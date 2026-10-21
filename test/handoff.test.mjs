@@ -66,7 +66,7 @@ test('Codex → Claude → Codex: resumo do modelo, factos observados e só o qu
   await hub.send(target.id,'mais','r3');await waitFor(idle(hub));
   assert.equal(await lastClaude(target),'mais');
 
-  const back=await hub.send(target.id,'volta','r4',{provider:'codex',model:'gpt-test',effort:'low'});
+  const back=await hub.send(target.id,'volta','r4',{provider:'codex',model:'gpt-test',effort:'low',handoffMode:'model'});
   assert.equal(back.conversationId,source.id);
   await waitFor(idle(hub));
   assert.equal(target.handoffSummaries[0].text,'RESUMO-CLAUDE 3');
@@ -81,7 +81,7 @@ test('Codex → Claude → Codex: resumo do modelo, factos observados e só o qu
   assert.equal((await codexPrompts()).at(-1),'final');
   await waitFor(()=>source.turns.find(turn=>turn.requestId==='r4').facts);
   assert.equal(source.turns.find(turn=>turn.requestId==='r4').facts.files.length,0);
-  const duplicate=await hub.send(source.id,'volta','r4',{provider:'codex'});
+  const duplicate=await hub.send(source.id,'volta','r4',{provider:'codex',handoffMode:'model'});
   assert.equal(duplicate.duplicate,true);
 });
 
@@ -119,7 +119,7 @@ test('resumo falhado não envia nada ao destino; novo envio leva os factos e lim
   const start=await hub.create({provider:'claude',cwd:directory,model:'haiku',effort:'low'});
   const source=claude.conversation(start.id);
   await hub.send(source.id,'primeiro','f1');await waitFor(idle(hub));
-  const switched=await hub.send(source.id,'continua','f2',{provider:'antigravity',model:'gemini-4-argon',effort:'low'});
+  const switched=await hub.send(source.id,'continua','f2',{provider:'antigravity',model:'gemini-4-argon',effort:'low',handoffMode:'model'});
   await waitFor(idle(hub));
   const target=antigravity.conversation(switched.conversationId);
   assert.equal(target.handoffState.status,'failed');
@@ -258,7 +258,7 @@ test('alterações de conteúdo durante o resumo bloqueiam o destino e não cobr
   hub.inspect=async()=>({files:{'dirty.txt':++calls===1?'hash-a':'hash-b'},complete:true,warnings:[]});
   const c=await hub.create({provider:'claude',cwd:directory,model:'haiku',effort:'low'});
   await hub.send(c.id,'primeiro','g1');await waitFor(idle(hub));
-  const moved=await hub.send(c.id,'continua','g2',{provider:'antigravity',model:'gemini-4-argon',effort:'low'});await waitFor(idle(hub));
+  const moved=await hub.send(c.id,'continua','g2',{provider:'antigravity',model:'gemini-4-argon',effort:'low',handoffMode:'model'});await waitFor(idle(hub));
   const source=claude.conversation(c.id),target=antigravity.conversation(moved.conversationId);
   assert.match(target.handoffState.error,/projeto mudou durante o resumo/);
   assert.equal(target.messages.length,0);assert.equal(source.handoffSummaries,undefined);
@@ -270,7 +270,7 @@ test('Parar durante a inspeção cancela a passagem antes do resumo e do envio',
   let release;hub.inspect=()=>new Promise(resolve=>release=resolve);
   const c=await hub.create({provider:'claude',cwd:directory,model:'haiku',effort:'low'});
   await hub.send(c.id,'primeiro','p1');await waitFor(idle(hub));
-  const moved=await hub.send(c.id,'continua','p2',{provider:'antigravity',model:'gemini-4-argon',effort:'low'});
+  const moved=await hub.send(c.id,'continua','p2',{provider:'antigravity',model:'gemini-4-argon',effort:'low',handoffMode:'model'});
   await hub.interrupt(moved.conversationId);release({files:{},warnings:[],complete:true});await waitFor(idle(hub));
   assert.equal(claude.conversation(c.id).turns.length,1);
   const target=antigravity.conversation(moved.conversationId);
@@ -306,7 +306,7 @@ test('destino inválido e inspeção incompleta falham antes de gastar um pedido
   await assert.rejects(hub.send(c.id,'continua','v2',{provider:'antigravity',model:'desconhecido',effort:'low'}),/catálogo/);
   assert.equal(antigravity.conversations.length,0);
   hub.inspect=async()=>({files:{},warnings:['Limite de leitura atingido.'],complete:false});
-  const moved=await hub.send(c.id,'continua','v3',{provider:'antigravity',model:'gemini-4-argon',effort:'low'});await waitFor(idle(hub));
+  const moved=await hub.send(c.id,'continua','v3',{provider:'antigravity',model:'gemini-4-argon',effort:'low',handoffMode:'model'});await waitFor(idle(hub));
   assert.match(antigravity.conversation(moved.conversationId).handoffState.error,/Não foi possível verificar/);
   assert.equal(claude.conversation(c.id).turns.length,1);
 });
@@ -381,4 +381,25 @@ test('passagem conserva os vários blocos parciais do agy após interrupção ou
     if(status==='uncertain')assert.match(prompt,/RESULTADO POR CONFIRMAR/);
     assert.equal(source.status,status);
   }
+});
+
+test('passagem conserva plano nativo mesmo sem edições e recupera base curta após compactação',()=>{
+ const source={id:'s',provider:'codex',cwd:'/p',turns:[{id:'t',requestId:'r',status:'completed',startedAt:'2026-01-01',model:'gpt',plan:[{step:'DECISAO-SEM-EDICOES',status:'pending'}],facts:{files:[],commands:[]}}],messages:[{role:'user',requestId:'r',text:'Planeia'},{role:'assistant',requestId:'r',text:'Plano proposto'}],items:[]};
+ const target={id:'d',provider:'claude',cwd:'/p',turns:[],messages:[]};const first=buildHandoff({target,members:[source,target],git:[]});assert.match(first.text,/DECISAO-SEM-EDICOES/);
+ target.turns.push({requestId:'delivery',status:'completed'});target.handoffDeliveries=[{requestId:'delivery',keys:first.keys,epoch:0}];assert.equal(buildHandoff({target,members:[source,target],git:[]}),null);
+ target.contextEpoch=1;const recovered=buildHandoff({target,members:[source,target],git:[]});assert.match(recovered.text,/Base curta após compactação/);assert.match(recovered.text,/DECISAO-SEM-EDICOES/);assert.deepEqual(recovered.keys,[]);
+ target.turns.push({requestId:'base',status:'completed'});target.handoffDeliveries.push({requestId:'base',keys:[],epoch:1});assert.equal(buildHandoff({target,members:[source,target],git:[]}),null);
+});
+
+test('passagem renova o mesmo pedido quando parcial passa a concluído',()=>{
+ const source={id:'s',provider:'codex',cwd:'/p',turns:[{id:'t',requestId:'r',status:'interrupted',model:'gpt',facts:{files:[],commands:[]}}],messages:[{role:'user',requestId:'r',text:'Pedido'},{role:'assistant',requestId:'r',text:'Parcial'}],items:[]};
+ const target={id:'d',cwd:'/p',turns:[],messages:[]};const first=buildHandoff({target,members:[source,target],git:[]});target.turns.push({requestId:'delivery',status:'completed'});target.handoffDeliveries=[{requestId:'delivery',keys:first.keys,fingerprints:first.fingerprints}];assert.equal(buildHandoff({target,members:[source,target]}),null);
+ source.turns[0].status='completed';source.messages[1].text='Conclusão final';assert.match(buildHandoff({target,members:[source,target]}).text,/Conclusão final/);
+});
+
+test('compactação repõe base anterior também quando há novidades por entregar',()=>{
+ const source={id:'s',provider:'codex',cwd:'/p',turns:[{id:'t',requestId:'old',status:'completed',model:'gpt',facts:{files:[],commands:[]},startedAt:'2026-01-01'}],messages:[{role:'user',requestId:'old',text:'Restrição anterior importante'},{role:'assistant',requestId:'old',text:'Plano antigo'}],items:[]},target={id:'d',cwd:'/p',turns:[],messages:[]};
+ const first=buildHandoff({target,members:[source,target]});target.turns.push({requestId:'received',status:'completed'});target.handoffDeliveries=[{requestId:'received',keys:first.keys,fingerprints:first.fingerprints,epoch:0}];target.contextEpoch=1;
+ source.turns.push({requestId:'new',status:'completed',startedAt:'2026-01-02',facts:{files:[],commands:[]}});source.messages.push({role:'user',requestId:'new',text:'Novidade atual'});
+ const next=buildHandoff({target,members:[source,target]});assert.match(next.text,/Base curta após compactação/);assert.match(next.text,/Restrição anterior importante/);assert.match(next.text,/Novidade atual/);
 });

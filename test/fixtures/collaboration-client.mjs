@@ -14,7 +14,9 @@ export class CollaborationClient extends EventEmitter {
   later(fn,ms=20){const timer=setTimeout(()=>{this.timers.delete(timer);fn().catch(e=>{this.fixtureError=e;});},ms);this.timers.add(timer);}
   async send(id,text,requestId,settings={}){
     const c=this.conversation(id);if(c.messages.some(m=>m.requestId===requestId&&m.role==='user'))return{accepted:true,duplicate:true};
-    this.lastPrompt=text;const t={id:randomUUID(),requestId,status:'running',delivery:'sending',startedAt:new Date().toISOString()};c.status='running';c.turns.push(t);c.turnId=t.id;c.messages.push({role:'user',text:settings.displayText||text,requestId,internal:settings.internal});await this.persist();this.changed();
+    this.lastPrompt=text;const t={id:randomUUID(),requestId,status:'running',delivery:'sending',startedAt:new Date().toISOString()};c.status='running';if(settings.projectDelivery)t.projectDelivery=settings.projectDelivery;
+    c.turns.push(t);c.turnId=t.id;c.messages.push({role:'user',at:new Date().toISOString(),text:settings.displayText||text,requestId,internal:settings.internal});if(settings.projectContext)c.messages.at(-1).projectContext=settings.projectContext;
+    await this.persist();this.changed();
     this.later(async()=>{
       if(c.status!=='running')return;
       if(this.role==='reviewer'){
@@ -25,8 +27,8 @@ export class CollaborationClient extends EventEmitter {
       }
       if(this.role==='executor'){
         if(text.includes('COL_APPROVAL')){const id=randomUUID();this.approvals.set(id,{id,conversationId:c.id,method:'session/request_permission',params:{toolCall:{title:'node --test add.test.mjs',kind:'execute'},options:[{optionId:'allow',kind:'allow_once',name:'Permitir'},{optionId:'reject',kind:'reject_once',name:'Recusar'}]}});c.status=t.status='waiting';await this.persist();this.changed();return;}
-        if(text.includes('COL_WORKER_HOLD')){c.messages.push({role:'assistant',text:'PARCIAL-REAL-DO-TESTE',requestId,turnId:t.id});await this.persist();this.changed();return;}
-        if(text.includes('COL_WORKER_LOST')){c.messages.push({role:'assistant',text:'PARCIAL-INCERTO',requestId,turnId:t.id});c.status=t.status='uncertain';await this.persist();this.changed();return;}
+        if(text.includes('COL_WORKER_HOLD')){c.messages.push({role:'assistant',at:new Date().toISOString(),text:'PARCIAL-REAL-DO-TESTE',requestId,turnId:t.id});await this.persist();this.changed();return;}
+        if(text.includes('COL_WORKER_LOST')){c.messages.push({role:'assistant',at:new Date().toISOString(),text:'PARCIAL-INCERTO',requestId,turnId:t.id});c.status=t.status='uncertain';await this.persist();this.changed();return;}
         c.items.push({id:randomUUID(),turnId:t.id,type:'commandExecution',command:'node --test',status:'completed',exitCode:0});await this.finish(c,'EXECUTOR-RESULT · teste aprovado');return;
       }
       if(this.role==='normal'){await this.finish(c,'NORMAL');return;}
@@ -50,7 +52,7 @@ export class CollaborationClient extends EventEmitter {
       await this.finish(c,'Deleguei; aguardo o resultado');
     });return{accepted:true};
   }
-  async finish(c,text){const t=c.turns.at(-1);c.status=t.status='completed';t.delivery='confirmed';t.usage={inputTokens:10,cachedInputTokens:6,uncachedInputTokens:4,outputTokens:2,totalTokens:12};t.completedAt=new Date().toISOString();t.finalAnswer=text;c.turnId=null;c.messages.push({role:'assistant',text,turnId:t.id,requestId:t.requestId});await this.persist();this.changed();}
+  async finish(c,text){const t=c.turns.at(-1);c.status=t.status='completed';t.delivery='confirmed';t.usage={inputTokens:10,cachedInputTokens:6,uncachedInputTokens:4,outputTokens:2,totalTokens:12,cacheReadPercent:60};t.completedAt=new Date().toISOString();t.finalAnswer=text;c.turnId=null;c.messages.push({role:'assistant',at:new Date().toISOString(),text,turnId:t.id,requestId:t.requestId});await this.persist();this.changed();}
   async interrupt(id){const c=this.conversation(id);c.status=c.turns.at(-1).status='interrupted';c.turnId=null;for(const[key,r]of this.approvals)if(r.conversationId===id)this.approvals.delete(key);await this.persist();this.changed();return{requested:true};}
   async respond(id,body){const r=this.approvals.get(id);if(!r)throw Error('Pedido inexistente');this.approvals.delete(id);const c=this.conversation(r.conversationId);if(body.optionId==='allow')await this.finish(c,'EXECUTOR-RESULT · autorização confirmada');else await this.interrupt(c.id);return{sent:true};}
   async close(){for(const timer of this.timers)clearTimeout(timer);this.timers.clear();for(const c of this.conversations)if(['running','waiting'].includes(c.status))c.status='uncertain';await this.persist();}

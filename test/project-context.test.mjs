@@ -165,3 +165,15 @@ test('entrega antiga cortada é renovada sem reescrever o histórico nem reenvia
  const prepared=await context.prepare(c);turn(c,'Confirmado','completed',{projectDelivery:prepared.delivery,projectContext:prepared.text.split('Atividade recente de outras conversas')[0]});
  const before=JSON.stringify(c);assert.match((await context.prepare(c)).text,/Final obrigatório/);assert.equal(JSON.stringify(c),before);
 });
+
+test('novidade muda com o conteúdo no mesmo estado e com conclusão de um parcial',async t=>{
+ const {context,p,make,turn}=await setup(t),a=await make(),b=await make(),r=turn(b,'Parcial','interrupted');
+ const first=await context.prepare(a);turn(a,'Recebi','completed',{projectDelivery:first.delivery,projectContext:first.text});assert.equal(await context.prepare(a),null);
+ b.messages.at(-1).text='Parcial atualizado';const changed=await context.prepare(a);assert.notEqual(changed.delivery.activityKeys[0],first.delivery.activityKeys[0]);
+ turn(a,'Recebi','completed',{projectDelivery:changed.delivery,projectContext:changed.text});r.status='completed';b.messages.at(-1).text='FINAL';const final=await context.prepare(a);assert.match(final.text,/FINAL/);assert.notEqual(final.delivery.activityKeys[0],changed.delivery.activityKeys[0]);
+});
+
+test('limpeza MCP reconhece PID reutilizado mesmo quando ainda existe',async t=>{
+ const {processIdentity}=await import('../lib/process-owner.mjs');const s=await setup(t),dir=s.dir+'/runtime';await mkdir(dir);const file=dir+'/'+'f'.repeat(64)+'.json',identity=processIdentity();
+ await writeFile(file,JSON.stringify({ownerPid:process.pid,ownerIdentity:{...identity,start:'0'}}),{mode:0o600});await new ContextMcp({},dir).cleanup();await assert.rejects(stat(file),{code:'ENOENT'});
+});

@@ -1,3 +1,4 @@
+import { workConflict } from './work-locks.js';
 import { captureDraftIntent, draftMode } from './composer.js';
 import { elicitationForm } from './elicitation.js';
 import { ImageAttachments } from './attachments.js';
@@ -93,7 +94,8 @@ function members(conversation = current()) { return conversation ? state.convers
 function switching(conversation = current()) { return Boolean(conversation && providerId() !== conversation.provider); }
 function targetMember(conversation = current()) { return members(conversation).filter(entry => entry.provider === providerId()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null; }
 function focusConversation(conversation = current()) { return members(conversation).find(entry => activeStatuses.includes(entry.status)) || conversation; }
-function anyBusy() { return Boolean(state?.collaboration?.busy) || Boolean(state?.handoff) || Boolean(state?.conversations.some(entry => activeStatuses.includes(entry.status))); }
+function workBlock(){return state?.workLocks?.find(lock=>workConflict(lock,{cwd:current()?.cwd||project()?.root||$('#cwd').value,projectId:project()?.id,resources:['normal:'+providerId()]}));}
+function anyBusy() { return state?.workLocks?Boolean(workBlock()):Boolean(state?.collaboration?.busy || state?.handoff || state?.conversations.some(entry => activeStatuses.includes(entry.status))); }
 const uncertaintyKey = conversation => conversation.turns?.findLast(turn => turn.status === 'uncertain')?.requestId || conversation.updatedAt;
 const needsUncertaintyReview = conversation => conversation.status === 'uncertain' && conversation.uncertaintyReview?.key !== uncertaintyKey(conversation);
 function mapSandbox(sandbox, target) {
@@ -746,7 +748,7 @@ function renderSend() {
   $('#use-as-request').disabled = sending;
   $('#composer').classList.toggle('steering', steering || expired);
   $('#prompt').placeholder = steering ? 'Acrescenta uma orientação para a tarefa em curso…' : 'Descreve o que queres fazer…';
-  $('#composer-hint').textContent = state?.handoff ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : focus?.capabilities?.steer === false && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para orientar · Mantém o mesmo turno') : 'Enter para enviar · Shift + Enter para nova linha';
+  $('#composer-hint').textContent = !steering&&workBlock() ? workBlock().reason+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : focus?.capabilities?.steer === false && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para orientar · Mantém o mesmo turno') : 'Enter para enviar · Shift + Enter para nova linha';
 }
 
 function renderUncertainty(conversation) {

@@ -23,7 +23,7 @@ export class ProjectMemoryUI {
   }
   async open(projectId){return this.run(async()=>{
     const view=await this.api(`/api/projects/${projectId}/memory`),body=this.modal('Memória e atividade do projeto');let memory=view.memory;
-    body.append(node('p','A memória curada segue no primeiro pedido de cada sessão e quando muda. A atividade contém apenas avisos de outras conversas; o código no disco continua a ser a referência.'));
+    body.append(node('p','A memória curada segue no primeiro pedido de cada sessão e quando muda. A atividade contém apenas avisos de outras conversas e colaborações; o código no disco continua a ser a referência.'));
     const input=node('textarea');input.rows=9;input.maxLength=view.limit;input.value=memory.text;input.setAttribute('aria-label','Memória do projeto');
     const count=node('small');const update=()=>count.textContent=`${input.value.length}/${view.limit} caracteres · versão ${memory.revision}`;input.addEventListener('input',update);update();body.append(input,count);
     let sources=memory.sources;
@@ -73,14 +73,14 @@ export class ProjectMemoryUI {
     };
     if(projectChats.length){
       const select=node('select');select.setAttribute('aria-label','Conversa que propõe a memória');for(const c of projectChats){const o=node('option',`${c.organization.title||c.title} · ${c.provider} · ${c.model}`);o.value=c.id;select.append(o);}
-      proposals.append(select,node('p','Pedido adicional na sessão/modelo escolhidos. Usa a memória, os três últimos pedidos públicos concluídos do grupo e avisos recentes de outras conversas. Pede apenas texto com as permissões atuais. Inspeções incompletas ou alterações exigem revisão explícita; nada é desfeito. A proposta fica guardada, mesmo se recarregares.'));
+      proposals.append(select,node('p','Pedido adicional na sessão/modelo escolhidos. Usa a memória, os três últimos pedidos públicos concluídos do grupo e avisos recentes de outras conversas e colaborações. Pede apenas texto com as permissões atuais. Inspeções incompletas ou alterações exigem revisão explícita; nada é desfeito. A proposta fica guardada, mesmo se recarregares. Enquanto decorre, reserva este projeto/pasta e o cliente escolhido.'));
       const generate=button('Gerar proposta',()=>this.run(async()=>{generate.disabled=true;try{await this.api(`/api/projects/${projectId}/memory-proposal`,{conversationId:select.value,revision:memory.revision});proposalCursor=0;await refreshProposals();this.toast('Proposta iniciada. Podes fechar ou recarregar; consulta o resultado neste painel.');}finally{generate.disabled=false;}}));proposals.append(generate);
     }else proposals.append(node('p','É necessário um grupo com pedidos públicos concluídos e sem resultado incerto pendente para gerar uma proposta.'));
     proposals.append(cards,button('Atualizar propostas',()=>this.run(refreshProposals)));body.append(proposals);if(view.proposalError)cards.append(node('p',view.proposalError));else await refreshProposals();
     body.append(node('h3','Atividade recente · factos observados e conclusões declaradas'));
-    for(const e of view.activity)body.append(node('p',`${e.title} · ${e.provider} · ${e.status} · ${e.at}\nFicheiros observados: ${e.files.join(', ')||'nenhum'}\nConclusão declarada: ${e.conclusion||'(sem resposta final)'}`));
+    for(const e of view.activity)body.append(node('p',`${e.title} · ${e.kind==='collaboration'?'Colaboração':e.provider} · ${e.status} · ${e.at}\nFicheiros observados: ${e.files.join(', ')||'nenhum'}\nConclusão declarada: ${e.conclusion||'(sem resposta final)'}`));
     if(!view.activity.length)body.append(node('p','Ainda não há pedidos terminados neste projeto.'));
-    body.append(button('Pesquisar e importar outra conversa',()=>this.browse(projectId)));
+    body.append(button('Pesquisar e importar trabalho do projeto',()=>this.browse(projectId)));
     const caps=this.getState().contextCapabilities||{};body.append(node('small',`Consulta pelo modelo: ${caps[this.getProvider()]?'MCP de leitura disponível para esta sessão.':'MCP não ativado neste cliente; usa a importação explícita abaixo.'} Os conteúdos consultados são enviados ao fornecedor do modelo. A filtragem de segredos conhecidos é limitada; revê os excertos.`));
   });}
   async review(projectId){return this.run(async()=>{
@@ -91,7 +91,7 @@ export class ProjectMemoryUI {
   async browse(projectId,query='',cursor=0,includeArchived=false){return this.run(async()=>{
     const ownGroup=this.getCurrent()?.group||null;
     const result=await this.api(`/api/projects/${projectId}/context-query`,{ownGroup,tool:query?'search_project_conversations':'list_project_conversations',args:{...(query?{query}:{}),cursor,includeArchived}});
-    const body=this.modal('Consultar outras conversas do projeto'),form=node('form'),search=node('input');search.value=query;search.placeholder='Pesquisar palavras';search.maxLength=160;search.setAttribute('aria-label','Pesquisar conversas');const submit=node('button','Pesquisar');submit.type='submit';form.append(search,submit);form.addEventListener('submit',e=>{e.preventDefault();this.browse(projectId,search.value.trim(),0,includeArchived);});body.append(form);
+    const body=this.modal('Consultar outras conversas e colaborações do projeto'),form=node('form'),search=node('input');search.value=query;search.placeholder='Pesquisar palavras';search.maxLength=160;search.setAttribute('aria-label','Pesquisar conversas');const submit=node('button','Pesquisar');submit.type='submit';form.append(search,submit);form.addEventListener('submit',e=>{e.preventDefault();this.browse(projectId,search.value.trim(),0,includeArchived);});body.append(form);
     const archived=node('input');archived.type='checkbox';archived.checked=includeArchived;const label=node('label','Incluir conversas arquivadas');label.prepend(archived);archived.addEventListener('change',()=>this.browse(projectId,query,0,archived.checked));body.append(label);
     const entries=result.matches||result.entries;for(const e of entries){const item=node('div',undefined,'context-result');item.append(node('strong',`${e.title} · ${e.status}`),node('small',`${e.groupId} / ${e.requestId}`));if(e.excerpt)item.append(node('pre',e.excerpt));else item.append(node('p',e.conclusion||'Sem conclusão declarada.'));item.append(button('Ler este pedido',()=>this.read(projectId,e.groupId,e.requestId,e.offset||0,includeArchived)),button('Pré-visualizar importação',()=>this.importPreview(projectId,e.groupId,[e.requestId])));body.append(item);}
     if(!entries.length)body.append(node('p','Sem resultados. A conversa atual é excluída.'));

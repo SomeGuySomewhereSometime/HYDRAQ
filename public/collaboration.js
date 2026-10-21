@@ -1,7 +1,8 @@
+import { workConflict } from './work-locks.js';
 import { elicitationForm } from './elicitation.js';
 
 const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
-const statuses = { idle: 'Pronta', principal: 'Principal a trabalhar', queued: 'Executor em fila', executor: 'Grok a trabalhar', reviewing: 'Claude a rever', reporting: 'Principal a avaliar', stopping: 'A parar', completed: 'Concluída', interrupted: 'Interrompida', failed: 'Falhou', uncertain: 'Resultado por confirmar', running: 'Em curso' };
+const statuses = { limited: 'Avaliação pendente · limite atingido', idle: 'Pronta', principal: 'Principal a trabalhar', queued: 'Executor em fila', executor: 'Grok a trabalhar', reviewing: 'Claude a rever', reporting: 'Principal a avaliar', stopping: 'A parar', completed: 'Concluída', interrupted: 'Interrompida', failed: 'Falhou', uncertain: 'Resultado por confirmar', running: 'Em curso' };
 const active = new Set(['principal', 'queued', 'executor', 'reviewing', 'reporting', 'stopping']);
 const efforts = { low: 'Leve', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo', ultra: 'Ultra' };
 
@@ -41,7 +42,8 @@ export class CollaborationUI {
     const fast = this.field(fields, 'fast', 'Fast do executor'); this.options(fast, [{ value: 'false', label: 'Desligado' }, { value: 'true', label: 'Ligado · maior consumo' }], 'false');
     this.field(fields, 'reviewer', 'Revisão independente'); this.options(this.controls.reviewer,[{value:'',label:'Sem revisor'},{value:'claude',label:'Claude · só leitura'}],'');
     this.field(fields,'reviewModel','Modelo do revisor'); this.field(fields,'reviewEffort','Raciocínio do revisor');
-    this.settings.append(this.settingsSummary, fields, node('p', 'col-hint', 'O principal decide e avalia, com acesso só de leitura. O Grok pode alterar ficheiros; as autorizações nativas aparecem aqui. O revisor Claude opcional só lê código, sem terminal nem edição; consome a subscrição Claude. Sem corte por tempo. Parar interrompe a tarefa; até três delegações por pedido. As escolhas aplicam-se ao próximo pedido.'));
+    this.scopeHint=node('p','col-hint');
+    this.settings.append(this.settingsSummary,this.scopeHint, fields, node('p', 'col-hint', 'O principal decide e avalia, com acesso só de leitura. O Grok pode alterar ficheiros e executar comandos; as autorizações nativas aparecem aqui. O isolamento pelo sistema operativo não está comprovado. O revisor Claude opcional só lê código, sem terminal nem edição; consome a subscrição Claude. Sem corte por tempo. Parar interrompe a tarefa; até três delegações por pedido. As escolhas aplicam-se ao próximo pedido.'));
     this.decisionBanner = node('section', 'col-decision-banner hidden'); this.decisionBanner.setAttribute('role', 'status'); this.decisionBanner.setAttribute('aria-live', 'polite');
     this.decisionText = node('p'); this.decisionJump = this.button('Ver e responder', () => { this.approvals.scrollIntoView({block:'nearest'}); this.approvals.querySelector('button,input,select,textarea')?.focus(); }); this.decisionBanner.append(this.decisionText, this.decisionJump);
     this.thread = node('div', 'col-thread'); this.thread.setAttribute('aria-live', 'polite');
@@ -133,19 +135,22 @@ export class CollaborationUI {
     const error = catalog?.error || d?.error || '';
     this.error.textContent = error && !catalog?.error && d?.status==='interrupted' ? `Paragem anterior: ${error}` : error; this.error.classList.toggle('hidden', !this.error.textContent);
     this.recover.classList.toggle('hidden',!catalog?.recoverable);
+    this.scopeHint.textContent=(d?d.projectId:this.controls.project.value)?'O contexto é partilhado apenas com este projeto. Outros projetos independentes podem trabalhar em paralelo; o mesmo cliente normal executa um pedido de cada vez.':'Sem projeto associado: esta colaboração não partilha memória nem aparece na atividade de projetos.';
     this.renderButtons();
     if (!this.selected) { this.metrics.classList.add('hidden');this.decisionBanner.classList.add('hidden');this.approvals.replaceChildren();this.review.classList.add('hidden');this.continuation.classList.add('hidden'); this.thread.replaceChildren(node('div', 'col-welcome', 'Define o objetivo com o principal. Ele pode planear, delegar trabalho no Grok e avaliar o resultado nesta mesma conversa.')); this.work.replaceChildren(node('h2', '', 'Executor e revisão'), node('p', 'col-hint', 'As tarefas delegadas, pareceres, autorizações e resultados aparecem aqui.')); }
     else if (!this.detail || this.detail.status!==selectedSummary?.status || this.detail.updatedAt !== selectedSummary?.updatedAt || active.has(selectedSummary?.status)) this.refresh();
   }
   renderButtons() {
     const state = this.getState(), summary = state?.collaboration?.sessions.find(s => s.id === this.selected), ownBusy = active.has(this.detail?.status) || active.has(summary?.status);
-    const busy = state?.collaboration?.busy || state?.handoff || state?.conversations.some(c => ['starting', 'running', 'waiting'].includes(c.status));
+    const block=state?.workLocks?.find(lock=>workConflict(lock,{cwd:this.detail?.cwd||this.controls.cwd.value,projectId:this.detail?.projectId||this.controls.project.value,resources:['collaboration']}));
+    const busy = state?.workLocks ? Boolean(block) : state?.collaboration?.busy || state?.handoff || state?.conversations.some(c => ['starting', 'running', 'waiting'].includes(c.status));
     this.send.disabled = !state || !this.prompt.value.trim() || this.sending || busy || ownBusy || state.collaboration?.error || this.detail?.status === 'uncertain' || !this.controls.model.value || !this.controls.workerEffort.value || (this.controls.reviewer.value && !this.controls.reviewModel.value);
     this.send.textContent = this.sending ? 'A enviar…' : 'Enviar ↗'; this.stop.classList.toggle('hidden', !ownBusy);
     for (const k of ['model', 'effort', 'workerEffort', 'context','reviewer']) this.controls[k].disabled = Boolean(ownBusy || this.sending);
     for(const k of ['reviewModel','reviewEffort']){this.controls[k].parentElement.classList.toggle('hidden',!this.controls.reviewer.value);this.controls[k].disabled=Boolean(ownBusy||this.sending||!this.controls.reviewer.value);}
     this.controls.fast.disabled = Boolean(ownBusy || this.sending || !state?.providers.cursor?.models.find(m => m.id === 'grok-4.7')?.supportsFast);
-    this.hint.textContent = this.detail?.approvals.length ? 'Responde à decisão pendente acima. A espera não cancela a tarefa.' : ownBusy ? 'Podes preparar o próximo pedido. Parar interrompe o ciclo.' : 'Enter para enviar · Shift + Enter para nova linha';
+    this.scopeHint.textContent=(this.detail?this.detail.projectId:this.controls.project.value)?'Contexto partilhado apenas com este projeto.':'Sem projeto associado: esta colaboração não partilha memória nem aparece na atividade de projetos.';
+    this.hint.textContent = this.detail?.approvals.length ? 'Responde à decisão pendente acima. A espera não cancela a tarefa.' : ownBusy ? 'Podes preparar o próximo pedido. Parar interrompe o ciclo.' : block ? block.reason+' · Projeto/pasta ou recurso reservado.' : 'Enter para enviar · Shift + Enter para nova linha';
   }
   async refresh(force = false) {
     if(this.loading){if(force)this.pendingRefresh=true;return;}
@@ -160,7 +165,7 @@ export class CollaborationUI {
     this.renderMetrics();
     this.decisionBanner.classList.toggle('hidden', !d.approvals.length);
     if(d.approvals.length){const who=d.approvals[0].role==='executor'?'O Grok':d.approvals[0].role==='reviewer'?'O revisor Claude':'O principal';this.decisionText.textContent=`${who} aguarda a tua decisão. A tarefa só continua depois de responderes; não há corte automático por tempo.`;}
-    this.continuation.classList.toggle('hidden',!['interrupted','failed','uncertain'].includes(d.status)||!d.jobs.length);
+    this.continuation.classList.toggle('hidden',!['interrupted','failed','uncertain','limited'].includes(d.status)||!d.jobs.length);
     this.continuationText.textContent = `${/Limite de .*minutos/.test(d.error||'')?'Este pedido parou pelo limite antigo. Os pedidos novos já não têm corte por tempo. ':''}Os ficheiros já criados ficam conservados. Podes preparar um novo pedido para o principal verificar o estado atual e continuar o que falta.`;
     const sig = JSON.stringify(d.messages);
     if (this.signature !== sig) {
@@ -169,7 +174,7 @@ export class CollaborationUI {
       if (d.messagesOmitted) this.thread.append(node('p', 'col-hint', `Mostradas as últimas 80 mensagens; ${d.messagesOmitted} anteriores conservadas no histórico local.`));
       for (const m of d.messages) {
         if (m.role === 'user' && m.internal) continue;
-        const card = node('article', 'col-message ' + m.role); card.append(node('small', '', m.role === 'user' ? 'Tu' : `${m.model || d.principal.model} · Principal`), this.markdown(m.text)); this.thread.append(card);
+        const card = node('article', 'col-message ' + m.role); card.append(node('small', '', m.role === 'user' ? 'Tu' : `${m.model || d.principal.model} · Principal`), this.markdown(m.text));if(m.projectContext){const context=node('details','col-action');context.append(node('summary','','Contexto do projeto enviado com este pedido'),node('pre','',m.projectContext));card.append(context);} this.thread.append(card);
       }
       if (nearBottom||this.scrollToEnd) this.thread.scrollTop = this.thread.scrollHeight;this.scrollToEnd=false;
     }
@@ -258,6 +263,10 @@ export class CollaborationUI {
     const c=cycles.find(c=>c.id===this.metricsSelect.value)||cycles.at(-1),m=c.metrics;if(!m)return;
     const f=n=>new Intl.NumberFormat('pt-PT').format(n),u=m.principalUsage;
     this.metricsUsage.textContent=u.measuredTurns?`Principal · ${u.measuredTurns}/${u.expectedTurns} turnos medidos · Entrada ${f(u.inputTokens)} · Cache ${f(u.cachedInputTokens)} · Saída ${f(u.outputTokens)}${u.complete?'':' · Contadores parciais'}`:`Principal · ${u.expectedTurns} turnos · Contadores ainda indisponíveis`;
+    const r=m.reviewerUsage,w=m.executorUsage,total=m.measuredUsage;
+    if(r)this.metricsUsage.textContent+=` · Claude ${r.expectedTurns?`${r.measuredTurns}/${r.expectedTurns} revisões medidas · Entrada ${f(r.inputTokens)} · Cache ${f(r.cachedInputTokens)} · Saída ${f(r.outputTokens)}`:'não participou'}`;
+    if(w)this.metricsUsage.textContent+=w.expectedTurns?' · Grok: não medido':' · Grok: não participou';
+    if(total)this.metricsUsage.textContent+=` · Subtotal medido: entrada ${f(total.inputTokens)} · cache ${f(total.cachedInputTokens)} · saída ${f(total.outputTokens)}${total.complete?'':' · Parcial'}`;
     const duration=ms=>{const s=Math.floor(ms/1000);return s>=60?`${Math.floor(s/60)} min ${s%60} s`:`${s} s`;};
     this.metricsTime.textContent=m.workMs===null?`Total ${duration(m.elapsedMs)} · Histórico anterior à medição de espera`:`Trabalho e preparação ${duration(m.workMs)} · Espera por decisões ${duration(m.waitMs)}${m.complete?'':' · Medição parcial após interrupção'}`;
   }

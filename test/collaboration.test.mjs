@@ -17,7 +17,7 @@ async function setup(t,existing){
 }
 
 test('fila espera pelo fim do principal, executa e entrega resultado uma vez na mesma sessão',async t=>{
- const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_GATE');await wait(()=>hub.collaboration.session(s.id).jobs.length===1);
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_GATE');await wait(()=>hub.collaboration.session(s.id).jobs.length===1&&clients.principal.duplicate);
  assert.equal(clients.principal.conversations[0].status,'running');assert.equal(clients.executor.conversations.length,0);assert.equal(clients.principal.duplicate.duplicate,true);
  await clients.principal.finish(clients.principal.conversations[0],'Pronto para executor');await wait(()=>hub.collaboration.session(s.id).status==='completed');
  const d=hub.collaboration.detail(s.id);assert.equal(d.jobs.length,1);assert.equal(d.jobs[0].status,'completed');assert.equal(d.jobs[0].resultDelivery,'confirmed');assert.match(d.messages.at(-1).text,/Avaliação: EXECUTOR-RESULT/);
@@ -140,7 +140,7 @@ test('parar revisão conserva parcial e bloqueia entrega automática de avaliaç
  await hub.collaboration.interrupt(s.id);const d=hub.collaboration.detail(s.id);assert.equal(d.status,'interrupted');assert.equal(d.reviews[0].partial,'PARECER-PARCIAL');assert.equal(d.reviews[0].cleanup,'confirmed');assert.equal(d.jobs[0].status,'completed');assert.equal(clients.principal.conversations[0].turns.length,1);
 });
 test('falha ou perda do revisor não é aprovação nem reenviada',async t=>{
- const {hub,clients,create,send}=await setup(t),s=await create({reviewer});await send(s,'COL_REVIEW_FAIL');await wait(()=>hub.collaboration.session(s.id).status==='failed');assert.equal(hub.collaboration.detail(s.id).jobs[0].status,'completed');assert.equal(clients.principal.conversations[0].turns.length,1);
+ const {hub,clients,create,send}=await setup(t),s=await create({reviewer});await send(s,'COL_REVIEW_FAIL');await wait(()=>hub.collaboration.session(s.id).status==='completed');assert.equal(hub.collaboration.detail(s.id).jobs[0].status,'completed');assert.equal(hub.collaboration.detail(s.id).reviews[0].status,'failed');assert.equal(clients.principal.conversations[0].turns.length,2);
  const other=await create({reviewer});await send(other,'COL_REVIEW_LOST');await wait(()=>hub.collaboration.session(other.id).status==='uncertain');await assert.rejects(send(other,'COL_DIRECT'),/incerto/);assert.equal(hub.collaboration.detail(other.id).reviews[0].partial,'PARECER-INCERTO');
 });
 test('reinício durante revisão conserva parecer parcial e não repete os três clientes',async t=>{
@@ -152,4 +152,75 @@ test('parecer não pode ser consultado por outra colaboração e modelo inválid
  const {hub,clients,create,send}=await setup(t);await assert.rejects(create({reviewer:{provider:'claude',model:'inexistente',effort:'medium'}}),/revisão/);assert.equal(clients.principal.conversations.length,0);
  const a=await create({reviewer});await send(a);await wait(()=>hub.collaboration.session(a.id).status==='completed');const id=hub.collaboration.detail(a.id).reviews[0].id;
  const b=await create();await send(b,'COL_GATE');await wait(()=>hub.collaboration.session(b.id).jobs.length===1);await assert.rejects(hub.collaboration.tool(clients.principal.lastToken,'get_review_result',{reviewId:id}),/fora/);await hub.collaboration.interrupt(b.id);
+});
+
+test('falha antes de criar turno do Grok nunca reutiliza o sucesso anterior',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s);await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ clients.executor.send=async()=>{throw Error('Preparação recusada antes do turno');};
+ await send(s,'Novo trabalho');await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ const j=hub.collaboration.detail(s.id).jobs.at(-1);assert.equal(j.status,'failed');assert.equal(j.result,undefined);assert.match(j.error,/Preparação recusada/);assert.equal(j.resultDelivery,'confirmed');
+});
+
+test('limite de turnos conserva resultados pendentes e não declara conclusão',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_GATE');await wait(()=>clients.principal.duplicate);
+ hub.collaboration.session(s.id).cycles[0].maxPrincipalTurns=1;await clients.principal.finish(clients.principal.conversations[0],'Deleguei');
+ await wait(()=>hub.collaboration.session(s.id).status==='limited');const d=hub.collaboration.detail(s.id);assert.equal(d.jobs[0].status,'completed');assert.equal(d.jobs[0].resultDelivery,'pending');assert.match(d.error,/por avaliar/);
+});
+
+test('memória do principal é citada, não repete e regressa após compactação inclusive no reporting',async t=>{
+ const {dir,hub,clients,create,send}=await setup(t),p=await hub.createProject({name:'A',root:dir,revision:0}),s=await create({projectId:p.id});
+ await hub.saveProjectMemory(p.id,{revision:0,text:'Decisão <texto> "citado"'});await send(s,'COL_DIRECT');await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ const c=clients.principal.conversations[0];assert.match(c.messages[0].projectContext,/<hydraq_project_context>/);assert.match(c.messages[0].projectContext,/\\u003ctexto/);assert.equal(c.turns[0].projectDelivery.epoch,0);
+ await send(s,'COL_WORKER_HOLD');await wait(()=>clients.executor.conversations[0]?.messages.some(m=>m.text==='PARCIAL-REAL-DO-TESTE'));assert.equal(c.messages.findLast(m=>m.role==='user').projectContext,undefined);
+ c.contextEpoch=1;await clients.executor.finish(clients.executor.conversations[0],'Fim');await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ const last=c.messages.findLast(m=>m.role==='user');assert.match(last.projectContext,/Memória curada/);assert.equal(c.turns.at(-1).projectDelivery.epoch,1);
+ await send(s,'COL_DIRECT');await wait(()=>hub.collaboration.session(s.id).status==='completed');assert.equal(c.messages.findLast(m=>m.role==='user').projectContext,undefined);
+});
+
+test('entrega falhada ao principal não cobre memória nova nem perde resultado para continuação explícita',async t=>{
+ const {dir,hub,clients,create,send}=await setup(t),p=await hub.createProject({name:'A',root:dir,revision:0}),s=await create({projectId:p.id});
+ await hub.saveProjectMemory(p.id,{revision:0,text:'Antiga'});await send(s,'COL_WORKER_HOLD');await wait(()=>clients.executor.conversations[0]?.messages.some(m=>m.text==='PARCIAL-REAL-DO-TESTE'));
+ await hub.saveProjectMemory(p.id,{revision:1,text:'NOVA-NAO-ENTREGUE'});const original=clients.principal.send.bind(clients.principal);clients.principal.send=async(...args)=>{if(args[3]?.internal==='collaboration-result')throw Error('Entrega falhou');return original(...args);};
+ await clients.executor.finish(clients.executor.conversations[0],'TRABALHO-CONSERVADO');await wait(()=>hub.collaboration.session(s.id).status==='uncertain');
+ clients.principal.send=original;await hub.collaboration.acknowledge(s.id);await send(s,'COL_DIRECT');await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ const c=clients.principal.conversations[0];assert.match(c.messages.findLast(m=>m.role==='user').projectContext,/NOVA-NAO-ENTREGUE/);assert.match(clients.principal.lastPrompt,/TRABALHO-CONSERVADO/);assert.equal(clients.executor.conversations[0].turns.length,1);
+});
+
+test('índice comum usa só estado da colaboração, exclui a própria origem e permite importar para conversa',async t=>{
+ const {dir,hub,clients,normal,create,send}=await setup(t),p=await hub.createProject({name:'A',root:dir,revision:0}),s=await create({projectId:p.id});await send(s);await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ const c=await hub.create({projectId:p.id,revision:hub.projects.data.revision,provider:'codex',model:'gpt-test',effort:'low'});
+ clients.executor.conversations[0].messages.push({role:'assistant',requestId:'private',text:'SEGREDO-DO-HISTORICO-PRIVADO'});
+ const list=await hub.context.query(p.id,c.id,'list_project_conversations',{});assert.equal(list.entries[0].kind,'collaboration');assert.equal(list.entries[0].groupId,'col:'+s.id);
+ const read=await hub.context.query(p.id,c.id,'read_conversation_excerpt',{groupId:'col:'+s.id,requestId:hub.collaboration.session(s.id).cycles[0].requestId});assert.match(read.text,/O executor afirmou/);assert.doesNotMatch(read.text,/SEGREDO-DO-HISTORICO/);
+ assert.equal((await hub.context.query(p.id,'col:'+s.id,'list_project_conversations',{})).entries.length,0);
+ const preview=await hub.previewImport(p.id,{sourceGroupId:'col:'+s.id,requestIds:[read.requestId],targetGroupId:c.id});const prepared=await hub.context.prepare(normal.codex.conversation(c.id),{importId:preview.previewId});assert.match(prepared.imported.text,/EXECUTOR-RESULT/);
+ const noProject=await create();await send(noProject,'COL_DIRECT');await wait(()=>hub.collaboration.session(noProject.id).status==='completed');assert.ok(!hub.context.entries(p.id).some(e=>e.groupId==='col:'+noProject.id));
+ await hub.updateProject(p.id,{revision:hub.projects.data.revision,archived:true});await assert.rejects(hub.context.query(p.id,'col:'+s.id,'list_project_conversations',{}),/arquivado/);await assert.rejects(hub.previewImport(p.id,{sourceGroupId:'col:'+s.id,requestIds:[read.requestId]}),/arquivado/);
+});
+
+test('espera por autorização reserva a pasta mas permite conversa independente e conserva ambos os pedidos',async t=>{
+ const {dir,hub,clients,normal,create,send}=await setup(t);await mkdir(dir+'/A');await mkdir(dir+'/B');
+ const s=await create({cwd:dir+'/A'});await send(s,'COL_APPROVAL');await wait(()=>clients.executor.approvals.size===1);
+ const c=await hub.create({cwd:dir+'/B',provider:'codex',model:'gpt-test',effort:'low'});await hub.send(c.id,'Independente','parallel');await wait(()=>normal.codex.conversation(c.id).status==='completed');assert.equal(hub.collaboration.session(s.id).status,'executor');
+ const overlap=await hub.create({cwd:dir+'/A',provider:'codex',model:'gpt-test',effort:'low'});await assert.rejects(hub.send(overlap.id,'Conflito','blocked'),/tarefa em curso/);
+ await hub.collaboration.respond(s.id,{id:'executor:'+clients.executor.approvals.keys().next().value,optionId:'allow'});await wait(()=>hub.collaboration.session(s.id).status==='completed');assert.equal(normal.codex.conversation(c.id).turns.length,1);
+});
+
+test('bloqueio do catálogo reconhece dono com PID reutilizado',async t=>{
+ const first=await setup(t),s=await first.create();await first.close();await writeFile(first.dataDir+'/collaboration/owner.json',JSON.stringify({pid:process.pid,instance:'stale',identity:{pid:process.pid,start:'0',boot:'old'}}));
+ const next=await setup(t,first.dir);assert.equal(next.hub.collaboration.error,undefined);assert.equal(next.hub.collaboration.sessions[0].id,s.id);await next.close();
+});
+
+test('revisor recusado antes do turno entrega falha conhecida ao principal sem aprovar trabalho',async t=>{
+ const {hub,clients,create,send}=await setup(t);clients.reviewer.send=async()=>{throw Error('Revisor sem ligação antes do turno');};const s=await create({reviewer});await send(s);await wait(()=>hub.collaboration.session(s.id).status==='completed');const d=hub.collaboration.detail(s.id);assert.equal(d.jobs[0].resultDelivery,'confirmed');assert.equal(d.reviews[0].status,'failed');assert.equal(d.reviews[0].resultDelivery,'confirmed');assert.match(clients.principal.lastPrompt,/Revisor sem ligação/);
+});
+
+test('proposta de memória mostra reserva e permite cliente diferente em pasta independente',async t=>{
+ const {dir,hub,normal}=await setup(t);await mkdir(dir+'/A');await mkdir(dir+'/B');const p=await hub.createProject({name:'A',root:dir+'/A',revision:0});
+ const c=await hub.create({projectId:p.id,revision:hub.projects.data.revision,provider:'codex',model:'gpt-test',effort:'low'});await hub.send(c.id,'Fonte da proposta','proposal-source');await wait(()=>normal.codex.conversation(c.id).status==='completed');
+ let release,calls=0;hub.inspect=async()=>{if(++calls===1)await new Promise(r=>release=r);return{complete:true,files:{},warnings:[]};};const proposal=await hub.proposeMemory(p.id,{conversationId:c.id,revision:0});assert.equal(proposal.accepted,true);await wait(()=>Boolean(release));
+ assert.ok(hub.snapshot().workLocks.some(l=>l.reason==='Proposta de memória em curso'));
+ const same=await hub.create({cwd:dir+'/A',provider:'cursor',model:'grok-4.7',effort:'low',context:'500k',fast:false});await assert.rejects(hub.send(same.id,'Conflito','proposal-blocked'),/tarefa em curso/);
+ const other=await hub.create({cwd:dir+'/B',provider:'cursor',model:'grok-4.7',effort:'low',context:'500k',fast:false});await hub.send(other.id,'Trabalho independente','proposal-parallel');await wait(()=>normal.cursor.conversation(other.id).status==='completed');
+ release();await Promise.all([...hub.proposalTasks]);assert.equal(hub.reservations.size,0);assert.equal((await hub.projectMemoryProposals(p.id)).records[0].status,'ready');
 });
