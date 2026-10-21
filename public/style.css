@@ -1847,6 +1847,12 @@ h1 { font-size: clamp(36px, 3.7vw, 60px); font-weight: 550; letter-spacing: -2px
 .col-message.user .message-content { padding:10px 14px; border:1px solid var(--border-subtle); border-radius:9px; background:var(--bg-surface); }
 .col-approvals { flex-shrink:0; overflow:auto; max-height:34vh; }
 .col-approvals:empty { display:none; }
+.col-decision-banner { display:flex; align-items:center; gap:12px; flex-shrink:0; border:1px solid #ac955a; background:#302b1c; color:#f2e5b8; border-radius:9px; padding:10px 12px; margin-bottom:8px; font-size:12px; }
+.col-decision-banner p { flex:1; margin:0; line-height:1.6; }
+.col-decision-banner button,.col-continuation button { flex-shrink:0; border:1px solid #ac955a; border-radius:6px; background:var(--bg-raised); color:var(--text-primary); padding:8px 10px; font-size:12px; }
+.col-status[data-status="waiting"] { color:#f2d784; }
+.col-continuation { flex-shrink:0; border-top:1px solid var(--border-subtle); padding:8px 0; font-size:12px; }
+.col-continuation p { margin:0 0 6px; color:var(--text-secondary); }
 .col-approvals .approval { margin:6px 0; padding:12px; }
 .col-approvals pre { max-height:140px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }
 .col-approvals button { padding:8px 10px; margin:5px 5px 0 0; border:1px solid var(--border-subtle); background:var(--bg-raised); font-size:12px; }

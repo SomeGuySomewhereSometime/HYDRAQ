@@ -840,7 +840,7 @@ function render() {
   if(active){banner.textContent=`${providerName(active.provider)} · ${active.title} · ${state.approvals.length?'Decisão pendente':'Tarefa em curso'} — Abrir`;banner.onclick=()=>choose(active.id);}
   renderProjectSuggestion();
   const collaboration=state.collaboration?.sessions.find(s=>s.id===state.collaboration.activeId);
-  if(collaboration&&collaborationUI.view!=='collaboration'){banner.classList.remove('hidden');banner.textContent=`Colaboração · ${collaboration.title} · Em curso — Abrir`;banner.onclick=()=>{collaborationUI.choose(collaboration.id);collaborationUI.show('collaboration');};}
+  if(collaboration&&collaborationUI.view!=='collaboration'){banner.classList.remove('hidden');banner.textContent=`Colaboração · ${collaboration.title} · ${collaboration.pendingDecisions?'Aguarda a tua decisão':'Em curso'} — Abrir`;banner.onclick=()=>{collaborationUI.choose(collaboration.id);collaborationUI.show('collaboration');};}
   collaborationUI.render();
 }
 function renderProjectSuggestion(){

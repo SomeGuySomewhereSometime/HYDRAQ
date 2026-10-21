@@ -99,16 +99,28 @@ test('falha de limpeza bloqueia inferência até recuperação explícita e cons
  assert.equal(hub.collaboration.busy,true);assert.equal(hub.collaboration.session(s.id).status,'uncertain');supervisor.stopError=false;await hub.collaboration.recover();assert.equal(hub.collaboration.busy,false);assert.equal(hub.collaboration.error,null);await assert.rejects(send(s,'COL_DIRECT'),/incerto/);
 });
 
-test('prazo do executor encerra a tarefa e não inicia avaliação automática',async t=>{
- const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_WORKER_HOLD');await wait(()=>clients.executor.conversations[0]?.messages.some(m=>m.text==='PARCIAL-REAL-DO-TESTE'));hub.collaboration.session(s.id).jobs[0].deadline=Date.now()-1;hub.collaboration.kick();await wait(()=>hub.collaboration.session(s.id).status==='interrupted');assert.match(hub.collaboration.session(s.id).error,/dez minutos/);assert.equal(clients.principal.conversations[0].turns.length,1);
+test('trabalho continua sem prazo mesmo com deadlines antigos; Parar preserva factos e parcial',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_WORKER_HOLD');await wait(()=>clients.executor.conversations[0]?.messages.some(m=>m.text==='PARCIAL-REAL-DO-TESTE'));
+ const session=hub.collaboration.session(s.id),job=session.jobs[0],cycle=session.cycles[0],c=clients.executor.conversations[0];assert.equal(job.deadline,undefined);assert.equal(cycle.deadline,undefined);
+ cycle.deadline=job.deadline=Date.now()-24*60*60*1000;await hub.collaboration.serial(()=>hub.collaboration.advance());assert.equal(session.status,'executor');assert.equal(clients.principal.conversations[0].turns.length,1);
+ c.items.push({id:'edit',turnId:c.turns[0].id,type:'fileChange',status:'completed',changes:[{path:'/project/game.js'}]});await hub.collaboration.interrupt(s.id);
+ const d=hub.collaboration.detail(s.id);assert.equal(d.status,'interrupted');assert.equal(d.jobs[0].partial,'PARCIAL-REAL-DO-TESTE');assert.equal(d.jobs[0].delivery,'sending');assert.deepEqual(d.jobs[0].facts.files,['/project/game.js']);
+ await send(s,'COL_PARENT_HOLD');await wait(()=>clients.principal.conversations[0].turns.length===2);assert.match(clients.principal.lastPrompt,/game\.js/);assert.match(clients.principal.lastPrompt,/ficheiros atuais/);assert.equal(clients.executor.conversations[0].turns.length,1);
 });
 
-test('supervisor aceita apenas scopes exclusivos HYDRAQ e limites finitos',async()=>{
- const supervisor=new ProcessSupervisor();await assert.rejects(supervisor.stop('outro-servico.scope'),/inválido/);assert.throws(()=>supervisor.wrap('agent',[],'hydraq-col-worker-'+randomUUID()+'.scope',0),/inválida/);
- const unit='hydraq-col-worker-'+randomUUID()+'.scope',wrapped=supervisor.wrap('agent',['--sandbox','enabled','acp'],unit,610);assert.equal(wrapped.executable,'/usr/bin/systemd-run');assert.ok(wrapped.args.includes('--unit='+unit));assert.ok(wrapped.args.includes('--property=RuntimeMaxSec=610s'));
+test('supervisor aceita apenas scopes exclusivos e vigia o dono sem corte temporal',async()=>{
+ const supervisor=new ProcessSupervisor();await assert.rejects(supervisor.stop('outro-servico.scope'),/inválido/);assert.throws(()=>supervisor.wrap('agent',[],'outro.scope'),/inválida/);
+ const unit='hydraq-col-worker-'+randomUUID()+'.scope',wrapped=supervisor.wrap('agent',['--sandbox','enabled','acp'],unit);assert.equal(wrapped.executable,'/usr/bin/systemd-run');assert.ok(wrapped.args.includes('--unit='+unit));assert.ok(wrapped.args.some(a=>a.endsWith('/supervised-process.mjs')));assert.ok(!wrapped.args.some(a=>a.includes('RuntimeMaxSec')));
 });
 
 test('autorização é visível e só a decisão da sessão certa desbloqueia o executor',async t=>{
  const {hub,create,send,api}=await setup(t),s=await create(),other=await create();await send(s,'COL_APPROVAL');await wait(()=>hub.collaboration.detail(s.id).approvals.length===1);const request=hub.collaboration.detail(s.id).approvals[0];assert.equal(request.role,'executor');assert.equal(hub.collaboration.session(s.id).jobs[0].status,'running');
  assert.equal((await api(`/api/collaborations/${other.id}/respond`,{id:request.id,optionId:'allow'})).status,400);assert.equal((await api(`/api/collaborations/${s.id}/respond`,{id:request.id,optionId:'allow'})).status,200);await wait(()=>hub.collaboration.session(s.id).status==='completed');assert.match(hub.collaboration.detail(s.id).messages.at(-1).text,/autorização confirmada/);
+});
+
+test('autorização não expira e aparece no catálogo; parar conserva a causa da espera',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_APPROVAL');await wait(()=>hub.collaboration.detail(s.id).approvals.length===1);
+ const session=hub.collaboration.session(s.id);session.cycles[0].deadline=session.jobs[0].deadline=Date.now()-86400000;
+ await hub.collaboration.serial(()=>hub.collaboration.advance());assert.equal(hub.collaboration.snapshot().sessions[0].pendingDecisions,1);assert.equal(clients.executor.conversations[0].status,'waiting');assert.equal(session.status,'executor');
+ await hub.collaboration.interrupt(s.id);const d=hub.collaboration.detail(s.id);assert.equal(d.approvals.length,0);assert.equal(d.jobs[0].interruption.waiting.role,'executor');assert.equal(d.jobs[0].error,'Interrompido pelo utilizador.');assert.equal(clients.principal.conversations[0].turns.length,1);
 });

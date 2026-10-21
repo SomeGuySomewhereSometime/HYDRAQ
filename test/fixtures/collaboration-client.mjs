@@ -14,7 +14,7 @@ export class CollaborationClient extends EventEmitter {
   later(fn,ms=20){const timer=setTimeout(()=>{this.timers.delete(timer);fn().catch(e=>{this.fixtureError=e;});},ms);this.timers.add(timer);}
   async send(id,text,requestId,settings={}){
     const c=this.conversation(id);if(c.messages.some(m=>m.requestId===requestId&&m.role==='user'))return{accepted:true,duplicate:true};
-    const t={id:randomUUID(),requestId,status:'running',delivery:'sending',startedAt:new Date().toISOString()};c.status='running';c.turns.push(t);c.turnId=t.id;c.messages.push({role:'user',text:settings.displayText||text,requestId,internal:settings.internal});await this.persist();this.changed();
+    this.lastPrompt=text;const t={id:randomUUID(),requestId,status:'running',delivery:'sending',startedAt:new Date().toISOString()};c.status='running';c.turns.push(t);c.turnId=t.id;c.messages.push({role:'user',text:settings.displayText||text,requestId,internal:settings.internal});await this.persist();this.changed();
     this.later(async()=>{
       if(c.status!=='running')return;
       if(this.role==='executor'){
@@ -44,7 +44,7 @@ export class CollaborationClient extends EventEmitter {
     });return{accepted:true};
   }
   async finish(c,text){const t=c.turns.at(-1);c.status=t.status='completed';t.delivery='confirmed';t.completedAt=new Date().toISOString();t.finalAnswer=text;c.turnId=null;c.messages.push({role:'assistant',text,turnId:t.id,requestId:t.requestId});await this.persist();this.changed();}
-  async interrupt(id){const c=this.conversation(id);c.status=c.turns.at(-1).status='interrupted';c.turnId=null;await this.persist();this.changed();return{requested:true};}
+  async interrupt(id){const c=this.conversation(id);c.status=c.turns.at(-1).status='interrupted';c.turnId=null;for(const[key,r]of this.approvals)if(r.conversationId===id)this.approvals.delete(key);await this.persist();this.changed();return{requested:true};}
   async respond(id,body){const r=this.approvals.get(id);if(!r)throw Error('Pedido inexistente');this.approvals.delete(id);const c=this.conversation(r.conversationId);if(body.optionId==='allow')await this.finish(c,'EXECUTOR-RESULT · autorização confirmada');else await this.interrupt(c.id);return{sent:true};}
   async close(){for(const timer of this.timers)clearTimeout(timer);this.timers.clear();for(const c of this.conversations)if(['running','waiting'].includes(c.status))c.status='uncertain';await this.persist();}
 }

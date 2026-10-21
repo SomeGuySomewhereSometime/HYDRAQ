@@ -39,10 +39,14 @@ export class CollaborationUI {
     this.field(fields, 'model', 'Principal · Codex'); this.field(fields, 'effort', 'Raciocínio do principal');
     this.field(fields, 'workerEffort', 'Executor · Grok 4.7 · raciocínio'); this.field(fields, 'context', 'Contexto do executor');
     const fast = this.field(fields, 'fast', 'Fast do executor'); this.options(fast, [{ value: 'false', label: 'Desligado' }, { value: 'true', label: 'Ligado · maior consumo' }], 'false');
-    this.settings.append(this.settingsSummary, fields, node('p', 'col-hint', 'O principal decide e avalia, com acesso só de leitura. O Grok pode alterar ficheiros na pasta escolhida; as autorizações nativas aparecem aqui. Até três delegações por pedido, dez minutos por tarefa e trinta minutos no total.'));
+    this.settings.append(this.settingsSummary, fields, node('p', 'col-hint', 'O principal decide e avalia, com acesso só de leitura. O Grok pode alterar ficheiros na pasta escolhida; as autorizações nativas aparecem aqui. Sem corte automático por tempo. Parar interrompe a tarefa; cada pedido permite até três delegações.'));
+    this.decisionBanner = node('section', 'col-decision-banner hidden'); this.decisionBanner.setAttribute('role', 'status'); this.decisionBanner.setAttribute('aria-live', 'polite');
+    this.decisionText = node('p'); this.decisionJump = this.button('Ver e responder', () => { this.approvals.scrollIntoView({block:'nearest'}); this.approvals.querySelector('button,input,select,textarea')?.focus(); }); this.decisionBanner.append(this.decisionText, this.decisionJump);
     this.thread = node('div', 'col-thread'); this.thread.setAttribute('aria-live', 'polite');
     this.approvals = node('section', 'col-approvals'); this.approvals.setAttribute('aria-label', 'Decisões pendentes da colaboração');
     this.review = node('section', 'col-review hidden');
+    this.continuation = node('section', 'col-continuation hidden');
+    this.continuationText = node('p'); this.continuation.append(this.continuationText, this.button('Preparar continuação', () => this.prepareContinuation()));
     this.form = node('form', 'col-composer'); const label = node('label', 'sr-only', 'Pedido para o principal');
     this.prompt = node('textarea'); this.prompt.id = 'col-prompt'; this.prompt.rows = 2; this.prompt.maxLength = 60000; this.prompt.placeholder = 'Descreve o objetivo. O principal decide o que delegar…'; label.htmlFor = this.prompt.id;
     const footer = node('div', 'col-composer-footer'); this.hint = node('span', 'col-hint', 'Enter para enviar · Shift + Enter para nova linha');
@@ -51,7 +55,7 @@ export class CollaborationUI {
     this.form.addEventListener('submit', e => { e.preventDefault(); this.submit(); });
     this.prompt.addEventListener('input', () => { this.saveDraft(); this.renderButtons(); });
     this.prompt.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); if (!this.send.disabled) this.form.requestSubmit(); } });
-    this.main.append(heading, this.error,this.recover, this.settings, this.thread, this.review, this.approvals, this.form);
+    this.main.append(heading, this.error,this.recover, this.decisionBanner, this.settings, this.thread, this.review, this.continuation, this.approvals, this.form);
     this.work = node('aside', 'col-workstream'); this.work.setAttribute('aria-label', 'Trabalho delegado');
     this.root.append(this.history, this.main, this.work);
     this.controls.project.addEventListener('change', () => {
@@ -92,7 +96,7 @@ export class CollaborationUI {
       this.listSignature = listSig + this.selected;
       this.list.replaceChildren(...(catalog?.sessions || []).map(s => {
         const b = this.button('', () => this.choose(s.id), 'col-session' + (s.id === this.selected ? ' selected' : ''));
-        b.append(node('strong', '', s.title), node('small', '', `${statuses[s.status] || s.status} · ${state.projectCatalog.projects.find(p => p.id === s.projectId)?.name || s.cwd.split('/').at(-1)}`)); return b;
+        b.append(node('strong', '', s.title), node('small', '', `${s.pendingDecisions?'Decisão pendente':statuses[s.status] || s.status} · ${state.projectCatalog.projects.find(p => p.id === s.projectId)?.name || s.cwd.split('/').at(-1)}`)); return b;
       }));
     }
     const d = this.detail;
@@ -114,11 +118,12 @@ export class CollaborationUI {
     if (!this.selected && !this.controls.model.options.length && state.providers.codex?.models?.length) this.owner = null;
     if(!this.selected&&!this.controls.workerEffort.options.length&&state.providers.cursor?.models?.some(m=>m.id==='grok-4.7'))this.owner=null;
     const selectedSummary = catalog?.sessions.find(s => s.id === this.selected);
-    this.badge.textContent = d?.approvals.length?'Aguarda a tua decisão':statuses[selectedSummary?.status || 'idle']; this.badge.dataset.status = selectedSummary?.status || 'idle';
-    this.error.textContent = catalog?.error || d?.error || ''; this.error.classList.toggle('hidden', !this.error.textContent);
+    this.badge.textContent = d?.approvals.length?'Aguarda a tua decisão':statuses[selectedSummary?.status || 'idle']; this.badge.dataset.status = d?.approvals.length?'waiting':selectedSummary?.status || 'idle';
+    const error = catalog?.error || d?.error || '';
+    this.error.textContent = error && !catalog?.error && d?.status==='interrupted' ? `Paragem anterior: ${error}` : error; this.error.classList.toggle('hidden', !this.error.textContent);
     this.recover.classList.toggle('hidden',!catalog?.recoverable);
     this.renderButtons();
-    if (!this.selected) { this.thread.replaceChildren(node('div', 'col-welcome', 'Define o objetivo com o principal. Ele pode planear, delegar trabalho no Grok e avaliar o resultado nesta mesma conversa.')); this.work.replaceChildren(node('h2', '', 'Executor'), node('p', 'col-hint', 'As tarefas delegadas, autorizações e resultados aparecem aqui.')); }
+    if (!this.selected) { this.decisionBanner.classList.add('hidden');this.approvals.replaceChildren();this.review.classList.add('hidden');this.continuation.classList.add('hidden'); this.thread.replaceChildren(node('div', 'col-welcome', 'Define o objetivo com o principal. Ele pode planear, delegar trabalho no Grok e avaliar o resultado nesta mesma conversa.')); this.work.replaceChildren(node('h2', '', 'Executor'), node('p', 'col-hint', 'As tarefas delegadas, autorizações e resultados aparecem aqui.')); }
     else if (!this.detail || this.detail.status!==selectedSummary?.status || this.detail.updatedAt !== selectedSummary?.updatedAt || active.has(selectedSummary?.status)) this.refresh();
   }
   renderButtons() {
@@ -128,7 +133,7 @@ export class CollaborationUI {
     this.send.textContent = this.sending ? 'A enviar…' : 'Enviar ↗'; this.stop.classList.toggle('hidden', !ownBusy);
     for (const k of ['model', 'effort', 'workerEffort', 'context']) this.controls[k].disabled = Boolean(ownBusy || this.sending);
     this.controls.fast.disabled = Boolean(ownBusy || this.sending || !state?.providers.cursor?.models.find(m => m.id === 'grok-4.7')?.supportsFast);
-    this.hint.textContent = ownBusy ? 'Podes preparar o próximo pedido. Parar interrompe o ciclo.' : 'Enter para enviar · Shift + Enter para nova linha';
+    this.hint.textContent = this.detail?.approvals.length ? 'Responde à decisão pendente acima. A espera não cancela a tarefa.' : ownBusy ? 'Podes preparar o próximo pedido. Parar interrompe o ciclo.' : 'Enter para enviar · Shift + Enter para nova linha';
   }
   async refresh(force = false) {
     if(this.loading){if(force)this.pendingRefresh=true;return;}
@@ -140,6 +145,10 @@ export class CollaborationUI {
   }
   renderDetail() {
     const d = this.detail; if (!d) return;
+    this.decisionBanner.classList.toggle('hidden', !d.approvals.length);
+    if(d.approvals.length){const who=d.approvals[0].role==='executor'?'O Grok':'O principal';this.decisionText.textContent=`${who} aguarda a tua decisão. A tarefa só continua depois de responderes; não há corte automático por tempo.`;}
+    this.continuation.classList.toggle('hidden',!['interrupted','failed','uncertain'].includes(d.status)||!d.jobs.length);
+    this.continuationText.textContent = `${/Limite de .*minutos/.test(d.error||'')?'Este pedido parou pelo limite antigo. Os pedidos novos já não têm corte por tempo. ':''}Os ficheiros já criados ficam conservados. Podes preparar um novo pedido para o principal verificar o estado atual e continuar o que falta.`;
     const sig = JSON.stringify(d.messages);
     if (this.signature !== sig) {
       const nearBottom = this.thread.scrollHeight - this.thread.scrollTop - this.thread.clientHeight < 90; this.signature = sig;
@@ -165,6 +174,7 @@ export class CollaborationUI {
         if (j.result || j.partial) card.append(this.markdown(j.result || j.partial));
         if (j.resultTruncated) card.append(node('p', 'col-hint', 'Relatório limitado a 60 000 caracteres; original conservado na sessão nativa.'));
         if (j.facts) card.append(node('p', 'col-hint', `Ficheiros observados: ${j.facts.files?.join(', ') || 'nenhum'}`));
+        if (j.interruption?.waiting) card.append(node('p','col-hint','A tarefa foi interrompida enquanto aguardava uma decisão. Nenhuma autorização foi concedida automaticamente.'));
         const actions = j.requestId===d.executorState?.requestId?(d.executorState?.items || []).filter(i => i.turnId === d.executorState.turnId && i.type !== 'reasoning'):[];
         if (j === d.jobs.at(-1)) for (const i of actions.slice(-12)) {
           const item = node('details', 'col-action'); item.append(node('summary', '', `${i.status || ''} · ${i.command || i.tool || i.type}`));
@@ -187,6 +197,7 @@ export class CollaborationUI {
     for (const r of d.approvals) {
       const card = node('section', 'approval'); const respond = body => this.api(`/api/collaborations/${d.id}/respond`, { id: r.id, ...body });
       card.append(node('h3', '', `${r.role === 'executor' ? 'Grok' : 'Principal'} · decisão pendente`));
+      card.append(node('p','col-hint','O trabalho está em pausa até responderes. Permitir ou recusar aplica-se apenas às opções anunciadas pelo cliente.'));
       if (r.method === 'session/request_permission') {
         card.append(node('pre', '', r.params.toolCall?.title || 'Ferramenta do Cursor'));
         const tool = r.params.toolCall,item=approvalItem(r),input=tool?.rawInput||item?.parameters; if (input) card.append(node('pre', '', typeof input==='string'?input:JSON.stringify(input, null, 2)));
@@ -212,6 +223,12 @@ export class CollaborationUI {
       }
       this.approvals.append(card);
     }
+  }
+  prepareContinuation() {
+    if(this.prompt.value.trim()){this.toast('O teu rascunho foi conservado. Envia-o ou limpa-o antes de preparar a continuação.');return;}
+    const d=this.detail;if(!d)return;
+    this.prompt.value=`Continua a tarefa anterior a partir dos ficheiros atuais. Motivo da paragem: ${(d.error||'pedido interrompido').replace(/[.!?]+$/,'')}. Inspeciona primeiro o que já foi feito e os resultados disponíveis. Não recries o projeto nem repitas ações sem verificar. Delega apenas o que falta corrigir ou testar e apresenta o resultado final.`;
+    this.saveDraft();this.renderButtons();this.prompt.focus();
   }
   settingsBody() { return { principal: { model: this.controls.model.value, effort: this.controls.effort.value }, executor: { model: 'grok-4.7', effort: this.controls.workerEffort.value, context: this.controls.context.value || null, fast: this.controls.fast.value === 'true' } }; }
   async submit() {
