@@ -1756,3 +1756,45 @@ h1 { font-size: clamp(36px, 3.7vw, 60px); font-weight: 550; letter-spacing: -2px
 .image-dialog>button { padding:7px 12px; color:var(--text-primary); background:var(--bg-raised); border:1px solid var(--border-subtle); }
 .image-dialog>p { font-size:12px; overflow-wrap:anywhere; margin:8px 0 0; }
 @media(max-width:800px) { .attach-image { min-height:40px; } .message-images .image-preview img { width:110px; height:80px; } .attachment-tray { padding-inline:10px; } }
+:root { --project-control: var(--bg-raised); }
+.new-project { width:100%;padding:9px 12px;margin:0 0 7px;border:1px solid var(--border-subtle);background:var(--bg-raised);text-align:left;font-size:12px; }
+.project-search { width:100%;min-height:34px;margin:12px 0 2px;padding:7px 10px;border:1px solid var(--border-subtle);background:var(--bg-surface);font-size:12px; }
+.project-section { margin:4px 0 9px;border-bottom:1px solid var(--border-subtle);padding-bottom:7px; }
+.project-section>summary { display:flex;align-items:center;gap:8px;padding:8px 2px;cursor:pointer;font-weight:600;font-size:13px; }
+.project-section>summary::before { content:'▸';color:var(--text-secondary); }.project-section[open]>summary::before { content:'▾'; }
+.project-section>summary span:first-child { overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1; }.project-section>summary small { font-size:10px;color:var(--text-secondary); }
+.project-actions { display:flex;gap:5px;margin:0 0 5px 12px; }.project-actions button,.organization-tools button,.loose-heading { background:none;border:0;color:var(--text-secondary);font-size:11px;padding:5px; }
+.project-actions button:hover,.organization-tools button:hover { color:var(--text-primary);text-decoration:underline; }.project-unavailable { color:#e6bc81; }
+.conversation-row { display:flex;align-items:stretch;min-width:0;position:relative; }.conversation-row .conversation-link { min-width:0;flex:1;padding-right:25px; }.conversation-menu { position:absolute;right:2px;top:5px;width:25px;height:28px;background:none;border:0;color:var(--text-secondary); }
+.loose-heading { display:block;padding:9px 2px;font-weight:600; }.organization-tools { display:flex;gap:4px;flex-wrap:wrap;border-top:1px solid var(--border-subtle);padding:5px 0; }
+.sidebar .new-chat { margin-bottom:0; }.sidebar .section-label { margin-top:12px; }.sidebar-bottom { flex-shrink:0; }
+.project-overview { overflow:auto;padding:30px clamp(18px,5vw,70px);flex:1;min-height:0; }.project-overview h1 { font-size:27px;margin:7px 0 12px; }.project-overview>p { color:var(--text-secondary);line-height:1.6;max-width:760px; }.project-overview .conversation-row { max-width:850px; }.project-overview .conversation-link { width:100%;text-align:left; }
+.project-path { overflow-wrap:anywhere;font-size:13px; }.project-page-actions { display:flex;gap:10px;flex-wrap:wrap;margin:18px 0; }
+.project-page-actions button,.project-form button { padding:9px 12px;background:var(--bg-raised);border:1px solid var(--border-subtle);font-size:13px; }.project-page-actions .primary-action { color:var(--bg-app);background:var(--accent); }
+.global-task { background:var(--bg-raised);color:var(--accent);border:0;border-bottom:1px solid var(--border-subtle);padding:9px 20px;text-align:left;font-size:12px;flex-shrink:0; }
+.project-dialog { background:var(--bg-surface);color:var(--text-primary);border:1px solid var(--border-subtle);border-radius:12px;max-width:620px;width:calc(100% - 30px);max-height:85dvh;padding:22px; }.project-dialog::backdrop { background:#0009; }
+.project-dialog-heading { display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px; }.project-dialog h2 { font-size:19px;margin:0; }.project-dialog-heading button { background:none;color:var(--text-secondary);border:0;padding:7px; }
+.project-form { display:flex;flex-direction:column;gap:15px; }.project-form label { display:flex;flex-direction:column;gap:7px;font-size:12px;color:var(--text-secondary); }.project-form input,.project-form select { padding:10px;border:1px solid var(--border-subtle);background:var(--bg-raised);width:100%;min-height:40px;color:var(--text-primary); }.project-form input[readonly] { opacity:.65; }.project-form p { font-size:12px;line-height:1.6;color:var(--text-secondary);margin:0; }.project-form summary { cursor:pointer;font-size:13px; }.project-form fieldset { display:flex;flex-direction:column;gap:10px;border:1px solid var(--border-subtle);margin-top:14px;padding:14px; }.project-form legend { padding:0 5px; }.project-form .candidate { display:flex;flex-direction:row;align-items:center;gap:10px;padding:9px 0;overflow-wrap:anywhere; }.candidate input { width:18px;min-height:18px;flex-shrink:0; }.organize-candidates { max-height:35dvh;overflow:auto; }
+.project-suggestion { margin-bottom:15px; }.project-suggestion button { background:none;border:1px solid var(--border-subtle);color:var(--accent);padding:8px;font-size:12px; }.project-suggestion small { display:block;line-height:1.5;color:var(--text-secondary);margin-top:6px; }
+@media(max-width:800px) { .new-project,.project-actions button,.organization-tools button,.conversation-menu,.loose-heading { min-height:36px; }.project-overview { padding:20px 16px; }.project-dialog { padding:16px; }.conversation-menu { width:30px; } }
+.topbar>div:first-of-type { min-width:0;overflow:hidden;display:flex;align-items:center;gap:12px; }
+#project-name { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.global-task { overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.sidebar-toggle,.sidebar-scrim { display:none; }
+@media(max-width:800px) {
+  .app-shell { grid-template-columns:minmax(0,1fr); }
+  .sidebar { position:fixed;inset:0 auto 0 0;width:min(300px,88vw);height:100dvh;z-index:60;transform:translateX(-100%);padding:20px 14px 0; }
+  .sidebar.is-open { transform:translateX(0); }
+  .sidebar-scrim { display:block;position:fixed;inset:0;z-index:50;border:0;border-radius:0;background:#0009; }
+  .sidebar-toggle { display:inline-flex;align-items:center;min-height:36px;padding:7px 9px;background:var(--bg-raised);border:1px solid var(--border-subtle);font-size:12px;flex-shrink:0; }
+  .sidebar .brand>span,.sidebar .section-label { display:block; }
+  .sidebar .brand { margin:0 4px 20px; }
+  .sidebar .brand small { font-size:10px; }
+  .sidebar .new-chat { font-size:13px;justify-content:flex-start; }
+  .sidebar .conversation-link { padding:12px 28px 12px 10px; }
+  .sidebar .conversation-link small { display:block; }
+  .topbar>div:first-of-type { flex:1;gap:7px; }
+  .topbar .breadcrumb,.topbar .breadcrumb-slash { display:none; }
+}
+
+/* Project organization */

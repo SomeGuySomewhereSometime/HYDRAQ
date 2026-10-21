@@ -1,6 +1,8 @@
 import { captureDraftIntent, draftMode } from './composer.js';
 import { elicitationForm } from './elicitation.js';
 import { ImageAttachments } from './attachments.js';
+import { ComposerDrafts, draftKey } from './drafts.js';
+import { ProjectUI, conversationGroups } from './projects.js';
 
 const $ = selector => document.querySelector(selector);
 const element = (tag, className, text) => {
@@ -31,6 +33,10 @@ function diffContent(target, text) {
 let state;
 let token;
 let selected = localStorage.getItem('hydraq.conversation') || null;
+let selectedProject = localStorage.getItem('hydraq.project') || null;
+let projectOverview = !selected && localStorage.getItem('hydraq.projectView') === 'true';
+const composerDrafts = new ComposerDrafts();
+const draftProviders = new Map();
 const providerNames = { codex: 'Codex', antigravity: 'Antigravity', claude: 'Claude Code', cursor: 'Cursor' };
 let selectedProvider = localStorage.getItem('hydraq.provider') || 'codex';
 if (!providerNames[selectedProvider]) selectedProvider = 'codex';
@@ -53,7 +59,7 @@ const recoveryDrafts = new Map();
 let settingsOwner;
 let settingsBaseline;
 const activeStatuses = ['starting', 'running', 'waiting'];
-const imageAttachments = new ImageAttachments({composer:$('#composer'),getKey:()=>selected || 'new',getToken:()=>token,isBusy:()=>anyBusy() || sending,changed:()=>renderSend(),toast});
+const imageAttachments = new ImageAttachments({composer:$('#composer'),getKey:()=>composerKey(),getToken:()=>token,isBusy:()=>anyBusy() || sending,changed:()=>renderSend(),toast});
 const statusLabels = { idle: 'Pronta', starting: 'A iniciar…', running: 'A trabalhar…', waiting: 'A aguardar a tua resposta', completed: 'Concluída', interrupted: 'Interrompida', failed: 'Falhou', uncertain: 'Estado por confirmar', inProgress: 'Em execução' };
 const effortLabels = { none: 'Sem raciocínio', minimal: 'Mínimo', low: 'Leve', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo', ultra: 'Ultra' };
 
@@ -78,7 +84,9 @@ async function api(route, body) {
 function providerId() { const conversation = current(); return conversation ? switchTargets.get(conversation.id) || conversation.provider : selectedProvider; }
 function providerState(id = providerId()) { return state?.providers?.[id] || state || {}; }
 function providerName(id = providerId()) { return providerNames[id] || id; }
-function settingsKey(conversation = current()) { return conversation ? `${conversation.id}:${providerId()}` : `new:${providerId()}`; }
+function composerKey() { return draftKey(current(),selectedProject); }
+function project() { return state?.projectCatalog?.projects.find(p=>p.id===(current()?.organization?.projectId || (!current()?selectedProject:null))); }
+function settingsKey(conversation = current()) { return `${draftKey(conversation,selectedProject)}:${providerId()}`; }
 function members(conversation = current()) { return conversation ? state.conversations.filter(entry => entry.group === conversation.group) : []; }
 function switching(conversation = current()) { return Boolean(conversation && providerId() !== conversation.provider); }
 function targetMember(conversation = current()) { return members(conversation).filter(entry => entry.provider === providerId()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null; }
@@ -102,17 +110,27 @@ function saveSettingsDraft() {
 }
 
 function current() { return state?.conversations.find(conversation => conversation.id === selected); }
-function choose(id) {
-  selected = id;
-  if (current()?.provider) selectedProvider = current().provider;
-  composerIntent = captureDraftIntent(null, $('#prompt').value, current());
-  if (id) localStorage.setItem('hydraq.conversation', id);
-  else localStorage.removeItem('hydraq.conversation');
-  messageSignature = activitySignature = approvalsSignature = '';
-  progressSignature = '';
-  render();
-  $('#prompt').focus();
+function saveComposerDraft() {
+  composerDrafts.save(composerKey(),$('#prompt').value,composerIntent,$('#cwd').value);
+  if(!current())draftProviders.set(composerKey(),selectedProvider);
+  if(settingsOwner===settingsKey())saveSettingsDraft();
 }
+function choose(id, projectId=selectedProject, overview=false, internal=false) {
+  if(sending&&!internal){toast('Aguarda a confirmação do envio antes de mudar de conversa.');return;}
+  saveComposerDraft();
+  setSidebar(false);
+  selected=id;selectedProject=id?current()?.organization?.projectId||null:projectId;projectOverview=overview;
+  if(current()?.provider)selectedProvider=current().provider;
+  else selectedProvider=draftProviders.get(composerKey()) || project()?.defaults?.provider || selectedProvider;
+  const draft=composerDrafts.get(composerKey());$('#prompt').value=draft.text;composerIntent=draft.intent;
+  $('#cwd').value=current()?.cwd||project()?.root||draft.cwd||state?.defaultCwd||'';
+  if(id)localStorage.setItem('hydraq.conversation',id);else localStorage.removeItem('hydraq.conversation');
+  if(selectedProject)localStorage.setItem('hydraq.project',selectedProject);else localStorage.removeItem('hydraq.project');
+  localStorage.setItem('hydraq.projectView',String(overview));
+  messageSignature=activitySignature=approvalsSignature=progressSignature='';settingsOwner=null;render();
+  if(!overview)$('#prompt').focus();
+}
+const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{state=await api('/api/state');render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast});
 
 function populateEfforts(value) {
   const model = providerState().models.find(entry => entry.id === $('#model').value);
@@ -180,7 +198,8 @@ function renderSettings(conversation) {
   const basis = conversation ? targetMember(conversation) : null;
   const group = members(conversation);
   const pendingSettings = !switching(conversation) ? conversation?.handoffState?.settings : null;
-  const baseline = JSON.stringify([basis?.id,basis?.model,basis?.effort,basis?.sandbox,basis?.context,basis?.fast,pendingSettings]);
+  const defaults=!conversation?project()?.defaults?.clients?.[provider]||{}:{};
+  const baseline = JSON.stringify([!conversation?project()?.defaults:null,basis?.id,basis?.model,basis?.effort,basis?.sandbox,basis?.context,basis?.fast,pendingSettings]);
   $('#provider').value = provider;
   $('#provider').disabled = sending || Boolean(conversation && (anyBusy() || group.some(needsUncertaintyReview)));
   $('#provider-hint').textContent = { cursor: 'Cursor original · Grok da tua conta', antigravity: 'agy original · Gemini e Claude da tua conta', claude: 'Claude Code original · sessão claude.ai existente', codex: 'Codex original · sessão ChatGPT existente' }[provider] + (conversation ? ' · podes mudar de cliente entre pedidos' : '');
@@ -211,21 +230,24 @@ function renderSettings(conversation) {
   }
   if (conversation) {
     $('#cwd').value = conversation.cwd;
+  } else if(project()) {
+    $('#cwd').value = project().root;
   } else if (!$('#cwd').value) {
     $('#cwd').value = state.defaultCwd;
   }
   if (settingsOwner !== owner || catalogChanged || (!draftSettings(conversation) && settingsBaseline !== baseline)) {
     const draft = draftSettings(conversation);
-    const wanted = draft?.model || pendingSettings?.model || basis?.model || $('#model').value;
+    const wanted = draft?.model || pendingSettings?.model || basis?.model || defaults.model || $('#model').value;
+    if(wanted && !providerState().models.some(m=>m.id===wanted)){const missing=element('option','',`${wanted} · indisponível`);missing.value=wanted;$('#model').append(missing);$('#model').value=wanted;}
     if (providerState().models.some(model => model.id === wanted)) $('#model').value = wanted;
-    populateEfforts(draft?.effort || pendingSettings?.effort || basis?.effort);
-    populateCursorOptions(draft?.context ?? pendingSettings?.context ?? basis?.context, draft?.fast ?? pendingSettings?.fast ?? basis?.fast ?? false);
+    populateEfforts(draft?.effort || pendingSettings?.effort || basis?.effort || defaults.effort);
+    populateCursorOptions(draft?.context ?? pendingSettings?.context ?? basis?.context ?? defaults.context, draft?.fast ?? pendingSettings?.fast ?? basis?.fast ?? defaults.fast ?? false);
     if (conversation) $('#sandbox').value = draft?.sandbox || pendingSettings?.sandbox || (switching(conversation) ? saferSandbox(conversation.sandbox, basis?.sandbox, provider) : basis?.sandbox || conversation.sandbox);
-    else if (draft?.sandbox) $('#sandbox').value = draft.sandbox;
+    else $('#sandbox').value = draft?.sandbox || 'workspace-write';
     settingsOwner = owner;
     settingsBaseline = baseline;
   }
-  $('#cwd').disabled = Boolean(conversation) || sending;
+  $('#cwd').disabled = Boolean(conversation) || Boolean(project()) || sending;
   const locked = sending || providerState().connection !== 'connected' || anyBusy() || group.some(needsUncertaintyReview) || basis?.status === 'uncertain';
   for (const selector of ['#model', '#effort', '#sandbox', '#context', '#fast']) $(selector).disabled = locked;
   $('#handoff-box').classList.toggle('hidden', !switching(conversation));
@@ -241,28 +263,7 @@ function renderSettings(conversation) {
 }
 
 function renderSidebar() {
-  const groups = new Map();
-  for (const conversation of state.conversations) groups.set(conversation.group, [...(groups.get(conversation.group) || []), conversation]);
-  $('#conversation-count').textContent = String(groups.size).padStart(2,'0');
-  const list = $('#conversation-list');
-  list.replaceChildren();
-  if (!groups.size) list.append(element('p','no-conversations','As tuas conversas ficam guardadas neste computador.'));
-  const selectedGroup = current()?.group;
-  for (const group of groups.values()) {
-    // Conversations arrive newest first; the group opens on its latest client and keeps its first title.
-    const latest = group[0];
-    const ordered = [...group].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-    const title = ordered.find(entry => entry.title !== 'Nova conversa')?.title || latest.title;
-    const button = element('button', `conversation-link${latest.group === selectedGroup ? ' active' : ''}`);
-    button.title = title;
-    button.append(element('strong', '', title));
-    const folder = latest.cwd.split('/').filter(Boolean).at(-1) || '/';
-    const status = group.find(entry => activeStatuses.includes(entry.status))?.status || latest.status;
-    const chain = [...new Set(ordered.map(entry => providerName(entry.provider)))].join(' → ');
-    button.append(element('small', '', `${chain} · ${folder} · ${statusLabels[status] || status}`));
-    button.addEventListener('click', () => choose(latest.id));
-    list.append(button);
-  }
+  projectUI.render({projectId:selectedProject,group:current()?.group,overview:projectOverview});
 }
 
 function inlineText(parent, text) {
@@ -728,7 +729,7 @@ function renderSend() {
   const pending = conversation?.messages.some(message => message.kind === 'steer' && message.delivery === 'sending');
   const hasImages=imageAttachments.list().length>0;
   imageAttachments.render(busy || sending || providerState().capabilities?.images===false);
-  $('#send').disabled = !state || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && providerState().capabilities?.images===false) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
+  $('#send').disabled = !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && providerState().capabilities?.images===false) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
   $('#send').textContent = sending ? 'A enviar…' : expired ? 'Turno terminado' : steering ? 'Orientar ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
@@ -792,6 +793,9 @@ function render() {
   if (!state) return;
   if (selected && !state.conversations.some(conversation => conversation.id === selected)) selected = null;
   const conversation = current();
+  if(conversation)selectedProject=conversation.organization?.projectId||null;
+  if(selectedProject&&!state.projectCatalog?.projects.some(p=>p.id===selectedProject)){selectedProject=null;projectOverview=false;}
+  $('.workspace').classList.toggle('hidden',projectOverview);
   const connection = providerState().connection;
   const account = providerState().account;
   const name = providerName();
@@ -806,11 +810,12 @@ function render() {
   $('#connection-dot').classList.toggle('connected',connection === 'connected');
   $('#account-label').textContent = account ? ({ cursor: 'Conta do Cursor · autenticação privada', antigravity: 'Sessão do agy · quota do plano', claude: `Claude · ${account.planType}` }[providerId()] || `ChatGPT · ${account.planType}`) : (connection === 'connecting' ? 'A verificar sessão…' : 'Sessão por verificar');
   $('#reconnect').classList.toggle('hidden',connection !== 'disconnected');
-  $('#project-name').textContent = conversation ? conversation.cwd.split('/').filter(Boolean).at(-1) || '/' : 'Nova conversa';
+  const visibleTitle=conversation?conversationGroups(state).find(g=>g.id===conversation.group)?.title||conversation.title:'';
+  $('#project-name').textContent = project() ? `${project().name}${conversation?' / '+visibleTitle:projectOverview?'':' / Nova conversa'}` : conversation ? visibleTitle : projectOverview?'Sem projeto':'Nova conversa';
   $('#project-name').title = conversation?.cwd || '';
   $('#session-badge').textContent = conversation ? statusLabels[conversation.status] || conversation.status : 'Uma tarefa. Todo o contexto.';
   const focus = focusConversation(conversation);
-  const notice = providerState().connectionError || focus?.error || conversation?.error;
+  const notice = (project()?.archived?'Projeto arquivado. Restaura-o nas definições para continuar.':current()?.organization?.archived?'Conversa arquivada. Restaura-a no menu da conversa para continuar.':project()?.available===false?project().folderError:null) || providerState().connectionError || focus?.error || conversation?.error;
   $('#notice').textContent = notice || '';
   $('#notice').classList.toggle('hidden',!notice);
   renderSettings(conversation);
@@ -823,9 +828,20 @@ function render() {
   renderSend();
   renderUncertainty(conversation);
   renderHandoffRecovery(conversation);
+  const active=state.conversations.find(c=>activeStatuses.includes(c.status)) || state.conversations.find(c=>c.id===state.handoff?.conversationId) || state.conversations.find(c=>state.approvals.some(a=>a.conversationId===c.id));
+  const banner=$('#global-task');banner.classList.toggle('hidden',!active||(!projectOverview&&active.group===conversation?.group));
+  if(active){banner.textContent=`${providerName(active.provider)} · ${active.title} · ${state.approvals.length?'Decisão pendente':'Tarefa em curso'} — Abrir`;banner.onclick=()=>choose(active.id);}
+  renderProjectSuggestion();
+}
+function renderProjectSuggestion(){
+  const view=$('#project-suggestion');view.replaceChildren();const folder=$('#cwd').value.replace(/\/$/,'');
+  const suggestion=!current()&&!project()?state.projectCatalog?.projects.filter(p=>!p.archived&&(folder===p.root||folder.startsWith(p.root==='/'?'/':p.root+'/'))).sort((a,b)=>b.root.length-a.root.length)[0]:null;
+  view.classList.toggle('hidden',!suggestion);if(!suggestion)return;
+  const button=element('button','',`Usar projeto ${suggestion.name}`);button.type='button';button.addEventListener('click',()=>choose(null,suggestion.id));view.append(button,element('small','','O novo pedido usará a pasta raiz deste projeto. Podes manter esta conversa solta.'));
 }
 
 $('#provider').addEventListener('change',()=> {
+  saveSettingsDraft();
   const conversation = current();
   if (conversation) {
     if ($('#provider').value === conversation.provider) switchTargets.delete(conversation.id);
@@ -859,8 +875,9 @@ $('#fast').addEventListener('change',()=>saveSettingsDraft());
 $('#sandbox').addEventListener('change',()=> { saveSettingsDraft(); renderCacheInfo(current()); });
 $('#prompt').addEventListener('input',()=> {
   composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, current());
-  renderSend();
+  saveComposerDraft();renderSend();
 });
+$('#cwd').addEventListener('input',()=>{saveComposerDraft();renderProjectSuggestion();});
 $('#use-as-request').addEventListener('click',()=> {
   composerIntent = $('#prompt').value.trim() ? { kind: 'send' } : null;
   renderSend();
@@ -872,6 +889,10 @@ $('#prompt').addEventListener('keydown',event=> {
     if (!$('#send').disabled) $('#composer').requestSubmit();
   }
 });
+function setSidebar(open){$('#projects-sidebar').classList.toggle('is-open',open);$('#sidebar-scrim').classList.toggle('hidden',!open);$('#sidebar-toggle').setAttribute('aria-expanded',String(open));}
+$('#sidebar-toggle').addEventListener('click',()=>setSidebar(!$('#projects-sidebar').classList.contains('is-open')));
+$('#sidebar-scrim').addEventListener('click',()=>setSidebar(false));
+document.addEventListener('keydown',event=>{if(event.key==='Escape')setSidebar(false);});
 $('#new-chat').addEventListener('click',()=>choose(null));
 document.addEventListener('keydown',event=> {
   if (event.key.toLowerCase() === 'n' && !event.ctrlKey && !event.metaKey && !event.altKey && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) { event.preventDefault(); choose(null); }
@@ -883,11 +904,11 @@ $('#composer').addEventListener('submit',async event=> {
   if ($('#send').disabled) return;
   const text = $('#prompt').value;
   const draftImages=[...imageAttachments.list()];
-  const imageDraftKey=selected || 'new';
+  const imageDraftKey=composerKey();
   const conversationAtSubmit = current();
   const steeringTarget = draftMode(composerIntent, conversationAtSubmit) === 'steer' ? composerIntent.turnId : null;
   const settings = { model: $('#model').value, effort: $('#effort').value, sandbox: $('#sandbox').value, ...(providerId()==='cursor' ? {context:$('#context').value || null,fast:$('#fast').checked} : {}) };
-  const draftKey = settingsKey(conversationAtSubmit);
+  const settingsDraftKey = settingsKey(conversationAtSubmit);
   const handoff = switching(conversationAtSubmit) ? { provider: providerId(), handoffMode: $('#handoff-mode').value, sandbox: $('#sandbox').value } : {};
   sending = true;
   renderSend();
@@ -901,20 +922,25 @@ $('#composer').addEventListener('submit',async event=> {
       return;
     }
     if (!conversation) {
-      conversation = await api('/api/conversations',{provider:providerId(),cwd:$('#cwd').value,...settings,sandbox:$('#sandbox').value});
-      if (!state.conversations.some(entry=>entry.id === conversation.id)) state.conversations.unshift(conversation);
-      imageAttachments.move(imageDraftKey,conversation.id);
-      choose(conversation.id);
+      conversation = await api('/api/conversations',{provider:providerId(),cwd:$('#cwd').value,...settings,sandbox:$('#sandbox').value,...(selectedProject?{projectId:selectedProject,revision:state.projectCatalog.revision}:{})});
+      const createdIndex=state.conversations.findIndex(entry=>entry.id===conversation.id);
+      if(createdIndex<0)state.conversations.unshift(conversation);else state.conversations[createdIndex]=conversation;
+      saveComposerDraft();
+      composerDrafts.move(imageDraftKey,draftKey(conversation,selectedProject));
+      imageAttachments.move(imageDraftKey,draftKey(conversation,selectedProject));
+      choose(conversation.id,selectedProject,false,true);
+      composerDrafts.records.delete(imageDraftKey);
     }
     const attachments=await imageAttachments.upload(draftImages,conversation);
     const result = await api(`/api/conversations/${conversation.id}/send`,{text,requestId:crypto.randomUUID(),...settings,...handoff,...(attachments.length?{attachments}:{})});
     imageAttachments.consume(draftImages);
-    settingDrafts.delete(draftKey);
+    settingDrafts.delete(settingsDraftKey);
+    composerDrafts.clear(draftKey(conversation,selectedProject),text);
     if (selected === conversation.id && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
     if (result.conversationId && result.conversationId !== conversation.id) {
       switchTargets.delete(conversation.id);
       if (!state.conversations.some(entry => entry.id === result.conversationId)) state = await api('/api/state');
-      choose(result.conversationId);
+      choose(result.conversationId,selectedProject,false,true);
     }
   } catch (error) { toast(error.message); }
   finally { sending = false; try { state = await api('/api/state'); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
@@ -959,6 +985,7 @@ async function boot(recovering = false) {
     const initial = await response.json();
     token = initial.token;
     state = initial.state;
+    if(!recovering&&!current()&&selectedProject)selectedProvider=state.projectCatalog?.projects.find(p=>p.id===selectedProject)?.defaults?.provider||selectedProvider;
     render();
     listen();
   } catch (error) {

@@ -61,6 +61,23 @@ Uma edição dentro do projeto pode concluir sem diálogo: a UI encaminha os ped
 
 Referência: [Cursor ACP](https://cursor.com/docs/cli/acp). Provas privadas da implementação em `.hydraq/cursor-integration-2026-10-21/`.
 
+## Projetos e organização das conversas
+
+Usa **＋ Novo projeto** para registar um nome e uma pasta local existente. O HYDRAQ valida o caminho real; uma pasta só pode ter um projeto, incluindo os arquivados. O nome é editável e a pasta fica fixa. Não são movidos ficheiros nem criados repositórios ou instruções adicionais.
+
+- Expande um projeto na barra lateral e usa **＋ Conversa**. **Abrir** mostra a página do projeto. Em ecrãs estreitos, usa **☰ Projetos** para abrir a navegação.
+- **Sem projeto** mantém as conversas soltas, com a sua própria pasta de trabalho. Ao escrever uma pasta compatível, a interface sugere um projeto existente; aceitar a sugestão cria a próxima conversa na raiz desse projeto. Podes manter a conversa solta.
+- As conversas antigas não são associadas automaticamente. Usa **Organizar existentes**, escolhe o projeto e revê as conversas compatíveis antes de selecionar e guardar. Uma conversa numa subpasta pode pertencer ao projeto da pasta superior. Projetos encaixados não reorganizam as associações já guardadas.
+- O menu **⋯** de uma conversa permite renomear, associar/retirar de um projeto e arquivar/restaurar. A operação abrange o grupo inteiro de sessões nativas ligadas pelas passagens; IDs, pasta de execução, histórico e anexos mantêm-se. Pastas divergentes ou incompatíveis são recusadas.
+- As definições do projeto permitem escolher o cliente inicial e modelo/raciocínio por cliente; no Cursor, contexto e Fast. Aplicam-se apenas a conversas novas, sem conceder permissões. Escolhas explícitas do rascunho têm prioridade. Um modelo indisponível exige uma escolha válida, sem substituição automática.
+- Texto e imagens por enviar ficam separados por conversa e, nas conversas novas, por projeto. Mudar o cliente conserva o texto/imagens; as definições são guardadas por cliente. Uma orientação continua ligada ao turno original. Estes rascunhos vivem na página e não sobrevivem ao recarregamento.
+- **Arquivados** permite recuperar projetos e conversas. Não se arquiva durante uma tarefa, uma decisão pendente ou a preparação do envio. Um aviso global permite voltar à tarefa ativa ao navegar noutro projeto. Arquivar não apaga dados nem ficheiros.
+- A pesquisa encontra nomes de projetos e títulos de conversas. Conversas de um projeto partilham ficheiros, mas não recebem automaticamente as mensagens/contexto umas das outras. Mantém-se uma tarefa de cada vez em toda a aplicação.
+
+O catálogo privado `.hydraq/projects.json` guarda a organização por grupo, separado dos quatro históricos. Usa gravação atómica, fila, revisão e cópia anterior válida em `projects.json.previous`. Uma alteração feita a partir de uma revisão antiga é recusada sem perder o formulário. Se o catálogo estiver inválido, o histórico continua disponível para consulta e o original é conservado; novos envios e operações de organização ficam bloqueados até recuperação explícita. Para recuperar, encerra o serviço, conserva o original e compara-o com a cópia anterior antes de escolher o ficheiro a restaurar. Não há restauro automático.
+
+Uma pasta indisponível ou que passou a apontar para outro caminho bloqueia novos pedidos, conservando as conversas para consulta. Não é feita uma retoma noutra pasta. Várias raízes por projeto, memória partilhada, revisão paralela e delegação automática ficam para uma versão posterior.
+
 ## Enviar imagens
 
 Na caixa da conversa, usa **＋ Imagem**, cola com **Ctrl+V** ou arrasta os ficheiros para a caixa. Podes enviar só imagens ou juntar texto. Antes de enviar, clica numa miniatura para ampliar ou em **×** para a remover. Os rascunhos ficam associados à conversa enquanto a página estiver aberta; se um envio falhar, conservam-se para revisão.
