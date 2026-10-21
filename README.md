@@ -2,6 +2,8 @@
 
 Interface local para os clientes originais **Codex**, **Antigravity**, **Claude Code** e **Cursor (Grok)**. Chama os executáveis locais por stdio e reutiliza as suas sessões existentes. Uma conversa pode passar de um cliente para outro entre pedidos, com passagem de contexto. Não usa proxies de modelos, APIs diretas adicionais dos fornecedores, contas alternativas ou colaboração simultânea entre agentes. O Cursor usa uma chave da própria conta Cursor, lida de um ficheiro privado.
 
+A aba **Colaboração** acrescenta a receita **Principal + executor**, com delegação em fila: o Codex decide e avalia, o Cursor/Grok executa tarefas delimitadas, e o resultado regressa à sessão do principal.
+
 ## Abrir
 
 Requisitos: Node.js 22 ou superior e o cliente que pretendes usar: Codex autenticado com ChatGPT (`codex login status`), Antigravity CLI autenticado (`agy models`) ou Claude Code autenticado com uma subscrição claude.ai (`claude auth status`). O Cursor requer o CLI original `agent` com ACP e o ficheiro privado descrito abaixo. Cada cliente funciona mesmo que os outros estejam indisponíveis. Não é necessário instalar Gemini CLI.
@@ -17,6 +19,21 @@ O HYDRAQ só escuta em `127.0.0.1`. Não precisa de alojamento remoto. A inferê
 3. Envia o pedido. O cliente original recebe o contexto e as instruções do projeto, utiliza as suas ferramentas e apresenta progresso e resultado.
 4. No Codex, Claude Code e Cursor, responde aos pedidos de autorização na conversa. No Cursor aparecem também perguntas com opções e planos para rever. O Antigravity headless segue a política nativa e recusa ações que exigem uma confirmação indisponível. **Parar** interrompe o processo/turno em execução.
 5. Abre uma conversa guardada para continuar. Entre pedidos podes mudar **modelo, raciocínio e acesso**, mantendo a mesma sessão e o histórico. A escolha só é aplicada quando envias o próximo pedido. O projeto fica associado à conversa. Para continuar noutro cliente, muda **Cliente original** entre pedidos (ver abaixo).
+
+## Colaboração · principal e executor
+
+1. Abre **Colaboração**, escolhe um projeto existente ou uma pasta e configura a equipa. O principal começa em GPT-6.1 Sol quando disponível; podes escolher outro modelo Codex. O executor desta versão é Grok 4.7, com raciocínio/contexto/Fast configuráveis e Fast desligado por defeito.
+2. Envia o objetivo. O principal pode responder diretamente, planear ou delegar implementação, investigação e testes. Depois de delegar, termina o turno; o executor trabalha e o HYDRAQ entrega o relatório num novo turno da mesma sessão principal. Não há polling do modelo nem troca manual de cliente.
+3. Consulta o trabalho do Grok no painel lateral e responde às autorizações, perguntas ou planos nativos na conversa. O principal mantém acesso nativo só de leitura; o executor usa o acesso de escrita e as permissões nativas do Cursor. As ferramentas MCP têm as suas próprias permissões.
+4. **Parar** interrompe o ciclo e encerra os processos supervisionados. Não desfaz alterações. Se o resultado ficar incerto, consulta os ficheiros e a resposta parcial e confirma a revisão antes de enviar um novo pedido. Reiniciar ou recarregar nunca reenvia tarefas automaticamente.
+
+Há no máximo três delegações e quatro turnos principais por pedido, dez minutos por tarefa do executor e trinta minutos para o ciclo completo. Continua a haver apenas um trabalho de inferência ativo na aplicação, incluindo conversas normais. Um aviso permite regressar à colaboração ao navegar para outra área.
+
+Os históricos desta aba são separados, em `.hydraq/collaboration/`, com os IDs nativos conservados. O projeto escolhido disponibiliza a memória curada por versão e as ferramentas de consulta das conversas desse projeto ao principal. Os resultados da colaboração não alteram a memória curada nem aparecem automaticamente no histórico das conversas normais. Os rascunhos da aba são separados por sessão/projeto no armazenamento da janela do browser.
+
+A execução delegada exige **Linux com systemd de utilizador disponível**. Cada processo nativo da colaboração recebe um scope exclusivo e transitório; os comandos descendentes são encerrados no fim, na interrupção ou na recuperação de uma falha. Não são criados serviços permanentes nem alteradas configurações globais. Sem supervisão disponível ou sem confirmação da limpeza, a inferência delegada é recusada. Os scopes controlam processos, não constituem por si uma sandbox de ficheiros/rede. As conversas normais mantêm as suas integrações existentes.
+
+A utilização continua a contar nas contas originais. Os contadores disponíveis do principal aparecem no painel; Cursor não comunica contadores equivalentes. A redução de quota não é garantida. Esta versão não inclui receitas com vários revisores, principais de outros clientes, anexos diretos na colaboração ou escrita em paralelo.
 
 ## Antigravity original: Gemini e Claude
 

@@ -23,11 +23,11 @@
     </aside>
     <button id="sidebar-scrim" class="sidebar-scrim hidden" aria-label="Fechar projetos"></button>
     <main>
-      <header class="topbar"><button id="sidebar-toggle" class="sidebar-toggle" aria-controls="projects-sidebar" aria-expanded="false">☰ Projetos</button><div><span class="breadcrumb">ESPAÇO LOCAL</span><span class="breadcrumb-slash">/</span><strong id="project-name">Nova conversa</strong></div><div class="connection-state" id="connection-state">A ligar ao Codex…</div></header>
+      <header class="topbar"><button id="sidebar-toggle" class="sidebar-toggle" aria-controls="projects-sidebar" aria-expanded="false">☰ Projetos</button><div><span class="breadcrumb">ESPAÇO LOCAL</span><span class="breadcrumb-slash">/</span><strong id="project-name">Nova conversa</strong></div><nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false">Colaboração</button></nav><div class="connection-state" id="connection-state">A ligar ao Codex…</div></header>
       <div id="catalog-error" class="notice hidden" role="alert"></div>
       <button id="global-task" class="global-task hidden"></button>
       <section id="project-overview" class="project-overview hidden" aria-label="Projeto"></section>
-      <div class="workspace">
+      <div class="workspace" id="chat-workspace">
         <section class="conversation-panel">
           <div class="conversation-toolbar"><span class="eyebrow"><span class="tiny-dot"></span><span id="agent-label">CODEX</span></span><span id="session-badge">Uma tarefa. Todo o contexto.</span></div>
           <div id="notice" class="notice hidden" role="alert"></div>
@@ -49,6 +49,7 @@
           <div class="inspector-bottom"><span class="tiny-dot"></span><span id="usage">Pronto para começar</span><button id="reconnect" class="text-button hidden">Voltar a ligar</button></div>
         </aside>
       </div>
+      <section id="collaboration-view" class="collaboration-view hidden" aria-label="Colaboração entre modelos"></section>
     </main>
   </div>
   <div id="toast" class="toast hidden" role="status"></div>

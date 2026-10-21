@@ -4,6 +4,7 @@ import { ImageAttachments } from './attachments.js';
 import { ComposerDrafts, draftKey } from './drafts.js';
 import { ProjectUI, conversationGroups } from './projects.js';
 import { ProjectMemoryUI } from './project-memory.js';
+import { CollaborationUI } from './collaboration.js';
 
 const $ = selector => document.querySelector(selector);
 const element = (tag, className, text) => {
@@ -92,7 +93,7 @@ function members(conversation = current()) { return conversation ? state.convers
 function switching(conversation = current()) { return Boolean(conversation && providerId() !== conversation.provider); }
 function targetMember(conversation = current()) { return members(conversation).filter(entry => entry.provider === providerId()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null; }
 function focusConversation(conversation = current()) { return members(conversation).find(entry => activeStatuses.includes(entry.status)) || conversation; }
-function anyBusy() { return Boolean(state?.handoff) || Boolean(state?.conversations.some(entry => activeStatuses.includes(entry.status))); }
+function anyBusy() { return Boolean(state?.collaboration?.busy) || Boolean(state?.handoff) || Boolean(state?.conversations.some(entry => activeStatuses.includes(entry.status))); }
 const uncertaintyKey = conversation => conversation.turns?.findLast(turn => turn.status === 'uncertain')?.requestId || conversation.updatedAt;
 const needsUncertaintyReview = conversation => conversation.status === 'uncertain' && conversation.uncertaintyReview?.key !== uncertaintyKey(conversation);
 function mapSandbox(sandbox, target) {
@@ -119,6 +120,7 @@ function saveComposerDraft() {
 function choose(id, projectId=selectedProject, overview=false, internal=false) {
   if(sending&&!internal){toast('Aguarda a confirmação do envio antes de mudar de conversa.');return;}
   saveComposerDraft();
+  collaborationUI.show('conversations',false);
   setSidebar(false);
   selected=id;selectedProject=id?current()?.organization?.projectId||null:projectId;projectOverview=overview;
   if(current()?.provider)selectedProvider=current().provider;
@@ -133,6 +135,7 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
 }
 const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{state=await api('/api/state');render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id)});
 const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:current,getProject:project,getKey:composerKey,getProvider:providerId,toast,renderImages:(target,images)=>imageAttachments.renderMessage(target,images),changed:()=>render()});
+const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
 
 function populateEfforts(value) {
   const model = providerState().models.find(entry => entry.id === $('#model').value);
@@ -836,6 +839,9 @@ function render() {
   const banner=$('#global-task');banner.classList.toggle('hidden',!active||(!projectOverview&&active.group===conversation?.group));
   if(active){banner.textContent=`${providerName(active.provider)} · ${active.title} · ${state.approvals.length?'Decisão pendente':'Tarefa em curso'} — Abrir`;banner.onclick=()=>choose(active.id);}
   renderProjectSuggestion();
+  const collaboration=state.collaboration?.sessions.find(s=>s.id===state.collaboration.activeId);
+  if(collaboration&&collaborationUI.view!=='collaboration'){banner.classList.remove('hidden');banner.textContent=`Colaboração · ${collaboration.title} · Em curso — Abrir`;banner.onclick=()=>{collaborationUI.choose(collaboration.id);collaborationUI.show('collaboration');};}
+  collaborationUI.render();
 }
 function renderProjectSuggestion(){
   const view=$('#project-suggestion');view.replaceChildren();const folder=$('#cwd').value.replace(/\/$/,'');

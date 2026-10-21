@@ -1,0 +1,114 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {mkdtemp,readFile,writeFile,rm,mkdir,rename,stat} from 'node:fs/promises';import os from 'node:os';import path from 'node:path';import {randomUUID} from 'node:crypto';
+import {Providers} from '../lib/providers.mjs';import {createHttpServer} from '../lib/http.mjs';import {CollaborationClient,TestSupervisor} from './fixtures/collaboration-client.mjs';
+import {ProcessSupervisor} from '../lib/process-supervisor.mjs';
+const wait=async f=>{const end=Date.now()+6000;while(!f()){if(Date.now()>end)throw Error('Estado não chegou');await new Promise(r=>setTimeout(r,10));}};
+async function setup(t,existing){
+ const dir=existing||await mkdtemp(path.join(os.tmpdir(),'hydraq-col-')),dataDir=dir+'/data';
+ const normal={codex:new CollaborationClient('normal',dataDir),cursor:new CollaborationClient('executor',dataDir+'/cursor')},clients={principal:new CollaborationClient('principal',dataDir+'/collaboration/principal'),executor:new CollaborationClient('executor',dataDir+'/collaboration/executor')},supervisor=new TestSupervisor();
+ const hub=new Providers({dataDir,defaultCwd:dir,clients:normal,collaborationClients:clients,collaborationSupervisor:supervisor});clients.principal.engine=hub.collaboration;await hub.load();
+ const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`,bootstrap=await(await fetch(base+'/api/bootstrap')).json();
+ const api=async(route,body,token=bootstrap.token)=>{const r=await fetch(base+route,{method:body===undefined?'GET':'POST',headers:{'x-hydraq-token':token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return{status:r.status,data:await r.json()};};
+ let closed=false;const close=async()=>{if(closed)return;closed=true;server.closeStreams();server.closeAllConnections();await new Promise(r=>server.close(r));await hub.close();};
+ t.after(async()=>{await close();if(!existing)await rm(dir,{recursive:true,force:true});});
+ const create=async extra=>hub.collaboration.create({cwd:dir,principal:{model:'gpt-test',effort:'medium'},executor:{model:'grok-4.7',effort:'low',context:'500k',fast:false},...extra});
+ const send=async(s,text='COL_DELEGATE',id=randomUUID())=>{await hub.collaboration.send(s.id,{text,requestId:id});return id;};
+ return{dir,dataDir,hub,clients,normal,supervisor,server,api,base,create,send,close};
+}
+
+test('fila espera pelo fim do principal, executa e entrega resultado uma vez na mesma sessão',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_GATE');await wait(()=>hub.collaboration.session(s.id).jobs.length===1);
+ assert.equal(clients.principal.conversations[0].status,'running');assert.equal(clients.executor.conversations.length,0);assert.equal(clients.principal.duplicate.duplicate,true);
+ await clients.principal.finish(clients.principal.conversations[0],'Pronto para executor');await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ const d=hub.collaboration.detail(s.id);assert.equal(d.jobs.length,1);assert.equal(d.jobs[0].status,'completed');assert.equal(d.jobs[0].resultDelivery,'confirmed');assert.match(d.messages.at(-1).text,/Avaliação: EXECUTOR-RESULT/);
+ assert.equal(clients.executor.conversations[0].turns.length,1);assert.equal(clients.principal.conversations[0].turns.length,2);assert.equal(hub.snapshot().conversations.length,0);
+ await assert.rejects(hub.collaboration.tool(clients.principal.lastToken,'delegate_to_executor',{requestKey:'late',instructions:'Não executar'}),/inválida/);
+});
+
+test('pedido e criação idempotentes; pergunta direta não chama executor',async t=>{
+ const {hub,clients,create,send}=await setup(t),key=randomUUID(),s=await create({requestId:key}),again=await create({requestId:key});assert.equal(s.id,again.id);
+ const requestId=await send(s,'COL_DIRECT');await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ const d=await hub.collaboration.send(s.id,{text:'COL_DIRECT',requestId});assert.equal(d.duplicate,true);assert.equal(clients.principal.conversations[0].turns.length,1);assert.equal(clients.executor.conversations.length,0);
+ await assert.rejects(hub.collaboration.send(s.id,{text:'outro',requestId}),/outro pedido/);
+});
+
+test('principal pode pedir correção delimitada sem trocar de sessão; limite bloqueia quarta delegação',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_LOOP');await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ assert.equal(hub.collaboration.session(s.id).jobs.length,2);assert.equal(clients.principal.conversations[0].turns.length,3);assert.equal(clients.executor.conversations[0].turns.length,2);
+ const other=await create();await send(other,'COL_BUDGET');await wait(()=>hub.collaboration.session(other.id).status==='completed');assert.equal(hub.collaboration.session(other.id).jobs.length,3);assert.match(clients.principal.budgetError,/três/);
+});
+
+test('ocupação mútua entre conversas e colaboração; arquivo ativo bloqueado',async t=>{
+ const {hub,normal,clients,create,send,dir}=await setup(t),p=await hub.createProject({name:'Projeto',root:dir,revision:0}),s=await create({projectId:p.id});
+ const c=await hub.create({cwd:dir,provider:'codex',model:'gpt-test',effort:'low'});normal.codex.conversation(c.id).status='running';await assert.rejects(send(s),/tarefa em curso/);normal.codex.conversation(c.id).status='idle';
+ await send(s,'COL_PARENT_HOLD');await wait(()=>clients.principal.conversations[0]?.status==='running');
+ await assert.rejects(hub.send(c.id,'Não enviar','normal-blocked'),/tarefa em curso/);assert.equal(normal.codex.conversations[0].turns.length,0);
+ await assert.rejects(hub.updateProject(p.id,{revision:hub.projects.data.revision,archived:true}),/colaboração/);
+ await hub.collaboration.interrupt(s.id);assert.ok(['interrupted','uncertain'].includes(hub.collaboration.session(s.id).status));
+});
+
+test('cancelamento conserva parcial, encerra supervisão e nunca entrega sucesso ao principal',async t=>{
+ const {hub,clients,supervisor,create,send}=await setup(t),s=await create();await send(s,'COL_WORKER_HOLD');await wait(()=>clients.executor.conversations[0]?.messages.some(m=>m.text==='PARCIAL-REAL-DO-TESTE'));
+ await hub.collaboration.interrupt(s.id);const d=hub.collaboration.detail(s.id);assert.equal(d.status,'interrupted');assert.equal(d.jobs[0].partial,'PARCIAL-REAL-DO-TESTE');assert.equal(d.jobs[0].status,'interrupted');assert.ok(supervisor.stops.includes(d.jobs[0].unit));assert.equal(clients.principal.conversations[0].turns.length,1);
+});
+
+test('perda nativa fica incerta e bloqueia novo pedido até revisão explícita',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_WORKER_LOST');await wait(()=>hub.collaboration.session(s.id).status==='uncertain');
+ assert.equal(hub.collaboration.detail(s.id).jobs[0].partial,'PARCIAL-INCERTO');await assert.rejects(send(s,'COL_DIRECT'),/incerto/);await hub.collaboration.acknowledge(s.id);await send(s,'COL_DIRECT');await wait(()=>hub.collaboration.session(s.id).status==='completed');assert.equal(clients.executor.conversations[0].turns.length,1);
+});
+
+test('reinício conserva jobs, parcial e IDs sem inferência nem reenvio',async t=>{
+ const first=await setup(t),s=await first.create();await first.send(s,'COL_WORKER_HOLD');await wait(()=>first.clients.executor.conversations[0]?.messages.some(m=>m.text==='PARCIAL-REAL-DO-TESTE'));const ids={p:first.clients.principal.conversations[0].threadId,e:first.clients.executor.conversations[0].threadId};await first.close();
+ const next=await setup(t,first.dir),d=next.hub.collaboration.detail(s.id);assert.equal(d.status,'uncertain');assert.equal(next.clients.principal.conversations[0].threadId,ids.p);assert.equal(next.clients.executor.conversations[0].threadId,ids.e);assert.equal(next.clients.executor.conversations[0].turns.length,1);assert.equal(d.jobs[0].partial,'PARCIAL-REAL-DO-TESTE');await next.close();
+});
+
+test('API limita tokens, sessões, modelos e projeto; memória fica no projeto autorizado',async t=>{
+ const {hub,clients,create,send,api,base,dir}=await setup(t),p=await hub.createProject({name:'A',root:dir,revision:0});await mkdir(dir+'/B');const q=await hub.createProject({name:'B',root:dir+'/B',revision:1});await hub.saveProjectMemory(p.id,{revision:0,text:'MEMORIA-A'});await hub.saveProjectMemory(q.id,{revision:0,text:'MEMORIA-B'});
+ const s=await create({projectId:p.id});assert.equal((await api(`/api/collaborations/${s.id}`,undefined,'wrong')).status,403);
+ assert.equal((await fetch(base+'/api/collaboration/tools',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'delegate_to_executor',args:{}})})).status,403);
+ await send(s,'COL_GATE');await wait(()=>clients.principal.lastToken);const token=clients.principal.lastToken;
+ const memory=await hub.collaboration.tool(token,'get_project_memory',{});assert.equal(memory.text,'MEMORIA-A');
+ await assert.rejects(hub.collaboration.tool(token,'get_project_memory',{projectId:q.id}),/autorizados/);
+ await assert.rejects(hub.collaboration.tool(token,'get_delegation_result',{jobId:randomUUID()}),/fora/);
+ await assert.rejects(hub.collaboration.tool(token,'delegate_to_executor',{requestKey:'foreign',instructions:'x',model:'outro'}),/autorizado/);
+ await hub.collaboration.interrupt(s.id);
+});
+
+test('supervisão indisponível recusa antes de criar inferência; pasta desaparecida bloqueia',async t=>{
+ const {hub,clients,supervisor,create,send,dir}=await setup(t);supervisor.availableValue=false;await assert.rejects(create(),/indisponível/);assert.equal(clients.principal.conversations.length,0);supervisor.availableValue=true;
+ await mkdir(dir+'/repo');const s=await create({cwd:dir+'/repo'});await rename(dir+'/repo',dir+'/moved');await assert.rejects(send(s),/ENOENT/);assert.equal(clients.principal.conversations.length,0);
+});
+
+test('arquivo inválido é preservado e não quebra as conversas normais',async t=>{
+ const first=await setup(t);await first.close();const file=first.dataDir+'/collaboration/state.json';await writeFile(file,'{"version":1,"conversations":{}}');const next=await setup(t,first.dir);assert.match(next.hub.collaboration.error,/preservado/);assert.deepEqual(next.hub.snapshot().collaboration.sessions,[]);assert.equal(next.hub.snapshot().providers.codex.connection,'connected');await next.close();assert.equal(await readFile(file,'utf8'),'{"version":1,"conversations":{}}');
+});
+
+test('histórico e credenciais de colaboração são privados',async t=>{
+ const {hub,create,send,dataDir}=await setup(t),s=await create();await send(s,'COL_GATE');await wait(()=>hub.collaboration.session(s.id).jobs.length);
+ assert.equal((await stat(dataDir+'/collaboration/state.json')).mode&0o777,0o600);assert.equal((await stat(dataDir+'/collaboration/'+s.id+'.lease.json')).mode&0o777,0o600);await hub.collaboration.interrupt(s.id);
+ await assert.rejects(readFile(dataDir+'/collaboration/'+s.id+'.lease.json'),'ENOENT');
+});
+
+test('falha de persistência inicial não deixa um ciclo executável em memória',async t=>{
+ const {hub,clients,create,send,dataDir}=await setup(t),s=await create(),file=dataDir+'/collaboration/state.json',original=await readFile(file,'utf8');
+ await writeFile(file,original+' ');await assert.rejects(send(s),/mudou no disco/);await new Promise(r=>setTimeout(r,40));assert.equal(hub.collaboration.session(s.id).status,'idle');assert.equal(clients.principal.conversations.length,0);assert.equal(hub.collaboration.busy,false);await writeFile(file,original);
+});
+
+test('falha de limpeza bloqueia inferência até recuperação explícita e conserva a incerteza',async t=>{
+ const {hub,supervisor,create,send}=await setup(t),s=await create();supervisor.stopError=true;await send(s,'COL_WORKER_LOST');await wait(()=>hub.collaboration.unsafe);
+ assert.equal(hub.collaboration.busy,true);assert.equal(hub.collaboration.session(s.id).status,'uncertain');supervisor.stopError=false;await hub.collaboration.recover();assert.equal(hub.collaboration.busy,false);assert.equal(hub.collaboration.error,null);await assert.rejects(send(s,'COL_DIRECT'),/incerto/);
+});
+
+test('prazo do executor encerra a tarefa e não inicia avaliação automática',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();await send(s,'COL_WORKER_HOLD');await wait(()=>clients.executor.conversations[0]?.messages.some(m=>m.text==='PARCIAL-REAL-DO-TESTE'));hub.collaboration.session(s.id).jobs[0].deadline=Date.now()-1;hub.collaboration.kick();await wait(()=>hub.collaboration.session(s.id).status==='interrupted');assert.match(hub.collaboration.session(s.id).error,/dez minutos/);assert.equal(clients.principal.conversations[0].turns.length,1);
+});
+
+test('supervisor aceita apenas scopes exclusivos HYDRAQ e limites finitos',async()=>{
+ const supervisor=new ProcessSupervisor();await assert.rejects(supervisor.stop('outro-servico.scope'),/inválido/);assert.throws(()=>supervisor.wrap('agent',[],'hydraq-col-worker-'+randomUUID()+'.scope',0),/inválida/);
+ const unit='hydraq-col-worker-'+randomUUID()+'.scope',wrapped=supervisor.wrap('agent',['--sandbox','enabled','acp'],unit,610);assert.equal(wrapped.executable,'/usr/bin/systemd-run');assert.ok(wrapped.args.includes('--unit='+unit));assert.ok(wrapped.args.includes('--property=RuntimeMaxSec=610s'));
+});
+
+test('autorização é visível e só a decisão da sessão certa desbloqueia o executor',async t=>{
+ const {hub,create,send,api}=await setup(t),s=await create(),other=await create();await send(s,'COL_APPROVAL');await wait(()=>hub.collaboration.detail(s.id).approvals.length===1);const request=hub.collaboration.detail(s.id).approvals[0];assert.equal(request.role,'executor');assert.equal(hub.collaboration.session(s.id).jobs[0].status,'running');
+ assert.equal((await api(`/api/collaborations/${other.id}/respond`,{id:request.id,optionId:'allow'})).status,400);assert.equal((await api(`/api/collaborations/${s.id}/respond`,{id:request.id,optionId:'allow'})).status,200);await wait(()=>hub.collaboration.session(s.id).status==='completed');assert.match(hub.collaboration.detail(s.id).messages.at(-1).text,/autorização confirmada/);
+});
