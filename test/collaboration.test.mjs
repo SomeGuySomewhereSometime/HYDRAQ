@@ -42,7 +42,7 @@ test('ocupação mútua entre conversas e colaboração; arquivo ativo bloqueado
  const {hub,normal,clients,create,send,dir}=await setup(t),p=await hub.createProject({name:'Projeto',root:dir,revision:0}),s=await create({projectId:p.id});
  const c=await hub.create({cwd:dir,provider:'codex',model:'gpt-test',effort:'low'});normal.codex.conversation(c.id).status='running';await assert.rejects(send(s),/tarefa em curso/);normal.codex.conversation(c.id).status='idle';
  await send(s,'COL_PARENT_HOLD');await wait(()=>clients.principal.conversations[0]?.status==='running');
- await assert.rejects(hub.send(c.id,'Não enviar','normal-blocked'),/tarefa em curso/);assert.equal(normal.codex.conversations[0].turns.length,0);
+ await assert.rejects(hub.send(c.id,'Não enviar','normal-blocked'),e=>e.code==='WORK_RESERVED');assert.equal(normal.codex.conversations[0].turns.length,0);
  await assert.rejects(hub.updateProject(p.id,{revision:hub.projects.data.revision,archived:true}),/colaboração/);
  await hub.collaboration.interrupt(s.id);assert.ok(['interrupted','uncertain'].includes(hub.collaboration.session(s.id).status));
 });
@@ -202,7 +202,7 @@ test('espera por autorização reserva a pasta mas permite conversa independente
  const {dir,hub,clients,normal,create,send}=await setup(t);await mkdir(dir+'/A');await mkdir(dir+'/B');
  const s=await create({cwd:dir+'/A'});await send(s,'COL_APPROVAL');await wait(()=>clients.executor.approvals.size===1);
  const c=await hub.create({cwd:dir+'/B',provider:'codex',model:'gpt-test',effort:'low'});await hub.send(c.id,'Independente','parallel');await wait(()=>normal.codex.conversation(c.id).status==='completed');assert.equal(hub.collaboration.session(s.id).status,'executor');
- const overlap=await hub.create({cwd:dir+'/A',provider:'codex',model:'gpt-test',effort:'low'});await assert.rejects(hub.send(overlap.id,'Conflito','blocked'),/tarefa em curso/);
+ const overlap=await hub.create({cwd:dir+'/A',provider:'codex',model:'gpt-test',effort:'low'});await assert.rejects(hub.send(overlap.id,'Conflito','blocked'),e=>e.code==='WORK_RESERVED');
  await hub.collaboration.respond(s.id,{id:'executor:'+clients.executor.approvals.keys().next().value,optionId:'allow'});await wait(()=>hub.collaboration.session(s.id).status==='completed');assert.equal(normal.codex.conversation(c.id).turns.length,1);
 });
 
@@ -220,7 +220,7 @@ test('proposta de memória mostra reserva e permite cliente diferente em pasta i
  const c=await hub.create({projectId:p.id,revision:hub.projects.data.revision,provider:'codex',model:'gpt-test',effort:'low'});await hub.send(c.id,'Fonte da proposta','proposal-source');await wait(()=>normal.codex.conversation(c.id).status==='completed');
  let release,calls=0;hub.inspect=async()=>{if(++calls===1)await new Promise(r=>release=r);return{complete:true,files:{},warnings:[]};};const proposal=await hub.proposeMemory(p.id,{conversationId:c.id,revision:0});assert.equal(proposal.accepted,true);await wait(()=>Boolean(release));
  assert.ok(hub.snapshot().workLocks.some(l=>l.reason==='Proposta de memória em curso'));
- const same=await hub.create({cwd:dir+'/A',provider:'cursor',model:'grok-4.7',effort:'low',context:'500k',fast:false});await assert.rejects(hub.send(same.id,'Conflito','proposal-blocked'),/tarefa em curso/);
+ const same=await hub.create({cwd:dir+'/A',provider:'cursor',model:'grok-4.7',effort:'low',context:'500k',fast:false});await assert.rejects(hub.send(same.id,'Conflito','proposal-blocked'),e=>e.code==='WORK_RESERVED');
  const other=await hub.create({cwd:dir+'/B',provider:'cursor',model:'grok-4.7',effort:'low',context:'500k',fast:false});await hub.send(other.id,'Trabalho independente','proposal-parallel');await wait(()=>normal.cursor.conversation(other.id).status==='completed');
  release();await Promise.all([...hub.proposalTasks]);assert.equal(hub.reservations.size,0);assert.equal((await hub.projectMemoryProposals(p.id)).records[0].status,'ready');
 });

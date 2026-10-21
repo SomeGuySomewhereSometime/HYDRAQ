@@ -199,6 +199,10 @@ O App Server é experimental: o protocolo foi conferido com Codex CLI **0.159.0*
 
 Sem dependências npm externas. `npm test` verifica transporte, histórico, autenticação, interrupção, autorizações, progresso, orientação no mesmo turno e proteção dos rascunhos, com processos originais simulados de Codex, Antigravity, Claude Code e Cursor, e a passagem entre clientes. Inclui políticas por turno, mudanças de acesso na mesma sessão, limites sem perda de pedidos, mais de 200 ações, recusas, resposta nativa completa, hashes de ficheiros, cancelamento, falhas de persistência, recuperação de resultados incertos, duplicados e reinício. O estado atual, as alterações, os testes e as limitações conhecidas ficam registados em [AI_CHANGES.md](AI_CHANGES.md).
 
+Para medir o índice operacional, arranca com `HYDRAQ_DIAGNOSTICS=1`. A rota local autenticada `GET /api/diagnostics` devolve contagens de chamadas, cache e falhas, duração total/média/máxima e a última medição de `records.entries()`. Não guarda texto, nomes, caminhos ou identificadores dos projetos. Fica desligado por defeito; os contadores vivem apenas na memória do processo. A medição inclui a construção e filtragem do índice, ou a consulta da cache.
+
+As recusas de envio por reserva usam HTTP 409 e `code: WORK_RESERVED`, com o motivo e o projeto/conversa que ocupa o recurso. A interface mostra a mesma explicação e conserva o rascunho. A preparação continua serial; uma reserva liberta apenas os recursos da própria operação e nenhum pedido recusado é reenviado automaticamente.
+
 `HYDRAQ_PORT` escolhe outra porta; `HYDRAQ_DATA_DIR` escolhe o diretório do histórico. `HYDRAQ_CODEX_BIN`, `HYDRAQ_AGY_BIN`, `HYDRAQ_CLAUDE_BIN` e `HYDRAQ_CURSOR_BIN` permitem indicar os executáveis originais. `npm run dev` reinicia o servidor quando o código muda; não o uses durante uma tarefa importante.
 
 Para terminar o serviço iniciado pelo atalho, consulta o PID em `/health` e envia-lhe `SIGTERM`. Num terminal com `npm start`, usa Ctrl+C.

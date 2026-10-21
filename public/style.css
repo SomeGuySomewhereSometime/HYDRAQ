@@ -1878,6 +1878,7 @@ h1 { font-size: clamp(36px, 3.7vw, 60px); font-weight: 550; letter-spacing: -2px
 .col-job>summary { cursor:pointer; font-size:12px; line-height:1.6; }
 .col-job-instructions { color:var(--text-secondary); white-space:pre-wrap; font-size:11px; line-height:1.7; max-height:160px; overflow:auto; }
 .col-job .message-content { font-size:11px; line-height:1.7; }
+.col-job .message-content p { white-space:pre-wrap; }
 .col-job .message-content pre { max-height:240px; overflow:auto; }
 .col-action { margin-top:8px; border-top:1px solid var(--border-subtle); padding-top:8px; font-size:10px; }
 .col-action summary { cursor:pointer; overflow-wrap:anywhere; }

@@ -1,4 +1,4 @@
-import { workConflict } from './work-locks.js';
+import { workConflict, workReason } from './work-locks.js';
 import { elicitationForm } from './elicitation.js';
 
 const node = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; };
@@ -150,7 +150,7 @@ export class CollaborationUI {
     for(const k of ['reviewModel','reviewEffort']){this.controls[k].parentElement.classList.toggle('hidden',!this.controls.reviewer.value);this.controls[k].disabled=Boolean(ownBusy||this.sending||!this.controls.reviewer.value);}
     this.controls.fast.disabled = Boolean(ownBusy || this.sending || !state?.providers.cursor?.models.find(m => m.id === 'grok-4.7')?.supportsFast);
     this.scopeHint.textContent=(this.detail?this.detail.projectId:this.controls.project.value)?'Contexto partilhado apenas com este projeto.':'Sem projeto associado: esta colaboração não partilha memória nem aparece na atividade de projetos.';
-    this.hint.textContent = this.detail?.approvals.length ? 'Responde à decisão pendente acima. A espera não cancela a tarefa.' : ownBusy ? 'Podes preparar o próximo pedido. Parar interrompe o ciclo.' : block ? block.reason+' · Projeto/pasta ou recurso reservado.' : 'Enter para enviar · Shift + Enter para nova linha';
+    this.hint.textContent = this.detail?.approvals.length ? 'Responde à decisão pendente acima. A espera não cancela a tarefa.' : ownBusy ? 'Podes preparar o próximo pedido. Parar interrompe o ciclo.' : block ? workReason(block)+' · Projeto/pasta ou recurso reservado.' : 'Enter para enviar · Shift + Enter para nova linha';
   }
   async refresh(force = false) {
     if(this.loading){if(force)this.pendingRefresh=true;return;}

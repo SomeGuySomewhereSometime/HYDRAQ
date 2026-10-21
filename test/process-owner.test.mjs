@@ -1,6 +1,6 @@
 import test from 'node:test';import assert from 'node:assert/strict';
 import {processIdentity,sameProcess} from '../lib/process-owner.mjs';
-import {workConflict} from '../public/work-locks.js';
+import {workConflict} from '../lib/work-locks.mjs';
 test('PID reutilizado não corresponde ao processo dono nem à sessão MCP',()=>{
  const id=processIdentity();assert.equal(sameProcess(process.pid,id),true);assert.equal(sameProcess(process.pid,{...id,start:String(BigInt(id.start)+1n)}),false);assert.equal(sameProcess(process.pid,{...id,boot:'old-boot'}),false);assert.equal(sameProcess(2147483647,id),false);assert.equal(sameProcess(process.pid),true);
 });

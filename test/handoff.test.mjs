@@ -334,7 +334,7 @@ test('falha ao persistir a preparação não deixa a aplicação presa numa pass
   const persist=claude.persist;claude.persist=async()=>{throw new Error('Disco indisponível');};
   try{await assert.rejects(hub.send(c.id,'continua','d2',{provider:'antigravity',model:'gemini-4-argon',effort:'low'}),/Disco indisponível/);}
   finally{claude.persist=persist;}
-  assert.equal(hub.handoff,null);assert.equal(hub.sending,false);
+  assert.equal(hub.handoff,null);assert.equal(hub.reservations.size,0);
   await hub.send(c.id,'ainda funciona','d3');await waitFor(idle(hub));
   assert.equal(claude.conversation(c.id).turns.at(-1).status,'completed');
 });

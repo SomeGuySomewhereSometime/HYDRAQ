@@ -133,7 +133,7 @@ test('verificar imagens no disco mantém a exclusão de pedidos concorrentes ent
   const gate=new Promise(r=>release=r);
   hub.attachments.resolve=async(...args)=>{if(!entered&&args[1]?.length){entered=true;await gate;}return resolve(...args);};
   const sending=hub.send(first.id,'primeiro','one',{attachments:[meta.id]});
-  try{await waitFor(()=>entered);await assert.rejects(hub.send(other.id,'NAO-ENVIAR','two'),/a ser enviado/);}
+  try{await waitFor(()=>entered);await assert.rejects(hub.send(other.id,'NAO-ENVIAR','two'),e=>e.code==='WORK_RESERVED'&&/uma preparação/.test(e.message));}
   finally{release();}
   await sending;await waitFor(idle);
   assert.equal(clients.claude.conversation(other.id).messages.length,0);

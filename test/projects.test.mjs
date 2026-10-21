@@ -42,7 +42,7 @@ test('fila recusa revisão antiga e uma gravação falhada não muda o catálogo
   const results=await Promise.allSettled([store.create({name:'A',root:dir,revision:0}),store.create({name:'B',root:dir,revision:0})]);
   assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.match(results.find(r=>r.status==='rejected').reason.message,/noutra janela/);
   const before=store.data;await writeFile(store.file,JSON.stringify({...store.data,revision:99}));
-  await assert.rejects(store.change(1,draft=>{draft.projects[0].name='Perdido';}),/mudou no disco/);assert.equal(store.data,before);assert.equal(store.data.projects[0].name,'A');
+  await assert.rejects(store.change(1,draft=>{draft.projects[0].name='Perdido';}),/mudou no disco/);assert.equal(store.data,before);assert.equal(store.data.projects[0].name,results.find(r=>r.status==='fulfilled').value.name);
 });
 
 test('catálogo corrompido é preservado e não é substituído por vazio nem pela cópia anterior',async t=>{
@@ -141,7 +141,7 @@ test('proposta de memória é um pedido interno adicional e só é aplicada apó
   const job=await hub.proposeMemory(p.id,{conversationId:c.id,revision:1});assert.equal(job.accepted,true);await Promise.all([...hub.proposalTasks]);const proposal=(await hub.projectMemoryProposals(p.id)).records[0];assert.equal(proposal.text,'Resultado confirmado');assert.equal((await hub.projectMemory(p.id)).memory.text,'Memória inicial');
   const native=clients.codex.conversation(c.id);assert.equal(native.turns.at(-1).internal,'memory-proposal');assert.equal(proposal.sources[0].requestId,'public-source');assert.equal(hub.context.entries(p.id).length,1);
   await hub.saveProjectMemory(p.id,{revision:1,text:proposal.text,sources:proposal.sources});assert.equal((await hub.projectMemory(p.id)).memory.revision,2);
-  const before=native.turns.length;await assert.rejects(hub.proposeMemory(p.id,{conversationId:c.id,revision:1}),/mudou/);assert.equal(native.turns.length,before);assert.equal(hub.sending,false);
+  const before=native.turns.length;await assert.rejects(hub.proposeMemory(p.id,{conversationId:c.id,revision:1}),/mudou/);assert.equal(native.turns.length,before);assert.equal(hub.reservations.size,0);
 });
 
 test('evento Codex de compactação e atualização explícita renovam contexto no próximo pedido',async t=>{
@@ -199,4 +199,65 @@ test('rotação MCP e proposta conservam configuração da sessão nativa sem no
  await hub.send(c.id,'Primeiro','rotation-source');await waitFor(idle);const first=hub.contextMcp.sessions.get(c.id),name=first.config.name,file=first.config.file;methods.length=0;first.expires=0;
  await hub.send(c.id,'Segundo','rotation-next');await waitFor(idle);assert.equal(hub.contextMcp.sessions.get(c.id).config.name,name);assert.equal(hub.contextMcp.sessions.get(c.id).config.file,file);assert.ok(!methods.includes('thread/resume'));assert.equal(native.messages.find(m=>m.requestId==='rotation-next').projectContext,undefined);
  methods.length=0;await hub.proposeMemory(p.id,{conversationId:c.id,revision:0});await Promise.all([...hub.proposalTasks]);assert.ok(!methods.includes('thread/resume'));assert.equal((await hub.projectMemoryProposals(p.id)).records[0].status,'ready');
+});
+
+test('preparação explicada por reserva; organização independente não bloqueia e falha liberta só a própria reserva',async t=>{
+  const {hub,clients,dir,project,chat}=await setup(t);
+  await mkdir(dir+'/a');await mkdir(dir+'/b');
+  const a=await project('Projeto A',dir+'/a'),b=await project('Projeto B',dir+'/b'),ca=await chat(a.id),cb=await chat(b.id);
+  let release,entered;const started=new Promise(r=>entered=r),held=new Promise(r=>release=r);
+  const prepare=hub.context.prepare.bind(hub.context);
+  hub.context.prepare=async(c,...args)=>{if(c.id===ca.id){entered();await held;throw Error('Falha de preparação controlada');}return prepare(c,...args);};
+  const pending=hub.send(ca.id,'Pedido A','prepare-a');const rejected=assert.rejects(pending,/Falha de preparação controlada/);await started;
+  const lock=hub.workScopes().find(r=>r.resources.includes('normal-preparation'));
+  assert.match(lock.label,/Projeto A/);assert.match(lock.reason,/preparar/);
+  await assert.rejects(hub.send(cb.id,'Pedido B','prepare-b'),e=>e.code==='WORK_RESERVED'&&e.status===409&&e.conflict.label==='Projeto A'&&/uma preparação/.test(e.message));
+  assert.equal(clients.codex.conversation(cb.id).turns.length,0);
+  await hub.organizeGroups({revision:hub.projects.data.revision,groups:[cb.id],title:'Outra conversa'});
+  await assert.rejects(hub.updateProject(a.id,{revision:hub.projects.data.revision,archived:true}),/pendente/);
+  const unrelated={id:'unrelated',cwd:dir+'/unrelated',resources:['normal:cursor'],reason:'Reserva de outra operação'};
+  hub.reservations.set('other',unrelated);
+  release();await rejected;assert.deepEqual([...hub.reservations.values()],[unrelated]);
+  hub.reservations.delete('other');await hub.send(cb.id,'Pedido após falha','after-failure');
+  assert.equal(hub.reservations.size,0);
+});
+
+test('HTTP serve só o módulo partilhado autorizado e devolve recusa estruturada sem enviar',async t=>{
+  const {hub,dir,chat}=await setup(t),c=await chat(),server=createHttpServer({hydraq:hub,publicDir:root+'/public'});
+  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeStreams();server.close();});
+  const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap')).json();
+  const module=await fetch(base+'/work-locks.js');assert.equal(module.status,200);assert.match(module.headers.get('content-type'),/javascript/);
+  assert.equal(await module.text(),await readFile(root+'/lib/work-locks.mjs','utf8'));
+  assert.equal((await fetch(base+'/lib/providers.mjs')).status,404);
+  assert.equal((await fetch(base+'/api/diagnostics')).status,403);
+  const diagnostics=await(await fetch(base+'/api/diagnostics',{headers:{'x-hydraq-token':token}})).json();assert.equal(diagnostics.enabled,false);assert.equal(diagnostics.entries,null);
+  hub.reservations.set('held',{cwd:dir,id:c.id,kind:'conversation',label:'Pedido A',reason:'A preparar um pedido (uma preparação de cada vez)',resources:['normal-preparation']});
+  const response=await fetch(base+`/api/conversations/${c.id}/send`,{method:'POST',headers:{'x-hydraq-token':token,'content-type':'application/json'},body:JSON.stringify({text:'Não reenviar',requestId:'http-conflict'})});
+  const body=await response.json();assert.equal(response.status,409);assert.equal(body.code,'WORK_RESERVED');assert.equal(body.conflict.label,'Pedido A');assert.match(body.error,/uma preparação/);assert.equal(hub.reservations.size,1);
+  hub.reservations.clear();
+});
+
+test('pasta da conversa normal é canónica e não escapa ao bloqueio por symlink',async t=>{
+  const {hub,dir}=await setup(t);await mkdir(dir+'/real');await symlink(dir+'/real',dir+'/alias');
+  const c=await hub.create({provider:'codex',cwd:dir+'/alias',model:'gpt-test',effort:'low'});
+  assert.equal(c.cwd,dir+'/real');hub.reservations.set('real',{cwd:dir+'/real/sub',reason:'Trabalho em subpasta',resources:[]});
+  await assert.rejects(hub.send(c.id,'Não sobrepor','symlink-lock'),e=>e.code==='WORK_RESERVED'&&/subpasta/.test(e.message));
+  assert.equal(hub.reservations.size,1);hub.reservations.clear();
+});
+
+test('envio independente termina sem libertar reserva de passagem ainda em preparação',async t=>{
+  const {hub,clients,dir,chat,idle}=await setup(t);
+  const {CollaborationClient}=await import('./fixtures/collaboration-client.mjs');
+  clients.cursor=new CollaborationClient('executor',dir+'/state/cursor');await clients.cursor.load();
+  await mkdir(dir+'/independent');await mkdir(dir+'/source');const source=await hub.create({provider:'codex',cwd:dir+'/source',model:'gpt-test',effort:'low'}),other=await hub.create({provider:'cursor',cwd:dir+'/independent',model:'grok-4.7',effort:'low',context:'500k',fast:false});
+  let release,entered;const started=new Promise(r=>entered=r),gate=new Promise(r=>release=r),prepare=hub.context.prepare.bind(hub.context);
+  hub.context.prepare=async(c,...args)=>{if(c.provider==='claude'){entered();await gate;}return prepare(c,...args);};
+  try{
+    await hub.send(source.id,'Passagem','held-handoff',{provider:'claude',model:'haiku',effort:'low',handoffMode:'quick'});await started;
+    const held=hub.reservations.get('handoff');assert.ok(held);
+    await hub.send(other.id,'Independente','independent-send');
+    assert.equal(hub.reservations.get('handoff'),held);assert.equal(hub.reservations.size,1);
+    await assert.rejects(hub.organizeGroups({revision:hub.projects.data.revision,groups:[source.id],title:'Não mover'}),/pendente/);
+  }finally{release();}
+  await waitFor(idle);assert.equal(hub.reservations.size,0);
 });
