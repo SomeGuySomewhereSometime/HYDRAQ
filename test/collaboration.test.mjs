@@ -5,7 +5,7 @@ import {ProcessSupervisor} from '../lib/process-supervisor.mjs';
 const wait=async f=>{const end=Date.now()+6000;while(!f()){if(Date.now()>end)throw Error('Estado não chegou');await new Promise(r=>setTimeout(r,10));}};
 async function setup(t,existing){
  const dir=existing||await mkdtemp(path.join(os.tmpdir(),'hydraq-col-')),dataDir=dir+'/data';
- const normal={codex:new CollaborationClient('normal',dataDir),cursor:new CollaborationClient('executor',dataDir+'/cursor')},clients={principal:new CollaborationClient('principal',dataDir+'/collaboration/principal'),executor:new CollaborationClient('executor',dataDir+'/collaboration/executor')},supervisor=new TestSupervisor();
+ const normal={codex:new CollaborationClient('normal',dataDir),cursor:new CollaborationClient('executor',dataDir+'/cursor'),claude:new CollaborationClient('reviewer',dataDir+'/claude')},clients={principal:new CollaborationClient('principal',dataDir+'/collaboration/principal'),executor:new CollaborationClient('executor',dataDir+'/collaboration/executor'),reviewer:new CollaborationClient('reviewer',dataDir+'/collaboration/reviewer')},supervisor=new TestSupervisor();
  const hub=new Providers({dataDir,defaultCwd:dir,clients:normal,collaborationClients:clients,collaborationSupervisor:supervisor});clients.principal.engine=hub.collaboration;await hub.load();
  const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));const base=`http://127.0.0.1:${server.address().port}`,bootstrap=await(await fetch(base+'/api/bootstrap')).json();
  const api=async(route,body,token=bootstrap.token)=>{const r=await fetch(base+route,{method:body===undefined?'GET':'POST',headers:{'x-hydraq-token':token,'content-type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return{status:r.status,data:await r.json()};};
@@ -123,4 +123,33 @@ test('autorização não expira e aparece no catálogo; parar conserva a causa d
  const session=hub.collaboration.session(s.id);session.cycles[0].deadline=session.jobs[0].deadline=Date.now()-86400000;
  await hub.collaboration.serial(()=>hub.collaboration.advance());assert.equal(hub.collaboration.snapshot().sessions[0].pendingDecisions,1);assert.equal(clients.executor.conversations[0].status,'waiting');assert.equal(session.status,'executor');
  await hub.collaboration.interrupt(s.id);const d=hub.collaboration.detail(s.id);assert.equal(d.approvals.length,0);assert.equal(d.jobs[0].interruption.waiting.role,'executor');assert.equal(d.jobs[0].error,'Interrompido pelo utilizador.');assert.equal(clients.principal.conversations[0].turns.length,1);
+});
+
+const reviewer={provider:'claude',model:'opus',effort:'medium'};
+test('revisor só arranca após executor, entrega parecer uma vez e preserva IDs do principal',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create({reviewer});await send(s);await wait(()=>hub.collaboration.session(s.id).status==='completed');const d=hub.collaboration.detail(s.id);
+ assert.equal(d.reviews.length,1);assert.equal(d.reviews[0].resultDelivery,'confirmed');assert.equal(d.jobs[0].resultDelivery,'confirmed');assert.equal(d.reviews[0].cleanup,'confirmed');assert.ok(Date.parse(d.reviews[0].startedAt)>=Date.parse(d.jobs[0].completedAt));assert.match(d.messages.at(-1).text,/PARECER-INDEPENDENTE/);assert.equal(clients.principal.conversations.length,1);assert.equal(clients.principal.conversations[0].turns.length,2);assert.equal(clients.reviewer.conversations[0].sandbox,'plan');assert.equal(hub.snapshot().conversations.length,0);assert.equal(d.cycles[0].metrics.principalUsage.inputTokens,20);assert.equal(d.cycles[0].metrics.principalUsage.measuredTurns,2);
+ const other=await create();await send(other,'COL_DIRECT');await wait(()=>hub.collaboration.session(other.id).status==='completed');assert.equal(clients.reviewer.conversations.length,1);
+});
+test('correção depois do parecer recebe nova revisão independente e respeita limite',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create({reviewer});await send(s,'COL_LOOP');await wait(()=>hub.collaboration.session(s.id).status==='completed');const d=hub.collaboration.detail(s.id);assert.equal(d.jobs.length,2);assert.equal(d.reviews.length,2);assert.equal(new Set(d.reviews.map(r=>r.conversationId)).size,2);assert.equal(clients.principal.conversations[0].turns.length,3);
+ assert.ok(d.reviews.every(r=>r.resultDelivery==='confirmed'));assert.ok(d.reviews.every(r=>r.cleanup==='confirmed'));
+});
+test('parar revisão conserva parcial e bloqueia entrega automática de avaliação',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create({reviewer});await send(s,'COL_REVIEW_HOLD');await wait(()=>clients.reviewer.conversations[0]?.messages.some(m=>m.text==='PARECER-PARCIAL'));
+ await hub.collaboration.interrupt(s.id);const d=hub.collaboration.detail(s.id);assert.equal(d.status,'interrupted');assert.equal(d.reviews[0].partial,'PARECER-PARCIAL');assert.equal(d.reviews[0].cleanup,'confirmed');assert.equal(d.jobs[0].status,'completed');assert.equal(clients.principal.conversations[0].turns.length,1);
+});
+test('falha ou perda do revisor não é aprovação nem reenviada',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create({reviewer});await send(s,'COL_REVIEW_FAIL');await wait(()=>hub.collaboration.session(s.id).status==='failed');assert.equal(hub.collaboration.detail(s.id).jobs[0].status,'completed');assert.equal(clients.principal.conversations[0].turns.length,1);
+ const other=await create({reviewer});await send(other,'COL_REVIEW_LOST');await wait(()=>hub.collaboration.session(other.id).status==='uncertain');await assert.rejects(send(other,'COL_DIRECT'),/incerto/);assert.equal(hub.collaboration.detail(other.id).reviews[0].partial,'PARECER-INCERTO');
+});
+test('reinício durante revisão conserva parecer parcial e não repete os três clientes',async t=>{
+ const first=await setup(t),s=await first.create({reviewer});await first.send(s,'COL_REVIEW_HOLD');await wait(()=>first.clients.reviewer.conversations[0]?.messages.some(m=>m.text==='PARECER-PARCIAL'));await first.close();
+ const next=await setup(t,first.dir),d=next.hub.collaboration.detail(s.id);assert.equal(d.status,'uncertain');assert.equal(d.reviews[0].partial,'PARECER-PARCIAL');assert.equal(d.reviews[0].cleanup,'confirmed');assert.equal(next.clients.reviewer.conversations.length,1);assert.equal(next.clients.reviewer.conversations[0].turns.length,1);assert.equal(next.clients.principal.conversations[0].turns.length,1);await next.close();
+});
+
+test('parecer não pode ser consultado por outra colaboração e modelo inválido falha antes da inferência',async t=>{
+ const {hub,clients,create,send}=await setup(t);await assert.rejects(create({reviewer:{provider:'claude',model:'inexistente',effort:'medium'}}),/revisão/);assert.equal(clients.principal.conversations.length,0);
+ const a=await create({reviewer});await send(a);await wait(()=>hub.collaboration.session(a.id).status==='completed');const id=hub.collaboration.detail(a.id).reviews[0].id;
+ const b=await create();await send(b,'COL_GATE');await wait(()=>hub.collaboration.session(b.id).jobs.length===1);await assert.rejects(hub.collaboration.tool(clients.principal.lastToken,'get_review_result',{reviewId:id}),/fora/);await hub.collaboration.interrupt(b.id);
 });

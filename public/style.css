@@ -1831,6 +1831,11 @@ h1 { font-size: clamp(36px, 3.7vw, 60px); font-weight: 550; letter-spacing: -2px
 .col-heading h1 { font-size:15px; font-weight:600; margin:0; }
 .col-status { color:var(--text-secondary); font-size:11px; }
 .col-status[data-status=executor],.col-status[data-status=principal],.col-status[data-status=reporting] { color:var(--accent); }
+.col-status[data-status=reviewing] { color:#deb5a4; }
+.col-metrics { flex-shrink:0; margin:0 0 8px; padding:8px 0; border-bottom:1px solid var(--border-subtle); min-width:0; }
+.col-metrics select { width:100%; min-width:0; font-size:11px; color:var(--text-secondary); background:var(--bg-surface); border:1px solid var(--border-subtle); padding:5px 7px; }
+.col-metrics p { margin:5px 0 0; color:var(--text-secondary); font-size:10px; line-height:1.5; overflow-wrap:anywhere; }
+.col-review-report { border-color:#795e50; }
 .col-status[data-status=uncertain],.col-job-error { color:#ebbb83; }
 .col-conversation>.notice { flex-shrink:0; margin:0 0 10px; font-size:12px; max-height:90px; overflow:auto; }
 .col-settings { flex-shrink:0; border:1px solid var(--border-subtle); border-radius:9px; padding:10px 12px; margin-bottom:8px; max-height:38vh; overflow:auto; background:var(--bg-surface); }

@@ -109,3 +109,10 @@ test('interrupção termina o turno sem matar a sessão; queda fica incerta e n�
   const last=await readFile(path.join(directory,`.fake-claude-last-${c.threadId}`),'utf8');
   assert.equal(last,'depois');
 });
+
+test('revisor mantém ferramentas de leitura e recusa escrita sem aprovação possível',async t=>{
+ const {directory,options,cleanup}=await setup(t);const log=path.join(directory,'args.json'),client=new ClaudeCode({...options,readOnly:true,env:{...options.env,FAKE_CLAUDE_ARGS_LOG:log}});cleanup.push(client);await client.load();await client.connect();
+ const c=await client.create({cwd:directory,model:'haiku',effort:'low',sandbox:'plan'});await client.send(c.id,'tool-approval','review');await waitFor(()=>c.status==='completed');
+ assert.equal(client.approvals.size,0);assert.equal(c.messages.at(-1).text,'Recusado.');assert.equal(c.items[0].status,'declined');
+ const args=JSON.parse(await readFile(log,'utf8'));assert.ok(args.includes('--restricted'));assert.ok(args.includes('--strict-mcp-config'));assert.equal(args[args.indexOf('--tools')+1],'Read,Glob,Grep');assert.equal(args[args.indexOf('--mcp-config')+1],'{"mcpServers":{}}');
+});

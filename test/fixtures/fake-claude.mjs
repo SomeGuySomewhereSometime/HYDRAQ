@@ -1,6 +1,7 @@
 import { createInterface } from 'node:readline';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 const args = process.argv.slice(2);
+if(process.env.FAKE_CLAUDE_ARGS_LOG)writeFileSync(process.env.FAKE_CLAUDE_ARGS_LOG,JSON.stringify(args));
 const emit = event => process.stdout.write(JSON.stringify(event) + '\n');
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : null;
 if (!args.includes('-p') || option('--input-format') !== 'stream-json' || option('--output-format') !== 'stream-json') process.exit(8);
