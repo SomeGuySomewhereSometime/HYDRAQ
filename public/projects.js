@@ -23,7 +23,7 @@ export class ProjectUI {
     this.dialog=el('dialog','project-dialog');document.body.append(this.dialog);
   }
   button(text,action,cls=''){const button=el('button',cls,text);button.type='button';button.addEventListener('click',action);return button;}
-  field(form,text,input){const label=el('label','',text);label.append(input);form.append(label);return input;}
+  field(form,text,input){input.setAttribute('aria-label',text);const label=el('label','',text);label.append(input);form.append(label);return input;}
   input(value='',maxLength=80){const input=el('input');input.value=value;input.maxLength=maxLength;return input;}
   select(options,value){const input=el('select');for(const [key,text]of options){const option=el('option','',text);option.value=key;input.append(option);}input.value=value;return input;}
   modal(title){

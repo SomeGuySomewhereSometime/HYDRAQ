@@ -138,7 +138,7 @@ test('proposta de memória é um pedido interno adicional e só é aplicada apó
   const {hub,clients,project,chat,idle}=await setup(t),p=await project(),c=await chat(p.id);
   hub.inspect=async()=>({complete:true,files:{'a.mjs':'hash'},warnings:[]});
   await hub.send(c.id,'Pedido público','public-source');await waitFor(idle);await hub.saveProjectMemory(p.id,{revision:0,text:'Memória inicial'});
-  const proposal=await hub.proposeMemory(p.id,{conversationId:c.id,revision:1});assert.equal(proposal.text,'Resultado confirmado');assert.equal((await hub.projectMemory(p.id)).memory.text,'Memória inicial');
+  const job=await hub.proposeMemory(p.id,{conversationId:c.id,revision:1});assert.equal(job.accepted,true);await Promise.all([...hub.proposalTasks]);const proposal=(await hub.projectMemoryProposals(p.id)).records[0];assert.equal(proposal.text,'Resultado confirmado');assert.equal((await hub.projectMemory(p.id)).memory.text,'Memória inicial');
   const native=clients.codex.conversation(c.id);assert.equal(native.turns.at(-1).internal,'memory-proposal');assert.equal(proposal.sources[0].requestId,'public-source');assert.equal(hub.context.entries(p.id).length,1);
   await hub.saveProjectMemory(p.id,{revision:1,text:proposal.text,sources:proposal.sources});assert.equal((await hub.projectMemory(p.id)).memory.revision,2);
   const before=native.turns.length;await assert.rejects(hub.proposeMemory(p.id,{conversationId:c.id,revision:1}),/mudou/);assert.equal(native.turns.length,before);assert.equal(hub.sending,false);
@@ -146,6 +146,7 @@ test('proposta de memória é um pedido interno adicional e só é aplicada apó
 
 test('evento Codex de compactação e atualização explícita renovam contexto no próximo pedido',async t=>{
   const {hub,clients,project,chat,idle}=await setup(t),p=await project(),c=await chat(p.id),native=clients.codex.conversation(c.id);
+  await hub.saveProjectMemory(p.id,{revision:0,text:'Memória de teste'});
   await hub.send(c.id,'Primeiro','ctx-first');await waitFor(idle);assert.ok(native.messages[0].projectContext);
   await hub.send(c.id,'Segundo','ctx-second');await waitFor(idle);assert.equal(native.messages.find(m=>m.requestId==='ctx-second').projectContext,undefined);
   clients.codex.client.emit('notification',{method:'thread/compacted',params:{threadId:native.threadId}});
@@ -162,4 +163,40 @@ test('passagem conserva o texto importado explicitamente sem repetir memória/at
   const result=await hub.send(target.id,'Continua','import-pass',{provider:'claude',model:'haiku',effort:'low',handoffMode:'quick'});await waitFor(idle);
   const destination=clients.claude.conversation(result.conversationId),message=destination.messages.find(m=>m.requestId==='import-pass');
   assert.ok(message.handoffContext.includes(preview.text));assert.doesNotMatch(message.handoffContext,/<hydraq_project_context>/);
+});
+
+
+test('orçamento retira só atividade e preserva memória inteira ou bloqueia antes de enviar',async t=>{
+ const {hub,clients,project,chat,idle}=await setup(t),p=await project(),source=await chat(p.id),target=await chat(p.id);
+ await hub.send(source.id,'Atividade de exemplo','budget-source');await waitFor(idle);
+ const text='Antes. Atividade recente de outras conversas. FIM-DA-MEMORIA';await hub.saveProjectMemory(p.id,{revision:0,text});
+ const native=clients.codex.conversation(target.id),prepared=await hub.context.prepare(native),size=99000-prepared.text.length+10;
+ await hub.send(target.id,'x'.repeat(size),'budget-target');await waitFor(idle);const message=native.messages.find(m=>m.requestId==='budget-target');
+ assert.ok(message.projectContext.includes('FIM-DA-MEMORIA'));assert.match(message.projectContext,/Atividade omitida/);assert.equal(native.turns.at(-1).projectDelivery.memoryRevision,1);
+ const huge=await chat(p.id),count=clients.codex.conversation(huge.id).turns.length;await assert.rejects(hub.send(huge.id,'x'.repeat(99000),'budget-too-large'),/excedem o limite/);assert.equal(clients.codex.conversation(huge.id).turns.length,count);
+});
+
+test('proposta recusa conversa vazia e resultado incerto antes de gastar inferência',async t=>{
+ const {hub,clients,project,chat,idle}=await setup(t),p=await project(),c=await chat(p.id),native=clients.codex.conversation(c.id);
+ await assert.rejects(hub.proposeMemory(p.id,{conversationId:c.id,revision:0}),/não tem pedidos públicos/);assert.equal(native.turns.length,0);
+ await hub.send(c.id,'Fonte','proposal-uncertain-source');await waitFor(idle);native.status='uncertain';native.turns[0].status='uncertain';
+ await assert.rejects(hub.proposeMemory(p.id,{conversationId:c.id,revision:0}),/incerto/);assert.equal(native.turns.length,1);assert.equal((await hub.projectMemoryProposals(p.id)).total,0);
+});
+
+test('proposta persiste resultado e permite inspeção incompleta com aviso explícito',async t=>{
+ const {hub,clients,dir,project,chat,idle}=await setup(t),p=await project(),c=await chat(p.id);await hub.send(c.id,'Fonte pública','proposal-durable-source');await waitFor(idle);
+ hub.inspect=async()=>({complete:false,files:{},warnings:['Limite de leitura']});const native=clients.codex.conversation(c.id),calls=[];
+ const send=clients.codex.send.bind(clients.codex);clients.codex.send=async(...args)=>{calls.push(args[3]);return send(...args);};
+ hub.contextMcp.endpoint('http://127.0.0.1:1/api/context/query');const config=await hub.contextMcp.issue(native);
+ const job=await hub.proposeMemory(p.id,{conversationId:c.id,revision:0});assert.equal(job.status,'running');await Promise.all([...hub.proposalTasks]);
+ const {MemoryProposals}=await import('../lib/memory-proposals.mjs');const restored=new MemoryProposals(dir+'/state/memory-proposals'),result=(await restored.list(p.id)).records[0];
+ assert.equal(result.id,job.id);assert.equal(result.status,'ready');assert.equal(result.text,'Resultado confirmado');assert.ok(result.warnings.length>=2);assert.equal(calls[0].contextMcp.file,config.file);assert.equal(calls[0].contextMcp.name,config.name);assert.equal((await hub.projectMemory(p.id)).memory.revision,0);
+});
+
+test('rotação MCP e proposta conservam configuração da sessão nativa sem novo resume',async t=>{
+ const {hub,clients,project,chat,idle}=await setup(t),p=await project(),c=await chat(p.id),native=clients.codex.conversation(c.id);hub.inspect=async()=>({complete:true,files:{},warnings:[]});hub.contextMcp.endpoint('http://127.0.0.1:1/api/context/query');
+ const original=clients.codex.client.call.bind(clients.codex.client),methods=[];clients.codex.client.call=async(method,...args)=>{methods.push(method);return original(method,...args);};
+ await hub.send(c.id,'Primeiro','rotation-source');await waitFor(idle);const first=hub.contextMcp.sessions.get(c.id),name=first.config.name,file=first.config.file;methods.length=0;first.expires=0;
+ await hub.send(c.id,'Segundo','rotation-next');await waitFor(idle);assert.equal(hub.contextMcp.sessions.get(c.id).config.name,name);assert.equal(hub.contextMcp.sessions.get(c.id).config.file,file);assert.ok(!methods.includes('thread/resume'));assert.equal(native.messages.find(m=>m.requestId==='rotation-next').projectContext,undefined);
+ methods.length=0;await hub.proposeMemory(p.id,{conversationId:c.id,revision:0});await Promise.all([...hub.proposalTasks]);assert.ok(!methods.includes('thread/resume'));assert.equal((await hub.projectMemoryProposals(p.id)).records[0].status,'ready');
 });

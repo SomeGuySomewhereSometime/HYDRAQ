@@ -7,7 +7,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { publicMcpResult } from '../lib/hydraq.mjs';
 import { Projects } from '../lib/projects.mjs';
-import { ProjectContext } from '../lib/project-context.mjs';
+import { ProjectContext, assembleProjectContext, redact } from '../lib/project-context.mjs';
 import { AttachmentStore } from '../lib/attachments.mjs';
 import { ContextMcp } from '../lib/context-mcp.mjs';
 import { createHttpServer } from '../lib/http.mjs';
@@ -18,7 +18,7 @@ async function setup(t){
  const projects=new Projects(dir+'/state');await projects.load();const p=await projects.create({name:'A',root:dir,revision:0});await mkdir(dir+'/other');const q=await projects.create({name:'B',root:dir+'/other',revision:1});
  const conversations=[];const make=async(project=p,props={})=>{const id=randomUUID(),c={id,group:id,provider:'codex',title:'Conversa',turns:[],messages:[],...props};conversations.push(c);await projects.change(projects.data.revision,d=>{d.groups[c.group]={projectId:project.id,title:null,archived:false};});return c;};
  const attachments=new AttachmentStore(dir+'/attachments'),context=new ProjectContext({directory:dir+'/memory',projects,conversations:()=>conversations,attachments});
- const turn=(c,text='Resposta',status='completed',props={})=>{const requestId=randomUUID(),record={id:requestId,requestId,status,startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),facts:{files:['a.mjs'],commands:[{command:'node test',status:'completed',exitCode:0}]},...props};c.turns.push(record);c.messages.push({role:'user',requestId,text:'Pergunta',at:record.startedAt},{role:'assistant',requestId,text,at:record.completedAt});return record;};
+ const turn=(c,text='Resposta',status='completed',props={})=>{const requestId=randomUUID(),record={id:requestId,requestId,status,startedAt:new Date().toISOString(),completedAt:new Date().toISOString(),facts:{files:['a.mjs'],commands:[{command:'node test',status:'completed',exitCode:0}]},...props};c.turns.push(record);c.messages.push({role:'user',requestId,text:'Pergunta',at:record.startedAt,...(props.projectContext?{projectContext:props.projectContext}:{})},{role:'assistant',requestId,text,at:record.completedAt});return record;};
  return {dir,projects,p,q,conversations,make,turn,context,attachments};
 }
 
@@ -48,16 +48,16 @@ test('consulta limita âmbito, exclui pedidos internos/contextos injetados e fil
 test('atividade não confunde aviso com entrega integral e não reenvia a própria conversa',async t=>{
  const {context,p,make,turn}=await setup(t),a=await make(),b=await make();turn(a,'Minha');const external=turn(b,'Conclusão','uncertain');
  await context.save(p.id,{revision:0,text:'Memória'});const first=await context.prepare(a);assert.equal(first.delivery.memoryRevision,1);assert.equal(first.delivery.activityKeys.length,1);assert.equal(first.delivery.coverage,'notice');assert.match(first.text,/uncertain/);assert.doesNotMatch(first.text,/Minha/);
- turn(a,'OK','completed',{projectDelivery:first.delivery});assert.equal(await context.prepare(a),null);
+ turn(a,'OK','completed',{projectDelivery:first.delivery,projectContext:first.text});assert.equal(await context.prepare(a),null);
  turn(b,'Novidade');const next=await context.prepare(a);assert.equal(next.delivery.memoryRevision,null);assert.match(next.text,/Novidade/);assert.equal(next.delivery.activityKeys.length,1);
  assert.equal(external.status,'uncertain');assert.equal(a.handoffDeliveries,undefined);
 });
 
 test('falha, reinício da sessão, mudança de memória e compactação não perdem contexto',async t=>{
- const {context,p,make,turn}=await setup(t),a=await make();const first=await context.prepare(a,{queryServerName:'server1'});turn(a,'Não concluído','failed',{projectDelivery:first.delivery});assert.ok(await context.prepare(a,{queryServerName:'server1'}));
- turn(a,'OK','completed',{projectDelivery:first.delivery});assert.equal(await context.prepare(a,{queryServerName:'server1'}),null);
+ const {context,p,make,turn}=await setup(t),a=await make();await context.save(p.id,{revision:0,text:'Inicial'});const first=await context.prepare(a,{queryServerName:'server1'});turn(a,'Não concluído','failed',{projectDelivery:first.delivery,projectContext:first.text});assert.ok(await context.prepare(a,{queryServerName:'server1'}));
+ turn(a,'OK','completed',{projectDelivery:first.delivery,projectContext:first.text});assert.equal(await context.prepare(a,{queryServerName:'server1'}),null);
  assert.equal(await context.prepare(a,{queryServerName:'server2'}),null);const rekey=await context.prepare(a,{queryServerName:'server2',queryAvailable:true});assert.equal(rekey.delivery.memoryRevision,null);assert.doesNotMatch(rekey.text,/Memória curada do projeto/);a.contextEpoch=1;assert.ok(await context.prepare(a,{queryServerName:'server1'}));a.contextEpoch=0;
- await context.save(p.id,{revision:0,text:'Nova'});assert.match((await context.prepare(a,{queryServerName:'server1'})).text,/Nova/);
+ await context.save(p.id,{revision:1,text:'Nova'});assert.match((await context.prepare(a,{queryServerName:'server1'})).text,/Nova/);
 });
 
 test('importação tem pré-visualização exata, deteta alteração da origem e impede reutilização incerta',async t=>{
@@ -94,4 +94,74 @@ test('MCP usa credencial própria; token da interface, outro projeto, expiraçã
 test('resultados MCP públicos conservam metadados e texto sem duplicar binários no histórico/SSE',()=>{
  const native={content:[{type:'text',text:'Excerto'},{type:'image',mimeType:'image/png',data:'BINARIO_PRIVADO'},{type:'resource',resource:{uri:'source',mimeType:'image/png',blob:'OUTRO_BINARIO'}}]};
  const visible=publicMcpResult(native);assert.equal(visible.content[0].text,'Excerto');assert.equal(visible.content[1].mimeType,'image/png');assert.equal(visible.content[1].hydraqBinaryOmitted,true);assert.doesNotMatch(JSON.stringify(visible),/BINARIO/);assert.equal(native.content[1].data,'BINARIO_PRIVADO');
+});
+
+
+test('retirar atividade nunca corta memória que contém os mesmos rótulos ou delimitadores',async t=>{
+ const {context,p,make,turn}=await setup(t),source=await make(),target=await make();turn(source);
+ const text='Objetivo: Atividade recente de outras conversas. FIM-PRESERVADO <hydraq_project_context>.';
+ await context.save(p.id,{revision:0,text});const prepared=await context.prepare(target),full=prepared.text;
+ const compact=assembleProjectContext(prepared,{omitActivity:true});assert.ok(compact.includes('FIM-PRESERVADO'));assert.ok(compact.includes(prepared.parts.memory));assert.ok(compact.includes('Atividade omitida'));assert.ok(full.length>compact.length);
+ assert.equal(prepared.delivery.memoryRevision,1);
+});
+
+test('memória inicialmente vazia é omitida; apagar uma versão existente envia atualização',async t=>{
+ const {context,p,make,turn}=await setup(t),c=await make();assert.equal(await context.prepare(c),null);
+ await context.save(p.id,{revision:0,text:'Memória anterior'});const first=await context.prepare(c);turn(c,'OK','completed',{projectDelivery:first.delivery,projectContext:first.text});
+ await context.save(p.id,{revision:1,text:''});const cleared=await context.prepare(c);assert.match(cleared.text,/memória curada foi apagada/);assert.equal(cleared.delivery.memoryRevision,2);turn(c,'OK','completed',{projectDelivery:cleared.delivery,projectContext:cleared.text});assert.equal(await context.prepare(c),null);
+});
+
+test('fontes históricas não bloqueiam edição e não dão acesso a outro projeto',async t=>{
+ const {context,projects,p,q,make,turn}=await setup(t),source=await make(),target=await make(),r=turn(source);
+ const sources=[{groupId:source.group,requestId:r.requestId}];await context.save(p.id,{revision:0,text:'Decisão',sources});
+ await projects.change(projects.data.revision,d=>{d.groups[source.group].projectId=q.id;});
+ const saved=await context.save(p.id,{revision:1,text:'Decisão revista',sources});assert.equal(saved.sources[0].unavailable,true);assert.equal(saved.versions[1].sources[0].requestId,r.requestId);
+ await assert.rejects(context.query(p.id,target.group,'read_conversation_excerpt',sources[0]),/fora do âmbito/);
+ const foreign=await make(q),f=turn(foreign);await assert.rejects(context.save(p.id,{revision:2,text:'Não aceitar',sources:[{groupId:foreign.group,requestId:f.requestId}]}),/fora deste projeto/);
+ await context.save(p.id,{revision:2,text:'Sem referências',sources:[]});assert.equal((await context.memory(p.id)).sources.length,0);
+});
+
+test('histórico de versões tem paginação sem apagar versões antigas',async t=>{
+ const {context,p}=await setup(t);for(let i=0;i<25;i++)await context.save(p.id,{revision:i,text:'Versão '+i});
+ const view=await context.view(p.id);assert.equal(view.memory.versions.length,10);assert.equal(view.versionCount,25);assert.equal(view.nextVersionCursor,10);
+ const page=await context.versions(p.id,10);assert.equal(page.versions.length,10);assert.equal(page.versions[0].revision,14);assert.equal(page.nextCursor,20);const last=await context.versions(p.id,20);assert.equal(last.versions.at(-1).revision,0);assert.equal(last.nextCursor,null);assert.equal((await context.memory(p.id)).versions.length,25);
+});
+
+test('importação pode ser reutilizada só após falha comprovadamente anterior ao envio',async t=>{
+ const {context,p,make,turn}=await setup(t),source=await make(),target=await make(),r=turn(source);
+ const preview=await context.preview(p.id,{sourceGroupId:source.group,requestIds:[r.requestId]}),prepared=await context.prepare(target,{importId:preview.previewId});
+ const attempt=turn(target,'','failed',{delivery:'preparing',projectDelivery:prepared.delivery});assert.equal((await context.importFor(target,preview.previewId)).text,preview.text);
+ attempt.delivery='sending';await assert.rejects(context.importFor(target,preview.previewId),/já foi usada/);attempt.status='interrupted';await assert.rejects(context.importFor(target,preview.previewId),/já foi usada/);
+});
+
+test('filtro de segredos cobre GitHub, AWS, chaves privadas e URLs autenticadas',()=>{
+ const values=['ghp_'+'A'.repeat(36),'github_pat_'+'B'.repeat(70),'AKIA'+'C'.repeat(16),'ASIA'+'D'.repeat(16),'-----BEGIN RSA PRIVATE KEY-----\nDADOS-SECRETOS\n-----END RSA PRIVATE KEY-----','https://utilizador:senha-secreta@exemplo.test/path'];
+ const text=redact(values.join('\n'));for(const value of values)assert.ok(!text.includes(value));assert.doesNotMatch(text,/DADOS-SECRETOS|senha-secreta/);assert.match(text,/exemplo.test\/path/);assert.match(redact('Texto normal'),/Texto normal/);
+});
+
+test('pesquisa suporta aspas e quebras de linha no texto original',async t=>{
+ const {context,p,make,turn}=await setup(t),source=await make(),target=await make();turn(source,'Uma decisão "entre aspas"\ne uma segunda linha');
+ assert.equal((await context.query(p.id,target.group,'search_project_conversations',{query:'"entre aspas"'})).matches.length,1);assert.equal((await context.query(p.id,target.group,'search_project_conversations',{query:'aspas"\ne uma'})).matches.length,1);
+});
+
+test('rotação MCP mantém nome/caminho, rejeita o token anterior e renova consultas de turno ativo',async t=>{
+ const s=await setup(t),c=await s.make(),hub={...s,conversations:()=>s.conversations},broker=new ContextMcp(hub,s.dir+'/runtime');broker.endpoint('http://127.0.0.1:1/api/context/query');t.after(()=>broker.close());
+ const first=await broker.issue(c),old=JSON.parse(await readFile(first.file)).token;broker.sessions.get(c.id).expires=0;
+ const second=await broker.issue(c),fresh=JSON.parse(await readFile(second.file)).token;assert.equal(second.name,first.name);assert.equal(second.file,first.file);assert.notEqual(fresh,old);await assert.rejects(broker.query(old,'get_project_memory',{}),/sem sessão/);
+ broker.sessions.get(c.id).expires=0;await assert.rejects(broker.query(fresh,'get_project_memory',{}),/expirada/);
+ c.turns.push({requestId:'long',status:'running'});assert.equal((await broker.query(fresh,'get_project_memory',{})).revision,0);assert.ok(broker.sessions.get(c.id).expires>Date.now());c.turns[0].status='completed';
+ await broker.close();const restarted=new ContextMcp(hub,s.dir+'/runtime');restarted.endpoint('http://127.0.0.1:2/api/context/query');t.after(()=>restarted.close());const third=await restarted.issue(c);assert.equal(third.name,first.name);assert.equal(third.file,first.file);
+});
+
+test('limpeza MCP remove só ficheiros conhecidos de processos mortos e preserva restantes',async t=>{
+ const s=await setup(t),directory=s.dir+'/runtime';await mkdir(directory);const deadFile=directory+'/'+'a'.repeat(64)+'.json',aliveFile=directory+'/'+'b'.repeat(64)+'.json',legacyFile=directory+'/'+randomUUID()+'.json';
+ await writeFile(deadFile,JSON.stringify({ownerPid:2147483647}),{mode:0o600});await writeFile(aliveFile,JSON.stringify({ownerPid:process.pid}),{mode:0o600});await writeFile(legacyFile,'{}',{mode:0o600});
+ const broker=new ContextMcp({},directory);await broker.cleanup();await assert.rejects(stat(deadFile),{code:'ENOENT'});assert.ok(await stat(aliveFile));assert.ok(await stat(legacyFile));
+});
+
+
+test('entrega antiga cortada é renovada sem reescrever o histórico nem reenviar pedidos',async t=>{
+ const {context,p,make,turn}=await setup(t),c=await make();await context.save(p.id,{revision:0,text:'Antes. Atividade recente de outras conversas. Final obrigatório.'});
+ const prepared=await context.prepare(c);turn(c,'Confirmado','completed',{projectDelivery:prepared.delivery,projectContext:prepared.text.split('Atividade recente de outras conversas')[0]});
+ const before=JSON.stringify(c);assert.match((await context.prepare(c)).text,/Final obrigatório/);assert.equal(JSON.stringify(c),before);
 });

@@ -5,11 +5,12 @@ const detail=(title,text)=>{const d=node('details');d.append(node('summary',titl
 export class ProjectMemoryUI {
   constructor({api,getState,getCurrent,getProject,getKey,getProvider,toast,renderImages,changed}){
     Object.assign(this,{api,getState,getCurrent,getProject,getKey,getProvider,toast,renderImages,changed});this.pending=new Map();
-    this.dialog=node('dialog',undefined,'project-dialog memory-dialog');document.body.append(this.dialog);
+    this.proposalPoll=null;
+    this.dialog=node('dialog',undefined,'project-dialog memory-dialog');document.body.append(this.dialog);this.dialog.addEventListener('close',()=>clearTimeout(this.proposalPoll));
     this.controls=node('div',undefined,'project-context-controls');document.querySelector('#composer').before(this.controls);
   }
   async run(action){try{return await action();}catch(e){this.toast(e.message);}}
-  modal(title){this.dialog.replaceChildren();const top=node('div',undefined,'project-dialog-heading');top.append(node('h2',title),button('Fechar',()=>this.dialog.close()));const body=node('div',undefined,'project-form');this.dialog.append(top,body);if(!this.dialog.open)this.dialog.showModal();return body;}
+  modal(title){clearTimeout(this.proposalPoll);this.dialog.replaceChildren();const top=node('div',undefined,'project-dialog-heading');top.append(node('h2',title),button('Fechar',()=>this.dialog.close()));const body=node('div',undefined,'project-form');this.dialog.append(top,body);if(!this.dialog.open)this.dialog.showModal();return body;}
   stage(value){this.pending.set(this.getKey(),value);this.changed();this.dialog.close();this.toast('Contexto preparado. Segue apenas com o próximo pedido enviado por ti.');}
   move(from,to){if(from!==to&&this.pending.has(from)){this.pending.set(to,this.pending.get(from));this.pending.delete(from);}}
   consume(key,value){if(this.pending.get(key)===value)this.pending.delete(key);}
@@ -33,17 +34,49 @@ export class ProjectMemoryUI {
     const file=node('input');file.type='file';file.accept='.md,.txt,text/markdown,text/plain';file.hidden=true;
     file.addEventListener('change',()=>this.run(async()=>{const f=file.files?.[0];if(!f)return;if(f.size>20000)throw Error('O ficheiro excede o limite.');const text=await f.text();if(text.length>view.limit)throw Error(`O conteúdo excede ${view.limit} caracteres.`);input.value=text;sources=[];update();this.toast('Texto importado para revisão. Guarda para aplicar.');}));
     actions.append(button('Importar Markdown',()=>file.click()),file);body.append(actions);
-    if(memory.versions.length){const history=node('details');history.append(node('summary',`Versões anteriores (${memory.versions.length})`));for(const version of [...memory.versions].reverse()){
-      const d=detail(`Versão ${version.revision} · ${version.updatedAt||'inicial'}`,version.text);d.append(button('Usar no editor',()=>{input.value=version.text;sources=version.sources;update();}));history.append(d);
-    }body.append(history);}
-    if(memory.sources.length)body.append(detail('Fontes da memória',memory.sources.map(s=>`${s.groupId} / ${s.requestId}`).join('\n')));
-    const projectChats=this.getState().conversations.filter(c=>c.organization?.projectId===projectId&&!c.organization.archived);
-    if(projectChats.length){const proposal=node('details');proposal.append(node('summary','Propor atualização com um modelo · pedido adicional'));
-      const select=node('select');select.setAttribute('aria-label','Conversa que propõe a memória');for(const c of projectChats){const o=node('option',`${c.title} · ${c.provider} · ${c.model}`);o.value=c.id;select.append(o);}proposal.append(select,node('p','Usa a sessão e as permissões atuais desta conversa. Pede apenas texto e verifica alterações no projeto; não desfaz alterações que ocorram. A proposta só é aplicada quando a guardares.'));
-      const generate=button('Gerar proposta',()=>this.run(async()=>{generate.disabled=true;try{
-        const result=await this.api(`/api/projects/${projectId}/memory-proposal`,{conversationId:select.value,revision:memory.revision});
-        const comparison=node('div',undefined,'memory-comparison');comparison.append(detail('Memória atual',input.value),detail('Proposta para revisão',result.text),button('Colocar proposta no editor',()=>{input.value=result.text;sources=result.sources;update();comparison.remove();}));proposal.append(comparison);
-      }finally{generate.disabled=false;}}));proposal.append(generate);body.append(proposal);}
+    if(view.versionCount){
+      const history=node('details');history.append(node('summary',`Versões anteriores (${view.versionCount})`));
+      const appendVersions=versions=>{for(const version of versions){const d=detail(`Versão ${version.revision} · ${version.updatedAt||'inicial'}`,version.text);d.append(button('Usar no editor',()=>{input.value=version.text;sources=version.sources;update();}));history.append(d);}};
+      appendVersions([...memory.versions].reverse());let cursor=view.nextVersionCursor;
+      const more=button('Carregar versões anteriores',()=>this.run(async()=>{const result=await this.api(`/api/projects/${projectId}/memory-versions?cursor=${cursor}`);appendVersions(result.versions);cursor=result.nextCursor;more.hidden=cursor===null;}));more.hidden=cursor===null;history.append(more);body.append(history);
+    }
+    const sourceBox=node('details');sourceBox.append(node('summary','Fontes da memória'));
+    sourceBox.append(node('pre',memory.sources.map(s=>`${s.groupId} / ${s.requestId}${s.unavailable?' · referência histórica indisponível neste projeto':''}`).join('\n')||'Sem fontes associadas.'));
+    sourceBox.append(button('Retirar fontes da edição',()=>{sources=[];this.toast('A edição será guardada sem fontes. As versões anteriores conservam as referências.');}));body.append(sourceBox);
+    const state=this.getState(),groups=new Map();
+    for(const c of state.conversations.filter(c=>c.organization?.projectId===projectId&&!c.organization.archived)){
+      const group=groups.get(c.group)||{members:[]};group.members.push(c);groups.set(c.group,group);
+    }
+    const projectChats=[...groups.values()].filter(g=>!g.members.some(c=>c.status==='uncertain')&&g.members.some(c=>c.turns?.some(t=>!t.internal&&t.status==='completed'))).map(g=>[...g.members].sort((a,b)=>b.updatedAt.localeCompare(a.updatedAt))[0]);
+    const proposals=node('details');proposals.append(node('summary','Propostas de memória guardadas'));
+    const cards=node('div');let proposalCursor=0;
+    const use=(result)=>{input.value=result.text;sources=result.sources;update();this.toast('Proposta colocada no editor. Revê e guarda para a aplicar.');};
+    const refreshProposals=async()=>{
+      if(!this.dialog.open||!body.isConnected)return;
+      const result=await this.api(`/api/projects/${projectId}/memory-proposals?cursor=${proposalCursor}`);cards.replaceChildren();
+      for(const record of result.records){
+        const card=node('div',undefined,'memory-comparison');card.append(node('strong',`${record.provider} · ${record.model} · ${{running:'Em curso',ready:'Pronta para revisão',failed:'Falhou',uncertain:'Por confirmar'}[record.status]} · memória base ${record.baseRevision}`));
+        if(record.error)card.append(node('p',record.error));for(const warning of record.warnings)card.append(node('p',warning));
+        if(record.status==='ready'){
+          card.append(detail('Memória no editor',input.value),detail('Proposta guardada',record.text));
+          const accept=button('Colocar proposta no editor',()=>use(record));
+          if(record.warnings.length){accept.disabled=true;const label=node('label','Revi os avisos e o estado do projeto');const check=node('input');check.type='checkbox';check.addEventListener('change',()=>accept.disabled=!check.checked);label.prepend(check);card.append(label);}
+          card.append(accept);
+          if(record.baseRevision!==memory.revision)card.append(node('p','Esta proposta partiu de outra versão da memória. Compara com a versão atual antes de guardar.'));
+        }else if(record.text)card.append(detail('Texto parcial, sem aplicar',record.text));
+        cards.append(card);
+      }
+      if(!result.records.length)cards.append(node('p','Ainda não há propostas guardadas.'));
+      if(proposalCursor>0)cards.append(button('Propostas mais recentes',()=>{proposalCursor=0;this.run(refreshProposals);}));
+      if(result.nextCursor!==null)cards.append(button('Propostas anteriores',()=>{proposalCursor=result.nextCursor;this.run(refreshProposals);}));
+      clearTimeout(this.proposalPoll);if(result.records.some(r=>r.status==='running'))this.proposalPoll=setTimeout(()=>this.run(refreshProposals),1500);
+    };
+    if(projectChats.length){
+      const select=node('select');select.setAttribute('aria-label','Conversa que propõe a memória');for(const c of projectChats){const o=node('option',`${c.organization.title||c.title} · ${c.provider} · ${c.model}`);o.value=c.id;select.append(o);}
+      proposals.append(select,node('p','Pedido adicional na sessão/modelo escolhidos. Usa a memória, os três últimos pedidos públicos concluídos do grupo e avisos recentes de outras conversas. Pede apenas texto com as permissões atuais. Inspeções incompletas ou alterações exigem revisão explícita; nada é desfeito. A proposta fica guardada, mesmo se recarregares.'));
+      const generate=button('Gerar proposta',()=>this.run(async()=>{generate.disabled=true;try{await this.api(`/api/projects/${projectId}/memory-proposal`,{conversationId:select.value,revision:memory.revision});proposalCursor=0;await refreshProposals();this.toast('Proposta iniciada. Podes fechar ou recarregar; consulta o resultado neste painel.');}finally{generate.disabled=false;}}));proposals.append(generate);
+    }else proposals.append(node('p','É necessário um grupo com pedidos públicos concluídos e sem resultado incerto pendente para gerar uma proposta.'));
+    proposals.append(cards,button('Atualizar propostas',()=>this.run(refreshProposals)));body.append(proposals);if(view.proposalError)cards.append(node('p',view.proposalError));else await refreshProposals();
     body.append(node('h3','Atividade recente · factos observados e conclusões declaradas'));
     for(const e of view.activity)body.append(node('p',`${e.title} · ${e.provider} · ${e.status} · ${e.at}\nFicheiros observados: ${e.files.join(', ')||'nenhum'}\nConclusão declarada: ${e.conclusion||'(sem resposta final)'}`));
     if(!view.activity.length)body.append(node('p','Ainda não há pedidos terminados neste projeto.'));
