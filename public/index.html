@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101114">
+  <title>HYDRAQ · Agentes locais</title>
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="/" aria-label="HYDRAQ início"><img src="/icon.svg" alt=""><span>HYDRAQ<span class="brand-dot">.</span><small>O TEU ESPAÇO DE TRABALHO</small></span></a>
+      <button class="new-chat" id="new-chat"><span>＋</span> Nova conversa <kbd>N</kbd></button>
+      <div class="section-label">CONVERSAS <span id="conversation-count">00</span></div>
+      <nav id="conversation-list" aria-label="Conversas guardadas"></nav>
+      <div class="sidebar-bottom"><div class="provider-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M5.6 18.4 18.4 5.6"/></svg></div><div><strong id="provider-label">Codex original</strong><small id="account-label">A verificar sessão…</small></div><span class="connection-dot" id="connection-dot"></span></div>
+    </aside>
+    <main>
+      <header class="topbar"><div><span class="breadcrumb">ESPAÇO LOCAL</span><span class="breadcrumb-slash">/</span><strong id="project-name">Nova conversa</strong></div><div class="connection-state" id="connection-state">A ligar ao Codex…</div></header>
+      <div class="workspace">
+        <section class="conversation-panel">
+          <div class="conversation-toolbar"><span class="eyebrow"><span class="tiny-dot"></span><span id="agent-label">CODEX</span></span><span id="session-badge">Uma tarefa. Todo o contexto.</span></div>
+          <div id="notice" class="notice hidden" role="alert"></div>
+          <section id="uncertainty-panel" class="uncertainty-panel hidden" aria-label="Resultado por confirmar"></section>
+          <section id="handoff-recovery-panel" class="handoff-recovery-panel hidden" aria-label="Rever contexto da passagem"></section>
+          <section id="progress-panel" class="progress-panel hidden" aria-label="Progresso da tarefa" aria-live="polite"></section>
+          <div id="messages" class="messages" aria-live="polite">
+            <div class="welcome" id="welcome"><div class="welcome-mark">H<span>↗</span></div><p class="eyebrow">DA IDEIA À EXECUÇÃO</p><h1>O que vamos<br>construir hoje<span>?</span></h1><p class="welcome-copy">Os clientes originais, num espaço teu.<br>Escolhe um cliente e um projeto para começar.</p><div class="suggestions"><button data-prompt="Analisa este projeto e explica a sua estrutura. Não alteres ficheiros."><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v18M16 3v18M3 8h18M3 16h18"/></svg></span> Explorar o projeto <span>↗</span></button><button data-prompt="Revê o código deste projeto e identifica os problemas mais importantes. Não alteres ficheiros."><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 9-9 9-9-9Z M9 12l2 2 4-4"/></svg></span> Rever o código <span>↗</span></button></div></div>
+          </div>
+          <section id="approvals" class="approvals" aria-label="Pedidos do Codex"></section>
+          <div class="composer-area"><form id="composer" class="composer"><div id="steer-mode" class="steer-mode hidden" role="status"><div id="steer-title">↳ Orientar a tarefa em curso</div><span id="steer-description">A orientação mantém o pedido atual.</span><button type="button" id="use-as-request" class="use-as-request hidden">Usar como novo pedido</button></div><label class="sr-only" id="prompt-label" for="prompt">Pedido para o Codex</label><textarea id="prompt" rows="3" placeholder="Descreve o que queres fazer…" maxlength="100000"></textarea><div class="composer-footer"><span id="composer-hint">Enter para enviar · Shift + Enter para nova linha</span><button type="button" id="stop" class="stop hidden">■ Parar</button><button type="submit" id="send" class="send" disabled>Enviar <span>↗</span></button></div></form><p class="composer-note"><span>◉</span> Execução no teu PC <span>·</span> Sessão original <span>·</span> Histórico local</p></div>
+        </section>
+        <aside class="inspector">
+          <div class="inspector-heading"><h2>Configuração</h2><span>01</span></div>
+          <div class="config-card"><label for="provider">CLIENTE ORIGINAL</label><select id="provider"><option value="codex">Codex</option><option value="antigravity">Antigravity · Gemini e Claude</option><option value="claude">Claude Code · Opus, Sonnet, Fable, Haiku</option><option value="cursor">Cursor · Grok</option></select><p id="provider-hint">Cada cliente usa a sua sessão original.</p><div id="handoff-box" class="handoff-box hidden"><label for="handoff-mode">PASSAGEM DE CONTEXTO</label><select id="handoff-mode"><option value="model">Completa · com resumo</option><option value="quick">Rápida · só factos</option></select><p id="handoff-hint"></p></div><label for="cwd">PROJETO</label><div class="input-with-icon"><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3Z M3 7V4h7l2 3"/></svg></span><input id="cwd" placeholder="/caminho/do/projeto" autocomplete="off" spellcheck="false"></div><p id="cwd-hint">A pasta onde o Codex vai trabalhar.</p><label for="model">MODELO</label><select id="model"><option>A carregar modelos…</option></select><div class="model-description" id="model-description"></div><label for="effort">RACIOCÍNIO</label><select id="effort"><option>Automático</option></select><div id="cursor-settings" class="hidden"><div id="context-field"><label for="context">CONTEXTO</label><select id="context"></select></div><label id="fast-field" class="toggle-field"><input id="fast" type="checkbox"> Fast · maior consumo de utilização</label></div><p id="settings-hint">Aplicam-se ao próximo pedido.</p><div id="cache-info" class="cache-info" aria-live="polite"></div><details class="capability-details"><summary>Comparar suporte dos modelos</summary><div id="model-capabilities"></div></details><label for="sandbox">ACESSO AO PROJETO</label><select id="sandbox"><option value="workspace-write">Leitura e escrita</option><option value="read-only">Só leitura</option></select><div class="config-footnote" id="permissions-hint">As autorizações adicionais aparecem na conversa.</div></div>
+          <section id="turn-usage" class="turn-usage hidden" aria-label="Consumo do último pedido"></section>
+          <div class="inspector-heading activity-heading"><h2>Atividade</h2><span id="activity-count">00</span></div><div id="activity" class="activity"><div class="empty-activity"><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></span><p>O trabalho aparece aqui.</p><small>Comandos, ferramentas e alterações,<br>à medida que acontecem.</small></div></div>
+          <details id="diff-panel" class="diff-panel hidden"><summary>Ver alterações</summary><pre id="diff"></pre></details>
+          <div class="inspector-bottom"><span class="tiny-dot"></span><span id="usage">Pronto para começar</span><button id="reconnect" class="text-button hidden">Voltar a ligar</button></div>
+        </aside>
+      </div>
+    </main>
+  </div>
+  <div id="toast" class="toast hidden" role="status"></div>
+</body>
+</html>

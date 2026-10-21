@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=HYDRAQ
+Comment=Codex, Antigravity, Claude Code e Cursor originais num espaço local
+Exec="/home/sauron/Documentos/ChatGPT/HYDRAQ/scripts/launch.sh"
+Path=/home/sauron/Documentos/ChatGPT/HYDRAQ
+Icon=/home/sauron/Documentos/ChatGPT/HYDRAQ/public/icon.svg
+Terminal=false
+Categories=Development;
+StartupNotify=false
