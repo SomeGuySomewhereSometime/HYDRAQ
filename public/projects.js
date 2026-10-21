@@ -13,8 +13,8 @@ export function conversationGroups(state) {
 }
 
 export class ProjectUI {
-  constructor({getState,api,refresh,choose,openProject,newChat,toast}) {
-    Object.assign(this,{getState,api,refresh,choose,openProject,newChat,toast});this.open=new Set();this.archived=false;
+  constructor({getState,api,refresh,choose,openProject,newChat,toast,memory}) {
+    Object.assign(this,{getState,api,refresh,choose,openProject,newChat,toast,memory});this.open=new Set();this.archived=false;
     this.search=document.querySelector('#project-search');
     this.search.addEventListener('input',()=>{this.signature='';this.render(this.selection);});
     document.querySelector('#new-project').addEventListener('click',()=>this.editProject());
@@ -84,8 +84,8 @@ export class ProjectUI {
     const title=project?.name||'Sem projeto';view.append(el('p','eyebrow','PROJETOS'),el('h1','',title),el('p','project-path',project?.root||'Conversas independentes, cada uma com a sua pasta de trabalho.'));
     if(project?.available===false)view.append(el('p','notice',project.folderError));
     const actions=el('div','project-page-actions');const create=this.button('＋ Nova conversa',()=>this.newChat(project?.id||null),'primary-action');create.disabled=Boolean(catalog?.error||project?.archived||project?.available===false);actions.append(create);
-    if(project)actions.append(this.button('Definições do projeto',()=>this.editProject(project)));view.append(actions);
-    view.append(el('p','',project?.archived?'Projeto arquivado. Restaura-o nas definições para continuar.':'Cada conversa mantém o seu contexto. Os ficheiros da pasta são comuns; as mensagens não são partilhadas automaticamente.'));
+    if(project)actions.append(this.button('Definições do projeto',()=>this.editProject(project)),this.button('Memória e conversas',()=>this.memory(project.id)));view.append(actions);
+    view.append(el('p','',project?.archived?'Projeto arquivado. Restaura-o nas definições para continuar.':'Cada conversa mantém a sua sessão. A memória curada e os avisos recentes seguem com os pedidos; as outras conversas são consultadas apenas quando necessário.'));
     const own=conversationGroups(state).filter(g=>(g.organization.projectId||null)===(project?.id||null)&&(!g.organization.archived||this.archived||project?.archived));
     for(const group of own)view.append(this.groupRow(group));if(!own.length)view.append(el('p','no-conversations','Ainda não há conversas aqui.'));
   }
@@ -122,7 +122,7 @@ export class ProjectUI {
     const currentId=group.organization.projectId||'';
     if(currentId&&!projects.some(p=>p.id===currentId)){const current=state.projectCatalog.projects.find(p=>p.id===currentId);if(current)projects.push(current);}
     const project=this.field(form,'Projeto',this.select([['','Sem projeto'],...projects.map(p=>[p.id,p.name])],currentId));
-    form.append(el('p','',`Pasta das sessões: ${group.latest.cwd}. A organização conserva esta pasta e todas as sessões ligadas.`));
+    form.append(el('p','',`Pasta das sessões: ${group.latest.cwd}. A organização conserva esta pasta e todas as sessões ligadas. Mudar de projeto revoga consultas futuras, mas não apaga contexto já lido pela sessão nativa.`));
     const save=this.button('Guardar',()=>{});save.type='submit';form.append(save);
     form.addEventListener('submit',event=>{event.preventDefault();this.submit(form,async()=>{const body={groups:[group.id],title:title.value};if(project.value!==currentId)body.projectId=project.value||null;if(await this.mutate('/api/groups/organize',body))this.dialog.close();});});
     form.append(this.button(group.organization.archived?'Restaurar conversa':'Arquivar conversa',()=>this.submit(form,async()=>{if(await this.mutate('/api/groups/organize',{groups:[group.id],archived:!group.organization.archived}))this.dialog.close();})));

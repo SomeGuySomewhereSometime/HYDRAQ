@@ -3,6 +3,7 @@ import { elicitationForm } from './elicitation.js';
 import { ImageAttachments } from './attachments.js';
 import { ComposerDrafts, draftKey } from './drafts.js';
 import { ProjectUI, conversationGroups } from './projects.js';
+import { ProjectMemoryUI } from './project-memory.js';
 
 const $ = selector => document.querySelector(selector);
 const element = (tag, className, text) => {
@@ -77,7 +78,7 @@ async function api(route, body) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const result = await response.json();
-  if (!response.ok) throw new Error(result.error || 'O pedido não foi concluído.');
+  if (!response.ok) throw Object.assign(new Error(result.error || 'O pedido não foi concluído.'),{status:response.status});
   return result;
 }
 
@@ -130,7 +131,8 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
   messageSignature=activitySignature=approvalsSignature=progressSignature='';settingsOwner=null;render();
   if(!overview)$('#prompt').focus();
 }
-const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{state=await api('/api/state');render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast});
+const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{state=await api('/api/state');render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id)});
+const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:current,getProject:project,getKey:composerKey,getProvider:providerId,toast,renderImages:(target,images)=>imageAttachments.renderMessage(target,images),changed:()=>render()});
 
 function populateEfforts(value) {
   const model = providerState().models.find(entry => entry.id === $('#model').value);
@@ -349,9 +351,9 @@ function wireSuggestions() {
 
 function internalMessage(message, owner) {
   const name = providerName(owner.provider);
-  if (message.role === 'user') return element('p', 'handoff-note', `HYDRAQ pediu ao ${name} um resumo de passagem · ${new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}`);
+  if (message.role === 'user') return element('p', 'handoff-note', `HYDRAQ pediu ao ${name} ${message.internal==='memory-proposal'?'uma proposta de memória':'um resumo de passagem'} · ${new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}`);
   const details = element('details', 'handoff-summary');
-  details.append(element('summary', '', `Resumo de passagem · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text));
+  details.append(element('summary', '', `${message.internal==='memory-proposal'?'Proposta de memória':'Resumo de passagem'} · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text));
   return details;
 }
 
@@ -412,8 +414,9 @@ function renderMessages(conversation) {
     if (message.role === 'user') {
       const content = element('div','message-content');
       content.append(element('p','',message.text));
-      imageAttachments.renderMessage(content,message.attachments);
+      imageAttachments.renderMessage(content,[...(message.attachments||[]),...(message.contextImages||[])]);
       article.append(content);
+      if(message.projectContext){const details=element('details','handoff-context');details.append(element('summary','','Contexto do projeto enviado com este pedido'),element('pre','',message.projectContext));article.append(details);}
       if (message.handoffContext) {
         const details = element('details', 'handoff-context');
         details.append(element('summary', '', `Contexto da passagem enviado com este pedido · ${formatTokens(message.handoffContext.length)} caracteres`), element('pre', '', message.handoffContext));
@@ -796,6 +799,7 @@ function render() {
   if(conversation)selectedProject=conversation.organization?.projectId||null;
   if(selectedProject&&!state.projectCatalog?.projects.some(p=>p.id===selectedProject)){selectedProject=null;projectOverview=false;}
   $('.workspace').classList.toggle('hidden',projectOverview);
+  projectMemory.render();
   const connection = providerState().connection;
   const account = providerState().account;
   const name = providerName();
@@ -905,6 +909,7 @@ $('#composer').addEventListener('submit',async event=> {
   const text = $('#prompt').value;
   const draftImages=[...imageAttachments.list()];
   const imageDraftKey=composerKey();
+  const importedContext=projectMemory.pending.get(imageDraftKey);
   const conversationAtSubmit = current();
   const steeringTarget = draftMode(composerIntent, conversationAtSubmit) === 'steer' ? composerIntent.turnId : null;
   const settings = { model: $('#model').value, effort: $('#effort').value, sandbox: $('#sandbox').value, ...(providerId()==='cursor' ? {context:$('#context').value || null,fast:$('#fast').checked} : {}) };
@@ -916,6 +921,7 @@ $('#composer').addEventListener('submit',async event=> {
   try {
     let conversation = current();
     if (steeringTarget) {
+      if(importedContext)throw new Error('A importação só pode seguir num pedido novo, depois de terminar o turno.');
       const result = await api(`/api/conversations/${conversationAtSubmit.id}/steer`, { text, requestId: crypto.randomUUID(), expectedTurnId: steeringTarget });
       if (!result.accepted) throw new Error('A entrega da orientação não foi confirmada. Não foi reenviada.');
       if (selected === conversationAtSubmit.id && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
@@ -928,12 +934,14 @@ $('#composer').addEventListener('submit',async event=> {
       saveComposerDraft();
       composerDrafts.move(imageDraftKey,draftKey(conversation,selectedProject));
       imageAttachments.move(imageDraftKey,draftKey(conversation,selectedProject));
+      projectMemory.move(imageDraftKey,draftKey(conversation,selectedProject));
       choose(conversation.id,selectedProject,false,true);
       composerDrafts.records.delete(imageDraftKey);
     }
     const attachments=await imageAttachments.upload(draftImages,conversation);
-    const result = await api(`/api/conversations/${conversation.id}/send`,{text,requestId:crypto.randomUUID(),...settings,...handoff,...(attachments.length?{attachments}:{})});
+    const result = await api(`/api/conversations/${conversation.id}/send`,{text,requestId:crypto.randomUUID(),...settings,...handoff,...(attachments.length?{attachments}:{}),...(importedContext?{importId:importedContext.previewId}:{})});
     imageAttachments.consume(draftImages);
+    projectMemory.consume(draftKey(conversation,selectedProject),importedContext);
     settingDrafts.delete(settingsDraftKey);
     composerDrafts.clear(draftKey(conversation,selectedProject),text);
     if (selected === conversation.id && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }

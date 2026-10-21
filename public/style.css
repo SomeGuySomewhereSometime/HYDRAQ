@@ -1798,3 +1798,19 @@ h1 { font-size: clamp(36px, 3.7vw, 60px); font-weight: 550; letter-spacing: -2px
 }
 
 /* Project organization */
+
+/* Project context stays compact beside the composer. */
+.project-context-controls { display:flex; flex-wrap:wrap; gap:5px; padding:3px 20px; flex-shrink:0; }
+.project-context-controls[hidden] { display:none; }
+.project-context-controls button { font-size:11px; padding:5px 8px; min-height:28px; }
+.memory-dialog { width:min(780px,94vw); }
+.memory-dialog pre { white-space:pre-wrap; overflow-wrap:anywhere; max-height:320px; overflow:auto; padding:12px; background:var(--surface, #191c21); font-size:12px; }
+.memory-dialog textarea { width:100%; min-height:180px; resize:vertical; }
+.memory-dialog form { display:flex; gap:8px; }
+.memory-dialog form input { min-width:0; flex:1; }
+.memory-dialog label:has(input[type=checkbox]) { display:flex; align-items:center; gap:8px; }
+.memory-dialog input[type=checkbox] { width:auto; }
+.context-result { border-top:1px solid var(--border, #30353c); padding:12px 0; display:grid; gap:8px; }
+.context-result small { overflow-wrap:anywhere; }
+.memory-comparison { border:1px solid var(--border, #30353c); padding:10px; }
+@media(max-width:700px) { .project-context-controls { padding:3px 10px; } .project-context-controls button { min-height:36px; } }
