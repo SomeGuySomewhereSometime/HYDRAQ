@@ -30,8 +30,8 @@ export class CollaborationUI {
     this.history = node('aside', 'col-history'); this.history.setAttribute('aria-label', 'Colaborações guardadas');
     this.newButton = this.button('＋ Nova colaboração', () => this.choose(null), 'col-new');
     this.list = node('nav', 'col-session-list'); this.history.append(this.newButton, this.list);
-    this.main = node('section', 'col-conversation'); this.main.setAttribute('aria-label', 'Conversa com o principal');
-    const heading = node('div', 'col-heading'); heading.append(node('h1', '', 'Principal + executor')); this.badge = node('span', 'col-status'); heading.append(this.badge);
+    this.main = node('section', 'col-conversation'); this.main.setAttribute('aria-label', 'Conversa da equipa');
+    const heading = node('div', 'col-heading'); heading.append(node('h1', '', 'Conversa da equipa')); this.badge = node('span', 'col-status'); heading.append(this.badge);
     this.error = node('div', 'notice hidden'); this.error.setAttribute('role', 'alert');
     this.recover=this.button('Verificar limpeza e desbloquear',async()=>{await this.api('/api/collaboration/recover',{});await this.refresh(true);},'col-recover hidden');
     this.settings = node('details', 'col-settings'); this.settings.open = !this.selected; this.settingsSummary = node('summary', '', 'Equipa e pasta');
@@ -46,7 +46,7 @@ export class CollaborationUI {
     this.settings.append(this.settingsSummary,this.scopeHint, fields, node('p', 'col-hint', 'O principal decide e avalia, com acesso só de leitura. O Grok pode alterar ficheiros e executar comandos; as autorizações nativas aparecem aqui. O isolamento pelo sistema operativo não está comprovado. O revisor Claude opcional só lê código, sem terminal nem edição; consome a subscrição Claude. Sem corte por tempo. Parar interrompe a tarefa; até três delegações por pedido. As escolhas aplicam-se ao próximo pedido.'));
     this.decisionBanner = node('section', 'col-decision-banner hidden'); this.decisionBanner.setAttribute('role', 'status'); this.decisionBanner.setAttribute('aria-live', 'polite');
     this.decisionText = node('p'); this.decisionJump = this.button('Ver e responder', () => { this.approvals.scrollIntoView({block:'nearest'}); this.approvals.querySelector('button,input,select,textarea')?.focus(); }); this.decisionBanner.append(this.decisionText, this.decisionJump);
-    this.thread = node('div', 'col-thread'); this.thread.setAttribute('aria-live', 'polite');
+    this.thread = node('div', 'col-thread'); this.thread.tabIndex=0;this.thread.setAttribute('role','log');this.thread.setAttribute('aria-label','Mensagens da equipa');this.thread.setAttribute('aria-live', 'polite');
     this.metrics = node('section','col-metrics hidden'); this.metricsSelect=node('select');this.metricsSelect.setAttribute('aria-label','Consumo e tempo do pedido');this.metricsUsage=node('p');this.metricsTime=node('p');this.metrics.append(this.metricsSelect,this.metricsUsage,this.metricsTime);this.metricsSelect.addEventListener('change',()=>this.renderMetrics());
     this.approvals = node('section', 'col-approvals'); this.approvals.setAttribute('aria-label', 'Decisões pendentes da colaboração');
     this.review = node('section', 'col-review hidden');
@@ -137,7 +137,7 @@ export class CollaborationUI {
     this.recover.classList.toggle('hidden',!catalog?.recoverable);
     this.scopeHint.textContent=(d?d.projectId:this.controls.project.value)?'O contexto é partilhado apenas com este projeto. Outros projetos independentes podem trabalhar em paralelo; o mesmo cliente normal executa um pedido de cada vez.':'Sem projeto associado: esta colaboração não partilha memória nem aparece na atividade de projetos.';
     this.renderButtons();
-    if (!this.selected) { this.metrics.classList.add('hidden');this.decisionBanner.classList.add('hidden');this.approvals.replaceChildren();this.review.classList.add('hidden');this.continuation.classList.add('hidden'); this.thread.replaceChildren(node('div', 'col-welcome', 'Define o objetivo com o principal. Ele pode planear, delegar trabalho no Grok e avaliar o resultado nesta mesma conversa.')); this.work.replaceChildren(node('h2', '', 'Executor e revisão'), node('p', 'col-hint', 'As tarefas delegadas, pareceres, autorizações e resultados aparecem aqui.')); }
+    if (!this.selected) { this.metrics.classList.add('hidden');this.decisionBanner.classList.add('hidden');this.approvals.replaceChildren();this.review.classList.add('hidden');this.continuation.classList.add('hidden'); this.thread.replaceChildren(node('div', 'col-welcome', 'Define o objetivo com o principal. Ele pode planear, delegar trabalho no Grok e avaliar o resultado nesta mesma conversa.')); this.work.replaceChildren(node('h2', '', 'Executor e revisão'), node('p', 'col-hint', 'As mensagens e os relatórios aparecem no chat. Aqui encontras comandos, ficheiros e detalhes das tarefas.')); }
     else if (!this.detail || this.detail.status!==selectedSummary?.status || this.detail.updatedAt !== selectedSummary?.updatedAt || active.has(selectedSummary?.status)) this.refresh();
   }
   renderButtons() {
@@ -167,25 +167,15 @@ export class CollaborationUI {
     if(d.approvals.length){const who=d.approvals[0].role==='executor'?'O Grok':d.approvals[0].role==='reviewer'?'O revisor Claude':'O principal';this.decisionText.textContent=`${who} aguarda a tua decisão. A tarefa só continua depois de responderes; não há corte automático por tempo.`;}
     this.continuation.classList.toggle('hidden',!['interrupted','failed','uncertain','limited'].includes(d.status)||!d.jobs.length);
     this.continuationText.textContent = `${/Limite de .*minutos/.test(d.error||'')?'Este pedido parou pelo limite antigo. Os pedidos novos já não têm corte por tempo. ':''}Os ficheiros já criados ficam conservados. Podes preparar um novo pedido para o principal verificar o estado atual e continuar o que falta.`;
-    const sig = JSON.stringify(d.messages);
-    if (this.signature !== sig) {
-      const nearBottom = this.thread.scrollHeight - this.thread.scrollTop - this.thread.clientHeight < 90; this.signature = sig;
-      this.thread.replaceChildren();
-      if (d.messagesOmitted) this.thread.append(node('p', 'col-hint', `Mostradas as últimas 80 mensagens; ${d.messagesOmitted} anteriores conservadas no histórico local.`));
-      for (const m of d.messages) {
-        if (m.role === 'user' && m.internal) continue;
-        const card = node('article', 'col-message ' + m.role); card.append(node('small', '', m.role === 'user' ? 'Tu' : `${m.model || d.principal.model} · Principal`), this.markdown(m.text));if(m.projectContext){const context=node('details','col-action');context.append(node('summary','','Contexto do projeto enviado com este pedido'),node('pre','',m.projectContext));card.append(context);} this.thread.append(card);
-      }
-      if (nearBottom||this.scrollToEnd) this.thread.scrollTop = this.thread.scrollHeight;this.scrollToEnd=false;
-    }
+    this.renderTimeline(d);
     const wsig = JSON.stringify([d.jobs, d.reviews,d.executorState?.items]);
     if (this.workSignature !== wsig) {
-      this.workSignature = wsig; this.work.replaceChildren(node('h2', '', 'Trabalho e revisão'));
+      this.workSignature = wsig; this.work.replaceChildren(node('h2', '', 'Detalhes do trabalho'));
       this.work.append(node('p','col-hint','O executor não comunica contadores de consumo. A poupança de quota depende da tarefa.'));
       if (!d.jobs.length) this.work.append(node('p', 'col-hint', 'O principal ainda não delegou nenhuma tarefa.'));
       for(const r of [...(d.reviews||[])].reverse()){
         const card=node('details','col-job col-review-report');card.open=r===(d.reviews||[]).at(-1);card.append(node('summary','',`Claude · ${statuses[r.status]||r.status} · ${r.model}`),node('p','col-hint','Revisão independente só de leitura. O revisor não executa testes.'));
-        if(r.error)card.append(node('p','col-job-error',r.error));if(r.result||r.partial)card.append(this.markdown(r.result||r.partial));
+        if(r.tools?.length)card.append(node('p','col-hint',`Ferramentas observadas: ${[...new Set(r.tools)].join(', ')}`));card.id='col-details-reviewer-'+r.id;card.tabIndex=-1;card.append(this.button('Ver revisão no chat',()=>this.showTimelineEntry('reviewer',r.id),'col-chat-link'));
         if(r.usage)card.append(node('p','col-hint',`Claude: ${new Intl.NumberFormat('pt-PT').format(r.usage.inputTokens)} tokens de entrada · ${new Intl.NumberFormat('pt-PT').format(r.usage.outputTokens)} de saída.`));
         this.work.append(card);
       }
@@ -193,9 +183,7 @@ export class CollaborationUI {
         const card = node('details', 'col-job'); if (j===d.jobs.at(-1)||['queued', 'running', 'uncertain'].includes(j.status)) card.open = true;
         card.append(node('summary', '', `${statuses[j.status] || j.status} · ${{ implement: 'Implementar', explore: 'Investigar', test: 'Testar' }[j.task] || j.task}`));
         card.append(node('p', 'col-job-instructions', j.instructions));
-        if (j.error) card.append(node('p', 'col-job-error', j.error));
-        if (j.result || j.partial) card.append(this.markdown(j.result || j.partial));
-        if (j.resultTruncated) card.append(node('p', 'col-hint', 'Relatório limitado a 60 000 caracteres; original conservado na sessão nativa.'));
+        card.id='col-details-executor-'+j.id;card.tabIndex=-1;card.append(this.button('Ver tarefa no chat',()=>this.showTimelineEntry('executor',j.id),'col-chat-link'));
         if (j.facts) card.append(node('p', 'col-hint', `Ficheiros observados: ${j.facts.files?.join(', ') || 'nenhum'}`));
         if (j.interruption?.waiting) card.append(node('p','col-hint','A tarefa foi interrompida enquanto aguardava uma decisão. Nenhuma autorização foi concedida automaticamente.'));
         const actions = j.requestId===d.executorState?.requestId?(d.executorState?.items || []).filter(i => i.turnId === d.executorState.turnId && i.type !== 'reasoning'):[];
@@ -213,6 +201,53 @@ export class CollaborationUI {
       const b = this.button('Confirmar revisão do estado', async () => { await this.api(`/api/collaborations/${d.id}/acknowledge`, {}); await this.refresh(true); }); b.disabled = true; check.addEventListener('change', () => { b.disabled = !check.checked; }); this.review.append(label, b);
     }
     this.renderApprovals(d); this.renderButtons();
+  }
+  showTimelineEntry(role,id) {
+    const card=document.getElementById(`col-entry-${role}:${id}:task`);
+    if(card){card.focus({preventScroll:true});card.scrollIntoView({block:'start',behavior:'instant'});}
+  }
+  renderTimeline(d) {
+    // The fallback keeps an already-open browser compatible during a server update.
+    const entries=d.timeline||d.messages.filter(m=>!(m.role==='user'&&m.internal)).map((m,i)=>({...m,id:m.id||'legacy:'+i,kind:'message',role:m.role==='user'?'user':'principal'}));
+    const omitted=d.timelineOmitted??d.messagesOmitted??0,sig=JSON.stringify([entries,omitted]);
+    if(this.signature===sig)return;
+    const nearBottom=this.thread.scrollHeight-this.thread.scrollTop-this.thread.clientHeight<90;
+    const rect=this.thread.getBoundingClientRect(),anchor=[...this.thread.children].find(c=>c.getBoundingClientRect().bottom>rect.top);
+    const anchorId=anchor?.id,anchorOffset=anchor?.getBoundingClientRect().top-rect.top;
+    const old=new Map([...this.thread.children].map(c=>[c.dataset.entryId,c])),wanted=[];
+    if(omitted){let notice=old.get('omitted')||node('p','col-hint');notice.dataset.entryId='omitted';notice.textContent=`${omitted} eventos anteriores não mostrados nesta vista; originais conservados nos históricos locais.`;wanted.push(notice);}
+    const labels={user:'Tu',principal:'Principal · Codex',executor:'Executor · Cursor',reviewer:'Revisor · Claude'};
+    for(const e of entries){
+      let card=old.get(e.id);if(!card){card=node('article',`col-message ${e.role}`);card.dataset.entryId=e.id;card.id='col-entry-'+e.id;card.tabIndex=-1;}
+      const signature=JSON.stringify(e);
+      if(card.entrySignature!==signature){
+        const open=new Set([...card.querySelectorAll('details[open]')].map(n=>n.dataset.section));card.replaceChildren();
+        const header=node('div','col-message-heading'),who=node('strong','',e.role==='user'?'Tu':`${e.model||d.principal.model} · ${labels[e.role]||e.role}`);header.append(who);
+        const at=new Date(e.at);if(Number.isFinite(at.getTime())){const clock=node('time','',at.toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}));clock.dateTime=e.at;header.append(clock);}
+        card.append(header);
+        if(e.kind==='task'){
+          const task=e.role==='reviewer'?'Revisão independente':({implement:'Implementação',explore:'Investigação',test:'Testes'}[e.task]||'Tarefa delegada');
+          card.append(node('p','col-task-status',`${task} · ${statuses[e.status]||e.status}`));
+          if(e.role==='reviewer')card.append(node('p','col-hint','Só leitura. O revisor não executa testes.'));
+          if(e.instructions){const detail=node('details','col-action');detail.dataset.section='instructions';detail.open=open.has('instructions');detail.append(node('summary','','Instruções da tarefa'),node('pre','',e.instructions));card.append(detail);}
+          if(e.files||e.commands)card.append(node('p','col-hint',`Ações observadas: ${e.files||0} ficheiro${e.files===1?'':'s'} · ${e.commands||0} comando${e.commands===1?'':'s'}.`));
+          card.append(this.button('Ver ações e ficheiros',()=>{const target=document.getElementById(`col-details-${e.role}-${e.referenceId}`);if(target){target.open=true;target.focus({preventScroll:true});target.scrollIntoView({block:'nearest',behavior:'instant'});}},'col-chat-link'));
+        }else{
+          if(e.kind==='error')card.append(node('p','col-job-error',e.text));else card.append(this.markdown(e.text||''));
+          if(e.streaming)card.append(node('span','col-streaming','A escrever…'));
+          if(e.truncated)card.append(node('p','col-hint','Mensagem abreviada nesta vista; original conservado no histórico nativo.'));
+        }
+        if(e.projectContext){const context=node('details','col-action');context.dataset.section='context';context.open=open.has('context');context.append(node('summary','','Contexto do projeto enviado com este pedido'),node('pre','',e.projectContext));card.append(context);}
+        card.entrySignature=signature;
+      }
+      wanted.push(card);
+    }
+    const keep=new Set(wanted);for(const child of [...this.thread.children])if(!keep.has(child))child.remove();
+    wanted.forEach((card,i)=>{if(this.thread.children[i]!==card)this.thread.insertBefore(card,this.thread.children[i]||null);});
+    this.signature=sig;
+    if(nearBottom||this.scrollToEnd)this.thread.scrollTop=this.thread.scrollHeight;
+    else if(anchorId){const retained=document.getElementById(anchorId);if(retained)this.thread.scrollTop+=retained.getBoundingClientRect().top-this.thread.getBoundingClientRect().top-anchorOffset;}
+    this.scrollToEnd=false;
   }
   renderApprovals(d) {
     const approvalItem=r=>(r.role==='executor'?d.executorState:r.role==='reviewer'?d.reviewerState:d.principalState)?.items.find(i=>(!r.params.turnId||i.turnId===r.params.turnId)&&((r.params.toolCall?.toolCallId&&i.nativeId===r.params.toolCall.toolCallId)||(r.params.itemId&&i.id===r.params.itemId)));

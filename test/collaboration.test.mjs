@@ -224,3 +224,13 @@ test('proposta de memória mostra reserva e permite cliente diferente em pasta i
  const other=await hub.create({cwd:dir+'/B',provider:'cursor',model:'grok-4.7',effort:'low',context:'500k',fast:false});await hub.send(other.id,'Trabalho independente','proposal-parallel');await wait(()=>normal.cursor.conversation(other.id).status==='completed');
  release();await Promise.all([...hub.proposalTasks]);assert.equal(hub.reservations.size,0);assert.equal((await hub.projectMemoryProposals(p.id)).records[0].status,'ready');
 });
+
+test('API de colaboração inclui progresso público do executor e revisão no chat sem criar turnos adicionais',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create({reviewer});await send(s);await wait(()=>hub.collaboration.session(s.id).status==='completed');
+ const d=hub.collaboration.detail(s.id),messages=d.timeline.filter(m=>m.kind==='message');
+ assert.ok(messages.some(m=>m.role==='executor'&&m.text.includes('EXECUTOR-RESULT')));assert.ok(messages.some(m=>m.role==='reviewer'&&m.text.includes('PARECER-INDEPENDENTE')));
+ assert.equal(messages.at(-1).role,'principal');assert.equal(clients.principal.conversations[0].turns.length,2);assert.equal(clients.executor.conversations[0].turns.length,1);assert.equal(clients.reviewer.conversations[0].turns.length,1);
+ const hold=await create();await send(hold,'COL_WORKER_HOLD');await wait(()=>hub.collaboration.detail(hold.id).timeline.some(m=>m.role==='executor'&&m.text==='PARCIAL-REAL-DO-TESTE'));
+ assert.equal(hub.collaboration.detail(hold.id).jobs[0].result,undefined);await hub.collaboration.interrupt(hold.id);
+ assert.ok(hub.collaboration.detail(hold.id).timeline.some(m=>m.role==='executor'&&m.text==='PARCIAL-REAL-DO-TESTE'));
+});
