@@ -4,6 +4,7 @@ const args = process.argv.slice(2);
 if(process.env.FAKE_CLAUDE_ARGS_LOG)writeFileSync(process.env.FAKE_CLAUDE_ARGS_LOG,JSON.stringify(args));
 const emit = event => process.stdout.write(JSON.stringify(event) + '\n');
 const option = name => args.includes(name) ? args[args.indexOf(name) + 1] : null;
+if (args[0] === 'agents' && args[1] === '--json') { process.stdout.write(process.env.FAKE_CLAUDE_AGENTS && existsSync(process.env.FAKE_CLAUDE_AGENTS) ? readFileSync(process.env.FAKE_CLAUDE_AGENTS, 'utf8') : '[]'); process.exit(0); }
 if (!args.includes('-p') || option('--input-format') !== 'stream-json' || option('--output-format') !== 'stream-json') process.exit(8);
 if (args.includes('--dangerously-skip-permissions') || args.includes('--allow-dangerously-skip-permissions')) process.exit(9);
 if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_BASE_URL) process.exit(7);
@@ -47,6 +48,11 @@ createInterface({ input: process.stdin }).on('line', line => {
   if (input.type === 'control_response') {
     if (!pending || input.response.request_id !== pending.request) process.exit(4);
     const allowed = input.response.response.behavior === 'allow';
+    if (pending.ask) {
+      const answers = input.response.response.updatedInput?.answers, text = allowed ? `Respostas ${JSON.stringify(answers)}` : `Sem respostas: ${input.response.response.message}`;
+      emit({ type: 'user', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: pending.tool, is_error: !allowed, content: text }] } });
+      say(`msg-${count}-b`, text); result(text); pending = null; return;
+    }
     emit({ type: 'user', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: pending.tool, is_error: !allowed, content: allowed ? 'File created' : 'Permission denied by host' }] } });
     say(`msg-${count}-b`, allowed ? 'Permitido.' : 'Recusado.');
     if(deferredSteer){const steer=deferredSteer;deferredSteer=null;emit({type:'user',uuid:steer.uuid,session_id:sessionId,message:steer.message});say('deferred-steer',steer.message.content);result(steer.message.content,{user_message_uuids:[currentUuid,steer.uuid]});}else result(allowed ? 'Permitido.' : 'Recusado.');
@@ -86,6 +92,15 @@ createInterface({ input: process.stdin }).on('line', line => {
       emit({type:'assistant',session_id:sessionId,message:{id:`msg-many-${i}`,content:[{type:'tool_use',id,name:i===-1?'Write':'Bash',input:i===-1?{file_path:'first.txt',content:'ok'}:{command:`command-${i}`}}]}});
       emit({type:'user',session_id:sessionId,message:{content:[{type:'tool_result',tool_use_id:id,is_error:i===0,content:i===0?'exit 42':'ok'}]}});
     }
+  }
+  if (text === 'ask') {
+    const tool = `ask_${count}`, questions = [
+      { question: 'Qual formato?', header: 'Formato', options: [{ label: 'Resumo', description: 'Curto' }, { label: 'Detalhado', description: 'Longo' }], multiSelect: false },
+      { question: 'Que secções?', header: 'Secções', options: [{ label: 'Intro', description: '' }, { label: 'Fim', description: '' }], multiSelect: true }];
+    emit({ type: 'assistant', session_id: sessionId, parent_tool_use_id: null, message: { id: `msg-${count}`, model: resolved, content: [{ type: 'tool_use', id: tool, name: 'AskUserQuestion', input: { questions } }] } });
+    pending = { request: `ask-${count}`, tool, ask: true };
+    emit({ type: 'control_request', request_id: pending.request, request: { subtype: 'can_use_tool', tool_name: 'AskUserQuestion', display_name: 'AskUserQuestion', input: { questions }, tool_use_id: tool } });
+    return;
   }
   if (text === 'tool-approval') {
     const tool = `toolu_${count}`;

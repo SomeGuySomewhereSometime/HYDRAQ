@@ -1,4 +1,5 @@
 import { NativeSessionsUI } from './native-sessions.js';
+import { ClaudeSessionsUI } from './claude-sessions.js';
 import { workConflict, workReason } from './work-locks.js';
 import { captureDraftIntent, draftMode, followupOptions, followupDescriptions } from './composer.js';
 import { elicitationForm } from './elicitation.js';
@@ -99,6 +100,7 @@ const recoveryDrafts = new Map();
 let settingsOwner;
 let settingsBaseline;
 const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{state=await api('/api/state');render();}});
+const claudeUI = new ClaudeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{state=await api('/api/state');render();}});
 const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
@@ -120,7 +122,7 @@ async function api(route, body) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const result = await response.json();
-  if (!response.ok) throw Object.assign(new Error(result.error || 'O pedido não foi concluído.'),{status:response.status,code:result.code,beforeSend:result.beforeSend});
+  if (!response.ok) throw Object.assign(new Error(result.error || 'O pedido não foi concluído.'),{status:response.status,code:result.code,beforeSend:result.beforeSend,confirm:result.confirm});
   return result;
 }
 
@@ -575,10 +577,10 @@ function renderMessages(conversation) {
     const avatar = element('span', 'avatar', message.role === 'user' ? (automaticReturn?'H':'TU') : '');
     if (message.role !== 'user') avatar.append(icon());
     header.append(avatar);
-    header.append(element('span','',message.role === 'user' ? (automaticReturn?'HYDRAQ · Avaliação do parecer':message.kind === 'steer' ? 'Tu · Orientação' : 'Tu') : providerName(owner.provider)));
+    header.append(element('span','',message.role === 'user' ? (automaticReturn?'HYDRAQ · Avaliação do parecer':message.kind === 'steer' ? 'Tu · Orientação' : message.source === 'terminal' ? 'Tu · Claude original' : 'Tu') : providerName(owner.provider)));
     if (message.model) {
       const modelName = providerState(owner.provider).models?.find(model => model.id === message.model)?.name || message.model;
-      header.append(element('span', 'message-model', `${modelName} · ${effortLabels[message.effort] || message.effort || ''}`));
+      header.append(element('span', 'message-model', [modelName, effortLabels[message.effort] || message.effort, message.source === 'terminal' && message.role !== 'user' ? 'Claude original' : null].filter(Boolean).join(' · ')));
     }
     const time = element('time','',new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}));
     time.dateTime = message.at;
@@ -932,6 +934,22 @@ function renderApprovals(conversation) {
       card.append(element('pre','',String(preview).slice(0,8000)));
       if (request.params.blockedPath) card.append(element('p','',`Caminho: ${request.params.blockedPath}`));
       card.append(approvalButton('Permitir desta vez',()=>respond({decision:'accept'})),approvalButton('Recusar',()=>respond({decision:'decline'}),true),approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
+    } else if (request.method === 'claude/askUserQuestion') {
+      card.append(element('h3','','O Claude Code tem perguntas'));
+      const fields=[];
+      for (const [index,question] of request.params.questions.entries()) {
+        const group=element('fieldset','cursor-question'); group.append(element('legend','',question.header ? `${question.header} · ${question.question}` : question.question));
+        const choices=[];
+        for (const option of question.options) {
+          const label=element('label','toggle-field'), input=element('input');
+          input.type=question.multiSelect?'checkbox':'radio';input.name=`claude-${request.id}-${index}`;input.value=option.label;
+          label.append(input,document.createTextNode(option.description ? `${option.label} — ${option.description}` : option.label));group.append(label);choices.push(input);
+        }
+        const other=element('input');other.type='text';other.placeholder='Ou escreve a tua resposta';other.setAttribute('aria-label',`Outra resposta: ${question.question}`);
+        group.append(other);fields.push({question,choices,other});card.append(group);
+      }
+      const answers=()=>Object.fromEntries(fields.map(({question,choices,other})=>[question.question,other.value.trim()?[...choices.filter(input=>input.checked&&question.multiSelect).map(input=>input.value),other.value.trim()]:choices.filter(input=>input.checked).map(input=>input.value)]));
+      card.append(approvalButton('Responder',()=>respond({decision:'accept',answers:answers()})),approvalButton('Não responder',()=>respond({decision:'decline'}),true),approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
     } else if (request.method === 'tool/requestUserInput') {
       card.append(element('h3','','O Codex tem uma pergunta'));
       const fields = new Map();
@@ -1021,7 +1039,7 @@ function renderSend() {
   const hasImages=imageAttachments.list().length>0;
   const openCodeNoImage=providerId()==='opencode'&&!providerState().models?.find(m=>m.id===$('#model').value)?.images;
   imageAttachments.render(busy || sending || openCodeNoImage || providerState().capabilities?.images===false);
-  $('#send').disabled = Boolean(nativeUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
+  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
   $('#send').textContent = sending ? 'A enviar…' : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
@@ -1032,7 +1050,7 @@ function renderSend() {
   $('#use-as-request').disabled = sending;
   $('#composer').classList.toggle('steering', steering || expired);
   $('#prompt').placeholder = steering ? 'Acrescenta uma orientação para a tarefa em curso…' : 'Descreve o que queres fazer…';
-  $('#composer-hint').textContent = nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ nas configurações.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
+  $('#composer-hint').textContent = nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ nas configurações.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ nas configurações.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
 }
 
 function renderUncertainty(conversation) {
@@ -1090,6 +1108,7 @@ function render() {
   $('.workspace').classList.toggle('hidden',projectOverview);
   projectMemory.render();
   nativeUI.render();
+  claudeUI.render();
   opinionUI.renderAutomatic();
   const connection = providerState().connection;
   const account = providerState().account;
