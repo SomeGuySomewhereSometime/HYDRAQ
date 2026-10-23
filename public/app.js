@@ -1545,7 +1545,7 @@ function listen() {
   events.onerror = () => {
     events.close();
     $('#connection-state').textContent = '○ Ligação local interrompida';
-    $('#send').disabled = Boolean(nativeUI.session()) || true;
+    $('#send').disabled = true;
     $('#notice').textContent = 'A ligação ao HYDRAQ foi interrompida. A página volta a ligar automaticamente; os pedidos não são reenviados.';
     $('#notice').classList.remove('hidden');
     clearTimeout(recoveryTimer);

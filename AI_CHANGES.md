@@ -4,7 +4,7 @@ Versão atual: 55
 
 ## Resumo atual
 
-- Integração Codex original em curso (entrada 55, branch de trabalho): adaptador local, contexto comum e turnos externos; ainda não integrada nem ativa. Ver docs/native-terminal-checkpoint.md para provas, limites e próximos passos.
+- Terminal Codex original (entrada 55): alternância da mesma sessão com controlo exclusivo, contexto/MCP/anexos/revisões pelo envio comum e associação explícita. Corrigidos transporte de catálogos grandes, imagens, histórico parcial e escolhas de modelo do TUI. 337 testes; validação real terminal → HYDRAQ e recuperação após reinício. Desktop indisponível. Detalhes em docs/native-terminal.md.
 
 - Revisão compacta (entrada 54): retorno automático reúne resposta inicial, pareceres e contexto interno num bloco fechado por omissão; resposta final fora, com expansão independente. Envio manual conserva o original visível e os pareceres separados. Síntese completa ao pedido original, com atribuição breve quando útil e fichas dos pareceres recebidos. 324 testes, 69 verificações específicas finais e browser Grafite/Atelier/móvel aprovados; Haiku real produziu plano completo após parecer simulado, sem escrita. 4318 ativada livre, mesmos 29 históricos e cinco clientes ligados. Provas em `.hydraq/review-folding-2026-10-23/VALIDACAO.md`.
 
@@ -540,8 +540,9 @@ Versão atual: 55
 - Verificado: suite 324/324 e 69 testes específicos finais, sintaxe e git diff --check. Browser com clientes simulados: bloco fechado de 40 px, envio manual sem esconder original, expansão independente/teclado, navegação conservando estado, autorizações visíveis/recusáveis, contexto interno sem ação de opinião, Grafite/Atelier 1280×720 e móvel 390×844 sem overflow/erros de consola observados. Ensaio real de síntese com Claude Haiku principal e parecer Antigravity simulado: dois turnos plan concluídos, plano final completo em quatro passos e ficheiros inalterados. Não prova revisão real por Antigravity neste pedido; limite de palavras do ensaio não foi seguido rigorosamente pelo modelo.
 - Ativação livre da 4318: PID 833531, mesmos 29 históricos/IDs, dois perfis e três ciclos existentes preservados, cinco clientes ligados e arquivo sem erro. Hashes de app.js/opinions.js/style.css confirmados por HTTP. Respostas antigas não são regeneradas; nova instrução aplica-se às próximas avaliações. README e provas em `.hydraq/review-folding-2026-10-23/VALIDACAO.md`.
 
-### 55 — 2026-10-23 — Codex (trabalho em curso, branch separada)
+### 55 — 2026-10-23 — Terminal Codex original e revisão do checkpoint
 
-- Implementação parcial da alternância HYDRAQ/terminal Codex original: socket Unix privado, pedidos pelo envio comum, controlo por grupo, histórico nativo e associação explícita de sessões. Desktop continua indisponível.
-- 87 testes específicos aprovados antes das últimas correções; alterações finais ainda por validar. Ensaio real Codex/ChatGPT concluiu três turnos, incluindo chamada MCP de memória; aviso de reconexão/apresentação final imediata do TUI ainda por investigar. Sem ativação na 4318.
-- Guardado a pedido do utilizador para continuar com Astra. Estado e provas em docs/native-terminal-checkpoint.md.
+- Adaptador Unix privado para o TUI original, controlo por grupo, envio comum com contexto/MCP/anexos/revisões, associação explícita e histórico nativo. Browser opcional; servidor HYDRAQ necessário. Operações ainda não integradas são recusadas; desktop indisponível.
+- Revisão corrigiu desconexão com catálogo de 18 MB, armazenamento/projeção de imagens, histórico parcial/concorrente, proposta de memória fora do controlo, prioridade de modelo/raciocínio do TUI e feedback de decisões não suportadas. Detalhes e limites em docs/native-terminal.md.
+- 337 testes aprovados. Ensaios reais: TUI sem reconexão e resposta final visível, memória por MCP, regresso à HYDRAQ com novo pedido e associação/reinício com os mesmos 9 turnos/20 mensagens. Browser Grafite/Atelier, 1440/390 px, seleção/controlo/comando funcionais. Clientes de testes de falhas, revisões e passagem para Claude são simulados.
+- Provas locais em `.hydraq/native-terminal-2026-10-23/VALIDACAO.md`; ativação registada após a integração.

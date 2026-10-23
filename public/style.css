@@ -4049,3 +4049,8 @@ body .opinion-thread .automatic-review-note { margin:0 0 6px; padding:4px 0; bor
 #native-sessions details { margin-top: 12px; }
 #native-sessions summary { cursor: pointer; }
 #native-sessions .native-import-row { display: block; width: 100%; margin: 6px 0; text-align: left; overflow-wrap: anywhere; }
+#native-sessions button { min-height: 36px; padding: 8px 11px; border: 1px solid var(--line); background: var(--soft); font-size: 12px; }
+#native-sessions button:hover:not(:disabled) { border-color: var(--accent); }
+#native-sessions label { display: grid; gap: 6px; margin: 12px 0; font-size: 12px; }
+#native-sessions input, #native-sessions textarea { padding: 9px; border: 1px solid var(--line); background: var(--panel); }
+#native-sessions textarea { margin-top: 8px; }

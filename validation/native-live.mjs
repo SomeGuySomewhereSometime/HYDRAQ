@@ -1,13 +1,17 @@
-import {mkdtemp, writeFile} from 'node:fs/promises';
+import {mkdtemp, writeFile, appendFile} from 'node:fs/promises';
 import {Providers} from '../lib/providers.mjs';
 import {Hydraq} from '../lib/hydraq.mjs';
 import {createHttpServer} from '../lib/http.mjs';
 const directory=process.env.NATIVE_TEST_DIR||await mkdtemp('/tmp/hydraq-native-live-');
 const codex=new Hydraq({dataDir:directory+'/state',defaultCwd:directory});
 const hub=new Providers({dataDir:directory+'/state',defaultCwd:directory,clients:{codex},git:async()=>null});
+// UI checks exercise the same route but launch the original CLI via pexpect,
+// rather than opening an interactive window on the user's desktop.
+const openTerminal=hub.nativeSessions.open.bind(hub.nativeSessions);hub.nativeSessions.open=(id)=>openTerminal(id,{launch:false});
+const write=hub.nativeSessions.write.bind(hub.nativeSessions);hub.nativeSessions.write=(peer,m)=>{appendFile(directory+'/wire-sizes.jsonl',JSON.stringify({method:m.method,id:m.id,bytes:JSON.stringify(m).length,buffered:peer?.bufferedAmount})+'\n').catch(()=>{});return write(peer,m);};
 const events=[];codex.client.on('notification',m=>{events.push({method:m.method,keys:Object.keys(m.params||{})});writeFile(directory+'/events.json',JSON.stringify(events,null,2)).catch(()=>{});});
 const connect=hub.nativeSessions.connected.bind(hub.nativeSessions);hub.nativeSessions.connected=(s,p)=>{p.on('close',(code,reason)=>writeFile(directory+'/peer-close.json',JSON.stringify({code,reason:reason.toString()})));return connect(s,p);};
-const methods=[];const dispatch=hub.nativeSessions.dispatch.bind(hub.nativeSessions);hub.nativeSessions.dispatch=async(s,m,p,id)=>{methods.push({method:m,keys:Object.keys(p),...(m==='config/batchWrite'?{edits:p.edits}: {}),...(m==='thread/resume'?{configKeys:Object.keys(p.config||{}),webSearch:p.config?.web_search,hasDeveloperInstructions:!!p.developerInstructions,hasBaseInstructions:!!p.baseInstructions}: {})});await writeFile(directory+'/methods.json',JSON.stringify(methods,null,2));return dispatch(s,m,p,id);};
+const methods=[];const dispatch=hub.nativeSessions.dispatch.bind(hub.nativeSessions);hub.nativeSessions.dispatch=async(s,m,p,id)=>{methods.push({method:m,keys:Object.keys(p),...(m==='config/batchWrite'?{edits:p.edits}: {}),...(m==='thread/resume'?{configKeys:Object.keys(p.config||{}),webSearch:p.config?.web_search,hasDeveloperInstructions:!!p.developerInstructions,hasBaseInstructions:!!p.baseInstructions}: {})});return dispatch(s,m,p,id);};
 await hub.load();
 const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});
 await new Promise(r=>server.listen(0,'127.0.0.1',r));

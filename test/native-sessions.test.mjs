@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp, rm, readFile, stat} from 'node:fs/promises';
+import {mkdtemp, rm, readFile, stat, writeFile} from 'node:fs/promises';
 import path from 'node:path';
 import {WebSocket} from 'ws';
 import {CodexClient} from '../lib/codex.mjs';
@@ -55,6 +55,8 @@ test('terminal partilha a sessão, conserva contexto atualizado e regressa sem d
   assert.equal((await stat(session.directory)).mode & 0o777, 0o700);
   await hub.context.save(p.id, {revision: 0, text: 'DECISAO-NOVA-SEM-PERDAS'});
   await assert.rejects(hub.send(c.id, 'hydra concorrente', 'no'), /terminal/);
+  await assert.rejects(hub.proposeMemory(p.id, {conversationId:c.id,revision:1}), /terminal/);
+  await assert.rejects(hub.refreshContext(c.id), /terminal/);
   const result = await call('turn/start', {threadId: c.threadId, input: [{type: 'text', text: 'pedido terminal'}]});
   assert.ok(result.turn.id); await wait(() => c.status === 'completed');
   assert.match(await readFile(log, 'utf8'), /DECISAO-NOVA-SEM-PERDAS/);
@@ -76,6 +78,17 @@ test('gateway recusa ações que contornam a admissão, outra thread e elevaçã
   assert.equal(c.turns.length, 1);
 });
 
+test('TUI conserva a prioridade nativa de modelo/raciocínio e a página inicial pedida', async t => {
+  const {hub, c} = await setup(t); const {call} = await peer(t, hub, c);
+  const resumed = await call('thread/resume', {threadId:c.threadId,excludeTurns:true,initialTurnsPage:{limit:10,sortDirection:'asc',itemsView:'full'}});
+  assert.equal(resumed.initialTurnsPage.data.length, 1);
+  await assert.rejects(call('thread/resume', {threadId:c.threadId,sandbox:'danger-full-access'}), /definições/);
+  await call('turn/start', {threadId:c.threadId,input:[{type:'text',text:'modelo escolhido no TUI'}],model:'gpt-test',effort:'low',
+    collaborationMode:{mode:'default',settings:{model:'gpt-other',reasoning_effort:'high',developer_instructions:null}}});
+  await wait(() => c.status === 'completed');
+  assert.equal(c.turns.at(-1).model, 'gpt-other'); assert.equal(c.turns.at(-1).effort, 'high');
+});
+
 test('desligar terminal em execução conserva o pedido e bloqueia transferência até terminar', async t => {
   const {hub, codex, c} = await setup(t); const {call, ws} = await peer(t, hub, c);
   await call('turn/start', {threadId: c.threadId, input: [{type: 'text', text: 'hold'}]});
@@ -92,6 +105,11 @@ test('aprovação no terminal e resposta concorrente na HYDRAQ resolvem uma só 
   await call('turn/start', {threadId: c.threadId, input: [{type: 'text', text: 'approval'}]});
   await wait(() => events.some(m => m.method.endsWith('/requestApproval')));
   const request = events.find(m => m.method.endsWith('/requestApproval'));
+  ws.send(JSON.stringify({id:request.id,result:{decision:'acceptForSession'}}));
+  await wait(() => events.some(m => m.method === 'warning'));
+  assert.equal(codex.approvals.size, 1);
+  await wait(() => events.filter(m => m.method.endsWith('/requestApproval')).length === 2);
+  assert.equal(events.filter(m => m.method.endsWith('/requestApproval')).length, 2);
   codex.respond(String(request.id), {decision: 'decline'});
   ws.send(JSON.stringify({id: request.id, result: {decision: 'accept'}}));
   await wait(() => c.status === 'completed');
@@ -135,4 +153,82 @@ test('associação explícita conserva o ID e recusa outra pasta', async t => {
   assert.equal(imported.threadId, source.threadId); assert.equal(imported.turns.length, 1);
   assert.equal(imported.messages.find(m => m.role === 'user').text, 'seed');
   await codex.reconcileNative(imported.id); assert.equal(imported.turns.length, 1); assert.equal(imported.messages.length, 2);
+});
+
+test('uma página de histórico falhada não altera estado, mensagens nem autorizações', async t => {
+  const {codex, c} = await setup(t);
+  const before = structuredClone(c);
+  const original = codex.client.call.bind(codex.client);
+  codex.approvals.set('pending', {conversationId:c.id});
+  codex.client.call = async (method, params) => {
+    if (method !== 'thread/turns/list') return original(method, params);
+    if (params.cursor) throw Error('Falha na segunda página');
+    return {data:[{id:'partial',status:'completed',items:[{id:'partial-user',type:'userMessage',content:[{type:'text',text:'NÃO PUBLICAR'}]}]}],nextCursor:'next'};
+  };
+  await assert.rejects(codex.reconcileNative(c.id), /segunda página/);
+  assert.deepEqual(c, before); assert.ok(codex.approvals.has('pending'));
+});
+
+test('histórico antigo não sobrescreve eventos recebidos durante a consulta', async t => {
+  const {codex, c} = await setup(t);
+  const original = codex.client.call.bind(codex.client);
+  codex.client.call = async (method, params) => {
+    const result = await original(method, params);
+    if (method === 'thread/turns/list') codex.client.emit('notification', {method:'mcpServer/startupStatus/updated',params:{threadId:c.threadId,name:'project',status:'ready'}});
+    return result;
+  };
+  await codex.reconcileNative(c.id);
+  assert.equal(c.status, 'completed');
+  codex.client.call = async (method, params) => {
+    const result = await original(method, params);
+    if (method === 'thread/turns/list') codex.client.emit('notification', {method:'turn/started',params:{threadId:c.threadId,turn:{id:'live',status:'inProgress'}}});
+    return result;
+  };
+  await assert.rejects(codex.reconcileNative(c.id), /mudou durante/);
+  assert.equal(c.status, 'running'); assert.equal(c.turnId, 'live');
+});
+
+test('catálogo maior que 16 MiB não perde a ligação nem eventos seguintes', async t => {
+  const {hub, codex, c} = await setup(t); const {call, ws} = await peer(t, hub, c);
+  const original = codex.client.call.bind(codex.client);
+  const catalog = {marketplaces:[],marketplaceLoadErrors:[],fixture:'x'.repeat(18 * 1024 * 1024)};
+  codex.client.call = async (method, params) => method === 'plugin/list' ? catalog : original(method, params);
+  const results = await Promise.all([call('plugin/list'), call('plugin/list')]);
+  assert.equal(results[0].fixture.length, catalog.fixture.length);
+  assert.equal(results[1].fixture.length, catalog.fixture.length);
+  assert.equal(ws.readyState, WebSocket.OPEN);
+  await call('turn/start', {threadId:c.threadId,input:[{type:'text',text:'depois do catálogo'}]});
+  await wait(() => c.status === 'completed');
+  assert.equal(c.turns.length, 2);
+});
+
+test('imagem local é guardada, enviada e conservada na projeção sem contexto interno', async t => {
+  const {hub, c, dir, p} = await setup(t, {project:true}); const {call} = await peer(t, hub, c);
+  await hub.context.save(p.id, {revision:0,text:'CONTEXTO INTERNO'});
+  const file = path.join(dir, 'pixel.png');
+  await writeFile(file, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=', 'base64'));
+  await call('turn/start', {threadId:c.threadId,input:[{type:'text',text:'Vê a imagem'}, {type:'localImage',path:file}]});
+  await wait(() => c.status === 'completed');
+  const shown = c.messages.find(m => m.text === 'Vê a imagem');
+  assert.equal(shown.attachments[0].mimeType, 'image/png');
+  const item = {id:shown.nativeItemId,type:'userMessage',content:[{type:'text',text:'CONTEXTO INTERNO'}, {type:'localImage',path:file}]};
+  const projected = hub.nativeSessions.project({item});
+  assert.equal(projected.item.content[0].text, 'Vê a imagem');
+  assert.equal(projected.item.content[1].path, file);
+  assert.equal(item.content[0].text, 'CONTEXTO INTERNO');
+});
+
+test('reconexão recupera aprovação pendente e repetição do ID não reenvia o pedido', async t => {
+  const {hub, c, codex} = await setup(t); const first = await peer(t, hub, c);
+  const params = {threadId:c.threadId,clientUserMessageId:'stable-message',input:[{type:'text',text:'approval'}]};
+  const admitted = await first.call('turn/start', params);
+  await wait(() => codex.approvals.size === 1);
+  first.ws.terminate(); await wait(() => !hub.nativeSessions.snapshot().sessions[0].connected);
+  const second = await peer(t, hub, c);
+  await wait(() => second.events.some(m => m.method.endsWith('/requestApproval')));
+  assert.equal((await second.call('turn/start', params)).turn.id, admitted.turn.id);
+  const approval = second.events.find(m => m.method.endsWith('/requestApproval'));
+  second.ws.send(JSON.stringify({id:approval.id,result:{decision:'decline'}}));
+  await wait(() => c.status === 'completed');
+  assert.equal(c.turns.length, 2);
 });
