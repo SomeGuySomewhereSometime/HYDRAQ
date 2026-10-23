@@ -9,7 +9,7 @@ import { ProjectUI, conversationGroups } from './projects.js';
 import { ProjectMemoryUI } from './project-memory.js';
 import { CollaborationUI } from './collaboration.js';
 import { ModelPicker } from './model-picker.js';
-import { OpinionUI, opinionResultAnchors } from './opinions.js';
+import { OpinionUI, opinionResultAnchors, diagnosticsView } from './opinions.js';
 import { Layout, Tooltips, AppearanceMenu, ClientColors, APPEARANCES, COLUMNS } from './layout.js';
 
 const $ = selector => document.querySelector(selector);
@@ -547,7 +547,7 @@ function pendingHandoff(entry) {
 function renderMessages(conversation) {
   const group = members(conversation);
   const opinionState=opinionUI.viewState();
-  const signature = JSON.stringify([conversation?.id,opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage]), entry.handoffState])]);
+  const signature = JSON.stringify([conversation?.id,opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage,turn.diagnostics]), entry.handoffState])]);
   if (signature === messageSignature) {opinionUI.refresh();return;}
   messageSignature = signature;
   const view = $('#messages');
@@ -617,6 +617,8 @@ function renderMessages(conversation) {
       if (turn?.usage && finalMessage && owner.provider!=='opencode') article.append(element('p', 'message-usage', `Entrada: ${formatTokens(turn.usage.inputTokens)} · Em cache: ${formatTokens(turn.usage.cachedInputTokens)} (${turn.usage.cachePercent}%) · Sem cache: ${formatTokens(turn.usage.uncachedInputTokens)}`));
       else if (turn?.nativeTurnUsage && finalMessage) article.append(element('p', 'message-usage', `Neste pedido — Entrada: ${formatTokens(turn.nativeTurnUsage.input_tokens)} · Leitura de cache: ${formatTokens(turn.nativeTurnUsage.cache_read_tokens)} · Saída: ${formatTokens(turn.nativeTurnUsage.output_tokens)} · Raciocínio: ${formatTokens(turn.nativeTurnUsage.thinking_tokens)}`));
     }
+    const diagnosticTurn=owner.turns?.find(t=>message.requestId&&t.requestId===message.requestId||message.turnId&&t.id===message.turnId);
+    if(diagnosticTurn?.diagnostics?.length&&!owner.messages.slice(owner.messages.indexOf(message)+1).some(m=>!m.internal&&(m.requestId&&m.requestId===diagnosticTurn.requestId||m.turnId&&m.turnId===diagnosticTurn.id)))article.append(diagnosticsView(diagnosticTurn.diagnostics));
     if (message.kind === 'steer') {
       const label = element('p', `steer-delivery delivery-${message.delivery || 'uncertain'}`, {
         preparing:'A guardar orientação…', sending: message.nativeEnqueued ? 'Na fila nativa do OpenCode · aguarda o próximo passo' : 'A aguardar confirmação do cliente…', accepted: `Recebida pelo ${providerName(owner.provider)}`, rejected: 'Orientação não entregue', uncertain: 'Entrega não confirmada · não foi reenviada',

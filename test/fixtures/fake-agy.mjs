@@ -28,6 +28,17 @@ createInterface({input:process.stdin}).on('line',line=> {
   writeFileSync('.fake-agy-last-'+nativeId,raw);
   const step={conversation_id:nativeId,step_index:count*10};
   emit({event:'step_update',step_update:{...step,state:'DONE',step_type:'user_input'}});
+  if(text.startsWith('diagnostic-')) {
+    const refused=text==='diagnostic-refused-empty';
+    if(refused)emit({event:'step_update',step_update:{...step,step_index:count*10+1,state:'DONE',step_type:'tool',tool_name:'run_command',tool_info:{parameters:{CommandLine:'git status --short'},error:{type:'PERMISSION_DENIED',message:'Approval unavailable in headless mode'}}}});
+    if(text==='diagnostic-stderr-warning')process.stderr.write('Warning: run_command soft-denied; approval required in headless mode\n');
+    if(text==='diagnostic-stderr-quota')process.stderr.write('ERROR: RESOURCE_EXHAUSTED: quota exceeded for this model\n');
+    if(text==='diagnostic-stderr-secrets')process.stderr.write('ERROR: quota exceeded API_KEY=sk-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n');
+    const empty=['diagnostic-empty','diagnostic-refused-empty'].includes(text);
+    const error=text==='diagnostic-quota-structured'?{type:'QUOTA_EXCEEDED',message:'Limite da conta'}:text==='diagnostic-resource-busy'?{type:'RESOURCE_EXHAUSTED',message:'Server capacity temporarily unavailable'}:text==='diagnostic-stderr-quota'?'Request failed':null;
+    setTimeout(()=>emit({event:'result',result:{conversation_id:nativeId,status:error?'ERROR':'SUCCESS',error,response:empty||error?'':text==='diagnostic-prose'?'O manual explica a mensagem quota exceeded; a minha resposta não indica um limite atingido.':'Resposta recebida com aviso nativo.'}}),20);
+    return;
+  }
   if(text==='hold')return;
   if(text==='multi-partial-hold') {
     emit({event:'step_update',step_update:{...step,step_index:count*10+1,state:'DONE',step_type:'agent_response',text_delta:'Primeiro bloco parcial.'}});

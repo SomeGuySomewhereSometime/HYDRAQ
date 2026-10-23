@@ -4010,6 +4010,13 @@ body .review-process { min-width:0; margin:0 0 18px; border:1px solid var(--bord
 .review-process[data-failed="true"] > summary { color:var(--warning,#e9bd70); }
 .review-message-phase { margin:8px 0; color:var(--text-secondary); font-size:11px; font-weight:600; }
 .opinion-summary-error { flex-basis:100%; color:var(--warning,#e9bd70); font-size:11px; font-weight:400; overflow-wrap:anywhere; }
+.opinion-diagnostic-summary { flex-basis:100%; color:var(--warning,#e9bd70); font-size:11px; }
+.native-diagnostics { margin:12px 0; padding:10px 12px; border:1px solid var(--border-subtle); border-radius:8px; text-align:left; overflow-wrap:anywhere; }
+.native-diagnostic + .native-diagnostic { margin-top:10px; }
+.native-diagnostic > strong { color:var(--warning,#e9bd70); font-size:12px; }
+.native-diagnostic p { margin:4px 0; color:var(--text-secondary); font-size:12px; }
+.native-diagnostic summary { color:var(--text-secondary); font-size:11px; cursor:pointer; }
+.native-diagnostic pre { max-height:180px; overflow:auto; white-space:pre-wrap; overflow-wrap:anywhere; font-size:11px; }
 .review-activity { margin:8px 0; }
 .review-activity > summary { color:var(--text-secondary); cursor:pointer; font-size:11px; }
 .review-process-body { padding:0 12px 10px; }

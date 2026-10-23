@@ -46,6 +46,15 @@ test('incorporação manual conserva foco explícito e pergunta original na sín
  const prompt=source.logs[0].text;assert.match(prompt,/Concentra-te apenas na arquitetura/);assert.match(prompt,/resposta final completa e autónoma/);assert.match(prompt,/OBJETIVO-ORIGINAL/);assert.match(prompt,/PLANO-ORIGINAL/);assert.match(prompt,/PARECER-claude/);assert.doesNotMatch(prompt,/PARECER-antigravity/);assert.equal(source.logs[0].settings.sandbox,'read-only');
 });
 
+test('diagnóstico de recusa acompanha um parecer válido até ao principal e fica visível no resumo',async t=>{
+ const{hub,c,source,body,workers}=await setup(t,{antigravity:'hold'});await hub.opinions.create(c.id,body(3,['antigravity']));await wait(()=>workers[0]?.logs.length);
+ const worker=workers[0],chat=worker.conversations[0],turn=chat.turns[0];turn.diagnostics=[{code:'permission',label:'Ferramenta recusada',source:'stderr',message:'Uma ferramenta foi recusada.',detail:'run_command soft-denied'}];
+ worker.finish(chat,'Parecer válido com inspeção limitada.');await wait(()=>!hub.opinions.tasks.size);
+ const job=hub.opinions.batches[0].jobs[0];assert.equal(job.status,'completed');assert.equal(job.diagnostics[0].source,'stderr');
+ assert.equal(hub.opinions.snapshot().batches[0].jobs[0].diagnostics[0].label,'Ferramenta recusada');
+ await hub.opinions.incorporate(c.id,{jobIds:[job.id],requestId:'review-with-warning'});await wait(()=>c.status==='completed');assert.match(source.logs[0].text,/Uma ferramenta foi recusada/);assert.match(source.logs[0].text,/Parecer válido/);
+});
+
 test('pareceres antigos vazios ou com aviso de pagamento são corrigidos ao carregar e não enviados',async t=>{
  const{hub,c,body,workers}=await setup(t);await hub.opinions.create(c.id,body(3,['cursor','antigravity']));await wait(()=>!hub.opinions.tasks.size);
  const [billing,empty]=hub.opinions.batches[0].jobs;billing.text='Add a payment method to continue';empty.text='';

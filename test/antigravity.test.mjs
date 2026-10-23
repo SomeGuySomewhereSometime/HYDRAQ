@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,39 @@ async function setup(t) {
   return {client,directory,options,settingsFile,cleanupClients};
 }
 async function chat(client,directory){return client.create({cwd:directory,model:'gemini-4-argon',effort:'low'});}
+
+test('sucesso sem resposta é falha explícita e recusa de ferramenta mantém a sua causa',async t=>{
+ const{client,directory}=await setup(t),c=await chat(client,directory);
+ await client.send(c.id,'diagnostic-empty','empty');await waitFor(()=>c.status==='failed');
+ assert.deepEqual(c.turns.at(-1).diagnostics.map(d=>d.code),['empty']);assert.match(c.error,/sem uma resposta/);
+ const pid=client.session.child.pid;
+ await client.send(c.id,'diagnostic-refused-empty','refused');await waitFor(()=>c.status==='failed');
+ assert.equal(client.session.child.pid,pid);assert.deepEqual(c.turns.at(-1).diagnostics.map(d=>d.code),['permission','empty']);assert.match(c.error,/falta de autorização/);assert.doesNotMatch(c.error,/quota/i);
+ assert.equal(c.turns.length,2);
+});
+test('recusa em stderr acompanha uma resposta válida sem a tornar falhada',async t=>{
+ const{client,directory}=await setup(t),c=await chat(client,directory);
+ await client.send(c.id,'diagnostic-stderr-warning','stderr');await waitFor(()=>c.status==='completed');
+ assert.match(c.messages.at(-1).text,/Resposta recebida/);assert.equal(c.error,null);
+ assert.equal(c.turns[0].diagnostics[0].code,'permission');assert.equal(c.turns[0].diagnostics[0].source,'stderr');
+ await client.persist();const restored=JSON.parse(await readFile(path.join(client.dataDir,'state.json'),'utf8'));assert.equal(restored.conversations[0].turns[0].diagnostics[0].code,'permission');
+});
+test('quota estruturada ou em stderr é distinguida de capacidade e não contamina o pedido seguinte',async t=>{
+ const{client,directory}=await setup(t),c=await chat(client,directory);
+ await client.send(c.id,'diagnostic-quota-structured','quota-object');await waitFor(()=>c.status==='failed');assert.ok(c.turns.at(-1).diagnostics.some(d=>d.code==='quota'));
+ await client.send(c.id,'diagnostic-stderr-quota','quota-stderr');await waitFor(()=>c.status==='failed');assert.equal(c.error,'Request failed');assert.equal(c.turns.at(-1).diagnostics.find(d=>d.code==='quota').source,'stderr');
+ await client.send(c.id,'diagnostic-resource-busy','capacity');await waitFor(()=>c.status==='failed');assert.ok(!c.turns.at(-1).diagnostics.some(d=>d.code==='quota'));
+ await client.send(c.id,'diagnostic-prose','normal');await waitFor(()=>c.status==='completed');assert.deepEqual(c.turns.at(-1).diagnostics,[]);assert.equal(c.turns.length,4);
+});
+test('diagnósticos históricos projetados conservam dados nativos e factos de recusas fora das ações visíveis',async t=>{
+ const{client,directory}=await setup(t),c=await chat(client,directory);
+ c.turns=[{id:'old-turn',requestId:'old',status:'completed',facts:{declined:2,commands:[],files:[]}}];c.status='completed';
+ const original=JSON.stringify(c);const snapshot=client.snapshot().conversations[0];
+ assert.deepEqual(snapshot.turns[0].diagnostics.map(d=>d.code),['permission','empty']);assert.match(snapshot.turns[0].diagnostics[0].message,/2 ferramenta/);
+ assert.equal(JSON.stringify(c),original,'projetar diagnóstico não reescreve histórico');
+ delete c.turns[0].facts;c.items=[{id:'old-tool',turnId:'old-turn',permissionDenied:true,tool:'run_command'}];
+ const withoutFacts=JSON.stringify(c);assert.equal(client.snapshot().conversations[0].turns[0].diagnostics[0].code,'permission');assert.equal(JSON.stringify(c),withoutFacts);
+});
 
 test('write_file com Path nativo entra nos factos de ficheiros alterados',async t=>{
  const{client,directory}=await setup(t),c=await chat(client,directory);await client.send(c.id,'write-file-path','native-write');await waitFor(()=>c.status==='completed');assert.deepEqual(turnFacts(c,c.turns.at(-1)).files,['/tmp/sum.mjs']);

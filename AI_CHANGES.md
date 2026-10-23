@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 58
+Versão atual: 59
 
 ## Resumo atual
+
+- Diagnósticos Antigravity (entrada 59): distingue quota/limite explícito, ferramenta recusada e ausência de resposta; mantém texto válido com aviso e identifica sucesso vazio como falha. Avisos na conversa, parecer fechado e contexto enviado ao principal; stderr por pedido e evidência filtrada. Condições publicadas de acesso documentadas, sem mudar autenticação/faturação/permissões ou migrar ACP. 367 testes e browser isolado Grafite/Atelier/móvel aprovados; sem novas inferências reais. Ativa na 4318, 31 históricos preservados e cinco clientes ligados.
 
 - Revisões por fases e falhas visíveis (entrada 58): resposta inicial/progresso em direto, pareceres expansíveis com contagem e cores dos clientes, síntese final em destaque; resposta vazia e aviso de pagamento/limite do Cursor deixam de contar como parecer, incluindo registos antigos. Confirmações do Claude fixas à conversa/pasta de origem. 358 testes e browser isolado Grafite/Atelier/móvel aprovados; sem novas inferências reais. Ativa na 4318, 30 históricos preservados e cinco clientes ligados.
 
@@ -572,3 +574,10 @@ Versão atual: 58
 - Última revisão real inspecionada: Grok/Cursor respondeu «Add a payment method to continue», registado como concluído; Flash terminou sem resposta após ferramenta recusada, sem evidência de falha de quota. O ciclo já estava falhado e livre, mas o erro ficava pouco visível. Avisos isolados de pagamento/limite do Cursor e pareceres vazios passam a falhados; leitura dos registos antigos corrige a apresentação e impede incorporá-los. Erros identificam o revisor e conservam os pareceres válidos para envio manual, sem síntese parcial silenciosa nem repetição.
 - Apresentação por fases: resposta inicial e atividade disponíveis desde o início, recolha ao consultar revisores, progresso por revisor com detalhes fechados, contagem de prontos/falhas e erros visíveis; síntese final fora do bloco. Cores próprias dos revisores preservadas. Expansões escolhidas pelo utilizador conservadas durante atualizações.
 - Verificado: 358/358, diff --check e browser isolado Grafite/Atelier, 1440/390 px: fases antes da primeira resposta, streaming inicial/revisor/final, expansão, conclusão 1/2 → 2/2, falhas sem parecer, cores distintas e sem overflow horizontal. Clientes simulados; sem novas inferências reais. Ativada livre na 4318 (PID 1016441): mesmos 30 históricos/conteúdos, 7 lotes e 4 ciclos, políticas preservadas, cinco clientes ligados e ficheiros servidos iguais. Últimos dois pareceres agora identificados como falhados, sem reenvio nem nova inferência. Provas em `.hydraq/review-stages-2026-10-23/`.
+
+### 59 — 2026-10-23 — Codex
+
+- Diagnóstico do Antigravity usa erros/códigos nativos, stderr e recusas observadas: quota/limite só com indicação explícita; RESOURCE_EXHAUSTED/429 isolado, contadores, texto do modelo e resposta vazia não provam quota. Erros estruturados preservam a mensagem. Recusas são identificadas pela causa, sem confundir saída normal de ferramentas com autorização recusada.
+- Avisos junto da última mensagem do pedido (junto da pergunta se não houver resposta), no resumo do parecer fechado e com detalhes expansíveis. Texto válido permanece concluído com aviso; SUCCESS sem texto fica falhado. Avisos seguem com o parecer selecionado para o principal. Registos antigos recuperam recusas dos factos, sem reescrever históricos nativos nem reconstruir stderr inexistente. Diagnósticos de stderr separados por pedido/processo aquecido, com UTF-8, filtragem de segredos conhecidos e indicação de abreviação.
+- README/docs/antigravity.md registam as condições publicadas pela Google em 2026-10-23 e distinguem funcionamento técnico de autorização da modalidade de acesso. Conta local/autorização específica por esclarecer com o fornecedor; sem ACP, instalação, nova autenticação, alterações globais de permissões/créditos ou API paga.
+- Verificado: 367/367 e 23 verificações finais de diagnóstico; browser isolado com CLI agy simulado e principal simulado (Grafite/Atelier, 1440/390 px), resposta válida com recusa, pedido vazio, quota em stderr, parecer fechado e envio do aviso ao principal, sem erros de JavaScript ou overflow horizontal. Sem novas inferências reais. Ativada livre na 4318 (PID 1033727): 31 históricos/conteúdos, 8 lotes, 5 ciclos e políticas preservados, cinco clientes ligados e ficheiros servidos iguais; novas projeções de diagnóstico, sem reenvios. Provas em `.hydraq/antigravity-diagnostics-2026-10-23/`.

@@ -1,4 +1,17 @@
 import {elicitationForm} from './elicitation.js';
+export function diagnosticsView(diagnostics = []) {
+  const section=document.createElement('section');section.className='native-diagnostics';
+  section.setAttribute('role','status');section.setAttribute('aria-label','Diagnóstico do cliente');
+  for(const diagnostic of diagnostics){
+    const row=document.createElement('div');row.className='native-diagnostic';row.dataset.code=diagnostic.code;
+    const label=document.createElement('strong');label.textContent=diagnostic.label;
+    const message=document.createElement('p');message.textContent=diagnostic.message;row.append(label,message);
+    if(diagnostic.detail){const details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent='Detalhes comunicados pelo cliente';text.textContent=diagnostic.detail;details.append(summary,text);row.append(details);}
+    section.append(row);
+  }
+  return section;
+}
+
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',opencode:'OpenCode · gratuitos',cursor:'Cursor'};
 const statuses={queued:'Em fila',starting:'A preparar',running:'A responder',stopping:'A parar',completed:'Concluído',failed:'Falhou',uncertain:'Resultado incerto',interrupted:'Interrompido'};
@@ -232,6 +245,7 @@ export class OpinionUI{
    for(const job of batch.jobs){const delivery=opinionDelivery(job.id,state?.merges);if(pendingOnly&&delivery.state==='submitted')continue;const card=this.fold('job:'+job.id,'message assistant opinion-card','');const jobSummary=card.firstElementChild;card.dataset.provider=job.provider;card.dataset.jobId=job.id;card.dataset.delivery=delivery.state;
     const contextNote=node('p','opinion-context-status',opinionContextLabel(job,delivery)+(automaticPending&&delivery.state==='separate'&&automaticReturnMode(cycle.config)!=='manual'?' · ciclo automático em curso':''));contextNote.dataset.delivery=delivery.state;jobSummary.append(node('strong','',names[job.provider]),node('span','opinion-summary-model',this.getState().providers[job.provider]?.models.find(m=>m.id===job.model)?.name||job.model),node('span','opinion-summary-state',job.approvals?.length?'Decisão pendente':statuses[job.status]||job.status));const contextBadge=node('span','opinion-summary-context',delivery.state==='submitted'?'Enviado':delivery.state==='uncertain'?'Entrega incerta':delivery.state==='sending'?'A enviar':job.recommendation?.status==='decided'&&!job.recommendation.sendToPrincipal?'Não recomenda enviar':'Separado');contextBadge.dataset.delivery=delivery.state;contextBadge.title=contextNote.textContent;jobSummary.append(contextBadge);card.append(contextNote);
     if(job.error)jobSummary.append(node('span','opinion-summary-error',job.error));
+    if(job.diagnostics?.length){jobSummary.append(node('span','opinion-diagnostic-summary',job.diagnostics.map(d=>d.label).join(' · ')));card.append(diagnosticsView(job.diagnostics));}
     card.append(node('p','opinion-access',job.allowWrite?'Escrita explicitamente ativada · autorizações nativas':'Planear / só leitura · não edita ficheiros'));
     if(job.recommendation)card.append(node('p','opinion-recommendation',(job.recommendation.status==='pending'?'Decisão pendente: ':job.recommendation.sendToPrincipal?'Recomenda enviar: ':'Não recomenda enviar: ')+job.recommendation.reason));
 
