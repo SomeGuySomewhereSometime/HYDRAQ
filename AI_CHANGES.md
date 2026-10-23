@@ -4,7 +4,7 @@ Versão atual: 55
 
 ## Resumo atual
 
-- Terminal Codex original (entrada 55): alternância da mesma sessão com controlo exclusivo, contexto/MCP/anexos/revisões pelo envio comum e associação explícita. Corrigidos transporte de catálogos grandes, imagens, histórico parcial e escolhas de modelo do TUI. 337 testes; validação real terminal → HYDRAQ e recuperação após reinício. Desktop indisponível. Detalhes em docs/native-terminal.md.
+- Terminal Codex original (entrada 55): alternância da mesma sessão com controlo exclusivo, contexto/MCP/anexos/revisões pelo envio comum e associação explícita. Corrigidos transporte de catálogos grandes, imagens, histórico parcial e escolhas de modelo do TUI. 337 testes; validação real terminal → HYDRAQ e recuperação após reinício. Ativa na 4318, 30 históricos preservados e cinco clientes ligados. Desktop indisponível. Detalhes em docs/native-terminal.md.
 
 - Revisão compacta (entrada 54): retorno automático reúne resposta inicial, pareceres e contexto interno num bloco fechado por omissão; resposta final fora, com expansão independente. Envio manual conserva o original visível e os pareceres separados. Síntese completa ao pedido original, com atribuição breve quando útil e fichas dos pareceres recebidos. 324 testes, 69 verificações específicas finais e browser Grafite/Atelier/móvel aprovados; Haiku real produziu plano completo após parecer simulado, sem escrita. 4318 ativada livre, mesmos 29 históricos e cinco clientes ligados. Provas em `.hydraq/review-folding-2026-10-23/VALIDACAO.md`.
 
@@ -545,4 +545,4 @@ Versão atual: 55
 - Adaptador Unix privado para o TUI original, controlo por grupo, envio comum com contexto/MCP/anexos/revisões, associação explícita e histórico nativo. Browser opcional; servidor HYDRAQ necessário. Operações ainda não integradas são recusadas; desktop indisponível.
 - Revisão corrigiu desconexão com catálogo de 18 MB, armazenamento/projeção de imagens, histórico parcial/concorrente, proposta de memória fora do controlo, prioridade de modelo/raciocínio do TUI e feedback de decisões não suportadas. Detalhes e limites em docs/native-terminal.md.
 - 337 testes aprovados. Ensaios reais: TUI sem reconexão e resposta final visível, memória por MCP, regresso à HYDRAQ com novo pedido e associação/reinício com os mesmos 9 turnos/20 mensagens. Browser Grafite/Atelier, 1440/390 px, seleção/controlo/comando funcionais. Clientes de testes de falhas, revisões e passagem para Claude são simulados.
-- Provas locais em `.hydraq/native-terminal-2026-10-23/VALIDACAO.md`; ativação registada após a integração.
+- Integrada e ativada livre na 4318 (PID 966963): mesmos 30 históricos/IDs/conteúdos, catálogo e políticas de revisão; cinco clientes ligados. Ficheiros servidos iguais aos do commit, controlo visível/ativo no browser sem erros. Provas em `.hydraq/native-terminal-2026-10-23/VALIDACAO.md`.
