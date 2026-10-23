@@ -4007,6 +4007,11 @@ body .review-process { min-width:0; margin:0 0 18px; border:1px solid var(--bord
 .review-process-title { color:var(--text-primary); font-weight:550; }
 .review-process-state { margin-inline-start:auto; font-size:11px; }
 .review-process[data-waiting="true"] > summary { color:var(--warning,#e9bd70); }
+.review-process[data-failed="true"] > summary { color:var(--warning,#e9bd70); }
+.review-message-phase { margin:8px 0; color:var(--text-secondary); font-size:11px; font-weight:600; }
+.opinion-summary-error { flex-basis:100%; color:var(--warning,#e9bd70); font-size:11px; font-weight:400; overflow-wrap:anywhere; }
+.review-activity { margin:8px 0; }
+.review-activity > summary { color:var(--text-secondary); cursor:pointer; font-size:11px; }
 .review-process-body { padding:0 12px 10px; }
 .review-process-body > :last-child { margin-bottom:0!important; }
 body .review-original { margin:0 0 8px; border-bottom:1px solid var(--border-subtle); }

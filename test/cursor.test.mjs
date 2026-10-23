@@ -21,6 +21,14 @@ async function setup(t,env={}) {
  return {directory,credentialFile,client,options,clients,log:async()=> (await readFile(path.join(directory,'prompts.log'),'utf8')).trim().split('\n').map(JSON.parse)};
 }
 
+test('aviso de pagamento recebido como end_turn é falha e nunca resposta final confirmada',async t=>{
+ const {client,directory}=await setup(t);await client.connect();
+ const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low',sandbox:'plan'});
+ await client.send(c.id,'billing','billing-request');await waitFor(()=>c.status==='failed');
+ assert.match(c.error,/método de pagamento/);assert.equal(c.turns.at(-1).status,'failed');
+ assert.equal(c.turns.at(-1).finalAnswer,undefined);assert.ok(c.messages.some(m=>m.role==='assistant'&&m.text.includes('Add a payment')));
+});
+
 test('chave privada: ficheiro literal, dono/permissões, recusa de symlinks e ambiente sanitizado',async t=>{
  const {credentialFile,client,directory}=await setup(t);
  assert.equal(await readCursorCredential(credentialFile),'TEST-CURSOR-SECRET');

@@ -45,3 +45,14 @@ test('incorporação manual conserva foco explícito e pergunta original na sín
  await hub.opinions.incorporate(c.id,{jobIds:[batch.jobs[0].id],requestId:'complete-synthesis',comment:'Concentra-te apenas na arquitetura',settings:{model:'test',effort:'high',sandbox:'read-only'}});
  const prompt=source.logs[0].text;assert.match(prompt,/Concentra-te apenas na arquitetura/);assert.match(prompt,/resposta final completa e autónoma/);assert.match(prompt,/OBJETIVO-ORIGINAL/);assert.match(prompt,/PLANO-ORIGINAL/);assert.match(prompt,/PARECER-claude/);assert.doesNotMatch(prompt,/PARECER-antigravity/);assert.equal(source.logs[0].settings.sandbox,'read-only');
 });
+
+test('pareceres antigos vazios ou com aviso de pagamento são corrigidos ao carregar e não enviados',async t=>{
+ const{hub,c,body,workers}=await setup(t);await hub.opinions.create(c.id,body(3,['cursor','antigravity']));await wait(()=>!hub.opinions.tasks.size);
+ const [billing,empty]=hub.opinions.batches[0].jobs;billing.text='Add a payment method to continue';empty.text='';
+ const projected=hub.opinions.snapshot().batches[0].jobs;assert.deepEqual(projected.map(j=>j.status),['failed','failed']);
+ await assert.rejects(hub.opinions.incorporate(c.id,{jobIds:[billing.id],requestId:'invalid-old-result'}),/concluídos/);
+ await hub.opinions.persist();await hub.opinions.close();
+ const recovered=new Opinions({hub,directory:hub.opinions.directory,supervisor});
+ try{await recovered.load();assert.equal(recovered.error,undefined);assert.deepEqual(recovered.batches[0].jobs.map(j=>j.status),['failed','failed']);assert.match(recovered.batches[0].jobs[0].error,/pagamento/);assert.match(recovered.batches[0].jobs[1].error,/sem uma resposta/);assert.ok(workers.every(w=>w.conversations[0].status==='completed'),'o histórico nativo mantém o resultado que o cliente comunicou');}
+ finally{await recovered.close();}
+});

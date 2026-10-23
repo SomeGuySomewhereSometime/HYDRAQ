@@ -52,6 +52,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(text==='disconnect'){say('PRIMEIRA PARTE');process.exit(1);}
  if(text==='mismatch'){emit({method:'session/update',params:{sessionId:'different',update:{sessionUpdate:'agent_message_chunk',content:{type:'text',text:'wrong'}}}});return;}
  if(text==='hold'){say('A trabalhar…');holding=m.id;return;}
+ if(text==='billing'){say('\n\nAdd a payment method to continue');done(m.id);return;}
  if(text==='echo-secret'){const key=process.env.CURSOR_API_KEY;say(key.slice(0,8));say(key.slice(8));done(m.id);return;}
  if(text==='partial-secret'){say(process.env.CURSOR_API_KEY.slice(0,15));process.exit(1);}
  if(text==='permission'||text==='permission-first'){

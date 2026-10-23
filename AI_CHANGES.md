@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 57
+Versão atual: 58
 
 ## Resumo atual
+
+- Revisões por fases e falhas visíveis (entrada 58): resposta inicial/progresso em direto, pareceres expansíveis com contagem e cores dos clientes, síntese final em destaque; resposta vazia e aviso de pagamento/limite do Cursor deixam de contar como parecer, incluindo registos antigos. Confirmações do Claude fixas à conversa/pasta de origem. 358 testes e browser isolado Grafite/Atelier/móvel aprovados; sem novas inferências reais. Ativa na 4318, 30 históricos preservados e cinco clientes ligados.
 
 - Claude original, revisão do Astra (entrada 57): regresso e associação falham fechados sem listagem do CLI ou com transcrição ausente/ilegível, até decisão explícita registada; pedido só concluído com `end_turn` e ferramentas com resultado; resultados de ferramentas em paralelo associados pelo ID. 348 testes; transcrições reais classificadas sem falsos incompletos; ativada livre na 4318, mesmos 30 históricos.
 
@@ -563,3 +565,10 @@ Versão atual: 57
 - Pedido: corrigir as três falhas reproduzidas pelo Astra na entrada 56. `sessionOpen` falha fechado quando `claude agents --json` não responde (a procura em `/proc` não vê sessões escolhidas dentro do TUI): erro `CLAUDE_CONFIRM`/`closed`, a conversa continua no terminal e só segue com confirmação explícita. Transcrição ausente ou com linhas ilegíveis no regresso ou na associação: `CLAUDE_CONFIRM`/`history` até «Continuar sem esse histórico»; as decisões ficam no erro da conversa. HTTP passa `code`/`confirm`; o painel mostra a explicação com botão específico e Cancelar.
 - Conclusão importada só com `stop_reason` `end_turn`/`stop_sequence` e todas as ferramentas com resultado; erro de API/recusa → falhado; sem resposta, texto parcial ou ferramenta pendente → interrompido com aviso, sem resposta final nem conclusão na passagem. Ao validar com transcrições reais encontrou-se uma falha anterior: resultados de ferramentas em paralelo ficam em ramos laterais e eram ignorados; passam a ser associados pelo ID.
 - Verificado: 348/348 (4 novos), sintaxe e diff --check. Classificação sem inferência das transcrições reais (GameBoxX, pasta HYDRAQ, pasta temporária): sessões terminadas como concluídas, só interrupções explícitas e o turno em curso ficaram por concluir. Browser isolado Grafite/Atelier: falha da listagem mostra a decisão, cancelar mantém o terminal, confirmar devolve o controlo. Sem novas inferências reais. 4318 ativada livre (PID 1000376), mesmos 30 históricos, cinco clientes ligados, ficheiros servidos iguais. Provas acrescentadas em `.hydraq/claude-original-2026-10-23/VALIDACAO.md`.
+
+### 58 — 2026-10-23 — Codex
+
+- Confirmações do Claude guardam a conversa e o projeto de origem; mudar de conversa descarta a decisão, incluindo respostas HTTP tardias e associação de sessões. O regresso usa sempre o ID capturado.
+- Última revisão real inspecionada: Grok/Cursor respondeu «Add a payment method to continue», registado como concluído; Flash terminou sem resposta após ferramenta recusada, sem evidência de falha de quota. O ciclo já estava falhado e livre, mas o erro ficava pouco visível. Avisos isolados de pagamento/limite do Cursor e pareceres vazios passam a falhados; leitura dos registos antigos corrige a apresentação e impede incorporá-los. Erros identificam o revisor e conservam os pareceres válidos para envio manual, sem síntese parcial silenciosa nem repetição.
+- Apresentação por fases: resposta inicial e atividade disponíveis desde o início, recolha ao consultar revisores, progresso por revisor com detalhes fechados, contagem de prontos/falhas e erros visíveis; síntese final fora do bloco. Cores próprias dos revisores preservadas. Expansões escolhidas pelo utilizador conservadas durante atualizações.
+- Verificado: 358/358, diff --check e browser isolado Grafite/Atelier, 1440/390 px: fases antes da primeira resposta, streaming inicial/revisor/final, expansão, conclusão 1/2 → 2/2, falhas sem parecer, cores distintas e sem overflow horizontal. Clientes simulados; sem novas inferências reais. Ativada livre na 4318 (PID 1016441): mesmos 30 históricos/conteúdos, 7 lotes e 4 ciclos, políticas preservadas, cinco clientes ligados e ficheiros servidos iguais. Últimos dois pareceres agora identificados como falhados, sem reenvio nem nova inferência. Provas em `.hydraq/review-stages-2026-10-23/`.

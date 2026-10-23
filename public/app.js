@@ -547,7 +547,7 @@ function pendingHandoff(entry) {
 function renderMessages(conversation) {
   const group = members(conversation);
   const opinionState=opinionUI.viewState();
-  const signature = JSON.stringify([conversation?.id,opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage]), entry.handoffState])]);
+  const signature = JSON.stringify([conversation?.id,opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage]), entry.handoffState])]);
   if (signature === messageSignature) {opinionUI.refresh();return;}
   messageSignature = signature;
   const view = $('#messages');

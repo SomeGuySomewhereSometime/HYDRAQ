@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {opinionTranscriptGroups,opinionResultAnchors,opinionDelivery,automaticParticipants,automaticReturnMode,opinionContextLabel} from '../public/opinions.js';
+import {opinionTranscriptGroups,opinionResultAnchors,opinionDelivery,automaticParticipants,automaticReturnMode,opinionContextLabel,reviewProgress} from '../public/opinions.js';
 const entry=(role,requestId,extra={},owner='source')=>({owner:{id:owner},message:{role,requestId,...extra}});
 
 test('interface conserva políticas antigas e mostra o modo condicional explícito',()=>{
@@ -67,14 +67,25 @@ test('envio manual e segunda opinião avulsa conservam a resposta original no ch
  assert.deepEqual(opinionTranscriptGroups(reviewedTimeline(),reviewState({config:{returnMode:'manual'}})),[]);
  const state=reviewState();state.automatic.cycles=[];assert.deepEqual(opinionTranscriptGroups(reviewedTimeline(),state),[]);
 });
-test('condicional sem parecer enviado conserva a resposta original, inclusive com decisões negativas',()=>{
+test('condicional sem parecer enviado continua a mostrar as fases e o original consultável',()=>{
  const state=reviewState({config:{returnMode:'necessary'}});state.merges=[];
- assert.deepEqual(opinionTranscriptGroups(reviewedTimeline().slice(0,3),state),[]);
+ assert.deepEqual(opinionTranscriptGroups(reviewedTimeline().slice(0,3),state)[0].original,[1,2]);
  assert.equal(opinionTranscriptGroups(reviewedTimeline(),state).length,1);
 });
-test('resposta ainda em streaming e revisão falhada sem avaliação não escondem o original',()=>{
- const timeline=reviewedTimeline();timeline[2].message.streaming=true;assert.deepEqual(opinionTranscriptGroups(timeline,reviewState()),[]);
- assert.deepEqual(opinionTranscriptGroups(reviewedTimeline().slice(0,3),reviewState({status:'failed'})),[]);
+test('resposta inicial em streaming e revisão falhada conservam um grupo com estado visível',()=>{
+ const timeline=reviewedTimeline();timeline[2].message.streaming=true;assert.deepEqual(opinionTranscriptGroups(timeline,reviewState())[0].original,[1,2]);
+ assert.deepEqual(opinionTranscriptGroups(reviewedTimeline().slice(0,3),reviewState({status:'failed'}))[0].original,[1,2]);
+});
+test('progresso diferencia resposta inicial, revisores em curso, falhas e avaliação final',()=>{
+ assert.match(reviewProgress({status:'waiting-main'}),/inicial a ser escrita/);
+ assert.match(reviewProgress({status:'preparing'}),/pronta.*consultar/);
+ assert.match(reviewProgress({status:'reviewing'},[{status:'completed',text:'OK'},{status:'running'}]),/1\/2 pareceres prontos/);
+ assert.match(reviewProgress({status:'failed'},[{status:'completed',text:'OK'},{status:'failed'}]),/1\/2 pareceres prontos · 1 sem parecer/);
+ assert.match(reviewProgress({status:'assessing'}),/Principal a preparar resposta final/);
+});
+test('fase inicial existe antes da primeira mensagem do modelo sem mover a pergunta',()=>{
+ const timeline=reviewedTimeline().slice(0,1),state=reviewState({status:'waiting-main'});state.batches=[];state.merges=[];
+ const [group]=opinionTranscriptGroups(timeline,state);assert.equal(group.anchor,0);assert.deepEqual(group.original,[]);assert.deepEqual(group.questions,[0]);
 });
 test('IDs iguais noutro cliente e notas internas não entram no grupo de revisão',()=>{
  const timeline=reviewedTimeline();timeline.push(entry('assistant','original',{id:'other'},'other'),entry('assistant','original',{id:'private',internal:'summary'}));

@@ -5,7 +5,7 @@ const statuses={queued:'Em fila',starting:'A preparar',running:'A responder',sto
 const effortLabels={none:'Sem raciocínio',minimal:'Mínimo',low:'Leve',medium:'Médio',high:'Alto',xhigh:'Muito alto',max:'Máximo',ultra:'Ultra'};
 const active=j=>['queued','starting','running','stopping'].includes(j.status);
 const reviewModes={comment:'Comentar resposta',plan:'Criticar plano',implementation:'Rever implementação'};
-const cycleStates={'waiting-main':'Aguarda a resposta final',preparing:'A preparar revisão',reviewing:'Revisor a verificar',delivering:'A enviar ao principal',assessing:'Principal a avaliar',completed:'Revisão concluída',skipped:'Revisão dispensada',failed:'Revisão falhou',suspended:'Revisão suspensa',cancelled:'Revisão parada','needs-decision':'Decisão de envio pendente'};
+const cycleStates={'waiting-main':'Resposta inicial em curso',preparing:'Resposta inicial pronta · a consultar revisores',reviewing:'Revisores a analisar',delivering:'Pareceres prontos · a enviar ao principal',assessing:'Principal a preparar resposta final',completed:'Revisão concluída',skipped:'Revisão dispensada',failed:'Revisão falhou',suspended:'Revisão suspensa',cancelled:'Revisão parada','needs-decision':'Decisão de envio pendente'};
 const shortNames={codex:'Codex',claude:'Claude',antigravity:'Antigravity',opencode:'OpenCode',cursor:'Cursor'};
 const glyphPaths={
  opinion:['M3.5 6A2.5 2.5 0 0 1 6 3.5h7A2.5 2.5 0 0 1 15.5 6v4a2.5 2.5 0 0 1-2.5 2.5H8.5L5 15.5v-3.1A2.5 2.5 0 0 1 3.5 10z','M18.5 8.5h.5a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2v3l-3.5-3H12a2 2 0 0 1-2-2v-.5'],
@@ -32,20 +32,15 @@ export function opinionResultAnchors(timeline){
 export function opinionTranscriptGroups(timeline, state = {}) {
  state ||= {};
  const groups = new Map(), batches = state.batches || [], cycles = state.automatic?.cycles || [], merges = state.merges || [];
- const eligible = cycle => {
-  if(!cycle || automaticReturnMode(cycle.config)==='manual')return false;
-  const returned=timeline.some(({owner,message})=>owner.id===cycle.conversationId&&message.requestId===cycle.returnRequestId&&message.role==='assistant'&&!message.internal);
-  if(['failed','cancelled','skipped','suspended','needs-decision'].includes(cycle.status)&&!returned)return false;
-  return automaticReturnMode(cycle.config)!=='necessary'||returned||merges.some(m=>m.requestId===cycle.returnRequestId);
- };
+ const eligible = cycle => cycle && automaticReturnMode(cycle.config)!=='manual' && cycle.status!=='skipped';
  const sameTurn = (a,b) => a.requestId && b.requestId ? a.requestId === b.requestId : Boolean(a.turnId && a.turnId === b.turnId);
  const add = (ownerId, source, batch, cycle) => {
   const at = timeline.findIndex(({owner,message},i) => owner.id === ownerId && message.role === 'assistant' && !message.internal && (source ? opinionMessageKey(message,owner.messages?.indexOf(message) ?? i) === source : message.requestId === cycle.requestId));
-  if (at < 0) return;
-  const original = timeline.map(({owner,message},i) => owner.id === ownerId && message.role === 'assistant' && !message.internal && (i === at || sameTurn(message,timeline[at].message)) ? i : -1).filter(i=>i>=0);
-  if (original.some(i=>timeline[i].message.streaming)) return;
-  const id = JSON.stringify([ownerId,timeline[at].message.requestId || timeline[at].message.turnId || source || at]);
-  if (!groups.has(id)) groups.set(id,{id,ownerId,original,batchIds:[],cycleIds:[],deliveries:[],finals:[],questions:[]});
+  const anchor = at >= 0 ? at : cycle?.status==='waiting-main' ? timeline.findIndex(({owner,message})=>owner.id===ownerId&&message.role==='user'&&!message.internal&&message.requestId===cycle.requestId) : -1;
+  if (anchor < 0) return;
+  const original = at<0?[]:timeline.map(({owner,message},i) => owner.id === ownerId && message.role === 'assistant' && !message.internal && (i === at || sameTurn(message,timeline[at].message)) ? i : -1).filter(i=>i>=0);
+  const id = JSON.stringify([ownerId,timeline[anchor].message.requestId || timeline[anchor].message.turnId || source || anchor]);
+  if (!groups.has(id)) groups.set(id,{id,ownerId,anchor,original,batchIds:[],cycleIds:[],deliveries:[],finals:[],questions:[]});
   const group=groups.get(id);
   if(batch&&!group.batchIds.includes(batch.id))group.batchIds.push(batch.id);
   if(cycle&&!group.cycleIds.includes(cycle.id))group.cycleIds.push(cycle.id);
@@ -56,12 +51,20 @@ export function opinionTranscriptGroups(timeline, state = {}) {
   const ownBatches=batches.filter(b=>group.batchIds.includes(b.id)), ownCycles=cycles.filter(c=>group.cycleIds.includes(c.id));
   const jobIds=new Set(ownBatches.flatMap(b=>b.jobs.map(j=>j.id)));
   const returns=new Set([...ownCycles.map(c=>c.returnRequestId),...merges.filter(m=>m.conversationId===group.ownerId&&m.jobIds?.some(id=>jobIds.has(id))).map(m=>m.requestId)].filter(Boolean));
-  timeline.forEach(({owner,message},i)=>{if(owner.id!==group.ownerId||message.internal)return;if(message.role==='user'&&group.original.some(at=>sameTurn(message,timeline[at].message)))group.questions.push(i);if(returns.has(message.requestId)){if(message.role==='user')group.deliveries.push(i);else if(message.role==='assistant')group.finals.push(i);}});
+  timeline.forEach(({owner,message},i)=>{if(owner.id!==group.ownerId||message.internal)return;if(message.role==='user'&&sameTurn(message,timeline[group.anchor].message))group.questions.push(i);if(returns.has(message.requestId)){if(message.role==='user')group.deliveries.push(i);else if(message.role==='assistant')group.finals.push(i);}});
  }
- return [...groups.values()].sort((a,b)=>a.original[0]-b.original[0]);
+ return [...groups.values()].sort((a,b)=>a.anchor-b.anchor);
 }
 export const automaticParticipants = config => config?.participants || (config?.participant ? [config.participant] : []);
 export const automaticReturnMode = config => config?.returnMode ?? (config?.returnToPrincipal === false ? 'manual' : 'always');
+export function reviewProgress(cycle, jobs = []) {
+ const done=jobs.filter(j=>j.status==='completed'&&j.text?.trim()).length;
+ const failed=jobs.filter(j=>['failed','uncertain','interrupted'].includes(j.status)).length;
+ const pending=jobs.filter(j=>j.approvals?.length).length;
+ const count=jobs.length?`${done}/${jobs.length} pareceres prontos${failed?` · ${failed} sem parecer`:''}`:'';
+ const phase=cycle?.status==='waiting-main'?'Resposta inicial a ser escrita':cycle?.status==='preparing'?'Resposta inicial pronta · a consultar revisores':cycle?.status==='reviewing'?(pending?'Aguarda a tua decisão':'Revisores a analisar'):cycleStates[cycle?.status]||'Consulta concluída';
+ return [phase,count].filter(Boolean).join(' · ');
+}
 export function opinionContextLabel(job, delivery) {
  if (delivery.state !== 'separate') return delivery.label;
  const recommendation = job.recommendation;
@@ -90,7 +93,7 @@ export class OpinionUI{
   this.quickObserver=new ResizeObserver(()=>this.positionQuick());this.quickObserver.observe(this.quick);
  }
  button(text,fn,cls='secondary-button'){const b=node('button',cls,text);b.type='button';b.addEventListener('click',fn);return b;}
- fold(id,cls,label,open=false){const details=node('details',cls),summary=node('summary','',label);details.dataset.foldId=id;details.open=this.folds.get(id)??open;details.append(summary);details.addEventListener('toggle',()=>{if(details.isConnected)this.folds.set(id,details.open);});return details;}
+ fold(id,cls,label,open=false){const details=node('details',cls),summary=node('summary','',label);details.dataset.foldId=id;details.open=this.folds.get(id)??open;let previous=details.open;details.append(summary);details.addEventListener('toggle',()=>{if(details.open===previous)return;previous=details.open;if(details.isConnected)this.folds.set(id,details.open);});return details;}
  openAncestors(element){for(let parent=element;parent;parent=parent.parentElement)if(parent.tagName==='DETAILS'){parent.open=true;if(parent.dataset.foldId)this.folds.set(parent.dataset.foldId,true);}}
  foldMessage(article,owner,message){
   const header=article.querySelector(':scope > .message-header');if(!header)return;
@@ -106,12 +109,16 @@ export class OpinionUI{
   for(const details of this.reviewGroups)if(!details.isConnected)this.reviewGroups.delete(details);
   const state=this.viewState(),groups=opinionTranscriptGroups(timeline,state),articles=new Map([...view.querySelectorAll(':scope > [data-timeline-index]')].map(e=>[Number(e.dataset.timelineIndex),e]));
   for(const group of groups){
-   const first=articles.get(group.original[0]);if(!first)continue;
-   const details=this.fold('process:'+group.id,'review-process','Resposta inicial e revisão'),body=node('div','review-process-body');details.dataset.reviewGroup=group.id;details.reviewGroup=group;details.append(body);first.before(details);
-   const original=this.fold('original:'+group.id,'review-original','Resposta inicial · '+names[timeline[group.original[0]].owner.provider]);body.append(original);
-   for(const at of group.original){const article=articles.get(at);if(article)original.append(article);}
+   const first=articles.get(group.anchor);if(!first)continue;
+   const cycle=(state?.automatic?.cycles||[]).find(c=>group.cycleIds.includes(c.id));
+   const writing=cycle?.status==='waiting-main';
+   const details=this.fold('process:'+group.id,'review-process','Resposta inicial e revisão',!group.finals.length),body=node('div','review-process-body');details.dataset.reviewGroup=group.id;details.reviewGroup=group;details.append(body);group.original.length?first.before(details):first.after(details);
+   const original=this.fold('original:'+group.id,'review-original',`Resposta inicial · ${names[timeline[group.anchor].owner.provider]} · ${writing?'a responder':'pronta para consultar'}`,writing);body.append(original);
+   for(const at of group.original){const article=articles.get(at);if(article){const message=timeline[at].message;article.prepend(node('p','review-message-phase',message.phase==='final_answer'||!writing&&at===group.original.at(-1)?'Resposta inicial':'Progresso da resposta inicial'));original.append(article);}}
+   const source=timeline[group.anchor],turn=source.owner.turns?.find(t=>t.requestId===source.message.requestId||t.id===source.message.turnId),items=source.owner.items?.filter(i=>i.turnId===turn?.id).slice(-8)||[];
+   if(items.length){const activity=this.fold('initial-activity:'+group.id,'review-activity','Raciocínio e atividade comunicados pelo cliente',writing);for(const item of items){activity.append(node('p','opinion-caption',`${item.type==='reasoning'?'A analisar o pedido':item.command||item.title||item.tool||item.type} · ${item.status||''}`));if(item.type==='reasoning'&&item.summary?.length)activity.append(node('p','opinion-caption',Array.isArray(item.summary)?item.summary.join('\n'):String(item.summary)));}original.append(activity);}
    const sourceIndices=new Set([...group.original,...group.questions]);
-   for(const slot of this.slots)if(slot.isConnected&&sourceIndices.has(Number(slot.dataset.sourceIndex))){body.append(slot);for(const batch of slot.querySelectorAll('.opinion-batch'))if(!this.folds.has(batch.dataset.foldId))batch.open=true;}
+   for(const slot of this.slots)if(slot.isConnected&&sourceIndices.has(Number(slot.dataset.sourceIndex)))body.append(slot);
    for(const at of group.deliveries){const article=articles.get(at);if(article)body.append(article);}
    const sentIds=new Set((state?.merges||[]).filter(m=>group.deliveries.some(i=>timeline[i].message.requestId===m.requestId)).flatMap(m=>m.jobIds||[]));
    const reviewers=(state?.batches||[]).filter(b=>group.batchIds.includes(b.id)).flatMap(b=>b.jobs).filter(j=>sentIds.has(j.id));
@@ -122,7 +129,7 @@ export class OpinionUI{
    if(body.querySelector('.opinion-approval'))this.openAncestors(body.querySelector('.opinion-approval'));
   }
  }
- updateGroup(details){const state=this.viewState(),group=details.reviewGroup,cycles=(state?.automatic?.cycles||[]).filter(c=>group.cycleIds.includes(c.id)),jobs=(state?.batches||[]).filter(b=>group.batchIds.includes(b.id)).flatMap(b=>b.jobs);const pending=jobs.filter(j=>j.approvals?.length).length,working=jobs.filter(active).length;const label=pending?pending+(pending===1?' decisão pendente':' decisões pendentes'):cycles.length?(cycleStates[cycles.at(-1).status]||cycles.at(-1).status):working?working+' em curso':'Consulta concluída';const summary=details.firstElementChild;summary.replaceChildren(node('span','review-process-title','Resposta inicial e revisão'),node('span','review-process-state',(jobs.length?jobs.length+' parecer'+(jobs.length===1?'':'es')+' · ':'')+label));details.dataset.waiting=String(pending>0);}
+ updateGroup(details){const state=this.viewState(),group=details.reviewGroup,cycles=(state?.automatic?.cycles||[]).filter(c=>group.cycleIds.includes(c.id)),jobs=(state?.batches||[]).filter(b=>group.batchIds.includes(b.id)).flatMap(b=>b.jobs),cycle=cycles.at(-1);const pending=jobs.some(j=>j.approvals?.length);const summary=details.firstElementChild;summary.replaceChildren(node('span','review-process-title','Resposta inicial e revisão'),node('span','review-process-state',reviewProgress(cycle,jobs)));details.dataset.waiting=String(pending);details.dataset.failed=String(cycle?.status==='failed'||jobs.some(j=>['failed','uncertain'].includes(j.status)));}
  field(parent,label,tag='select'){const wrap=node('label','opinion-field',label),e=node(tag);e.id='opinion-control-'+(++this.sequence);wrap.htmlFor=e.id;e.setAttribute('aria-label',label);wrap.append(e);parent.append(wrap);return e;}
  options(select,values,value){select.replaceChildren(...values.map(v=>{const o=node('option','',v.label||v.value);o.value=v.value;o.disabled=Boolean(v.disabled);return o;}));select.value=values.some(v=>v.value===value&&!v.disabled)?value:values.find(v=>!v.disabled)?.value||'';}
  header(title){this.dialog.classList.remove('automatic-review-dialog');this.dialog.replaceChildren();const h=node('div','opinion-dialog-heading');h.append(node('h2','',title),this.button('Fechar',()=>this.dialog.close()));this.dialog.append(h);}
@@ -213,9 +220,9 @@ export class OpinionUI{
   if(changed&&view)view.scrollTop=nearBottom?view.scrollHeight:top;this.positionQuick();
  }
  renderSlot(slot){const state=this.viewState(),batches=state?.batches.filter(b=>b.conversationId===slot.dataset.conversationId&&b.sourceKey===slot.dataset.messageKey)||[],cycles=slot.dataset.role==='user'?(state?.automatic?.cycles||[]).filter(r=>r.conversationId===slot.dataset.conversationId&&r.requestId===slot.dataset.requestId):[];const signature=JSON.stringify([batches,cycles,state?.merges,state?.automatic?.cycles,state?.error,batches.map(batch=>this.deliveryFilters.get(batch.id))]);if(slot.signature===signature)return;slot.signature=signature;const focused=slot.contains(document.activeElement)?document.activeElement:null,approvalNodes=new Map([...slot.querySelectorAll('.opinion-approval')].map(e=>[e.dataset.approvalId,e]));slot.opinionList.replaceChildren();slot.hidden=!batches.length&&!cycles.length;
-  for(const cycle of cycles){const note=node('div','automatic-review-note');note.append(node('strong','','Revisão automática · '+(cycleStates[cycle.status]||cycle.status)));if(cycle.reason||cycle.error)note.append(node('p',cycle.error?'opinion-error':'opinion-caption',cycle.error||cycle.reason));if(['waiting-main','preparing','reviewing','delivering','assessing'].includes(cycle.status))note.append(this.button('Parar revisão automática',async()=>{try{await this.api('/api/automatic-reviews/'+cycle.id+'/cancel',{});await this.refreshState();}catch(e){this.toast(e.message);}}));slot.opinionList.append(note);}
+  for(const cycle of cycles){const note=node('div','automatic-review-note');note.setAttribute('role','status');note.append(node('strong','','Revisão automática · '+(cycleStates[cycle.status]||cycle.status)));if(cycle.reason||cycle.error)note.append(node('p',cycle.error?'opinion-error':'opinion-caption',cycle.error||cycle.reason));if(['waiting-main','preparing','reviewing','delivering','assessing'].includes(cycle.status))note.append(this.button('Parar revisão automática',async()=>{try{await this.api('/api/automatic-reviews/'+cycle.id+'/cancel',{});await this.refreshState();}catch(e){this.toast(e.message);}}));slot.opinionList.append(note);}
   if(state?.error&&batches.length)slot.opinionList.append(node('p','opinion-error',state.error));
-  for(const batch of batches){const panel=this.fold('batch:'+batch.id,'opinion-batch',(batch.kind==='alternative'?'Outras respostas':'Pareceres')+' · '+batch.jobs.length+' modelo'+(batch.jobs.length===1?'':'s')+(batch.jobs.some(j=>j.approvals?.length)?' · Decisão pendente':batch.jobs.some(active)?' · Em curso':''),false);panel.dataset.batchId=batch.id;
+  for(const batch of batches){const panel=this.fold('batch:'+batch.id,'opinion-batch',(batch.kind==='alternative'?'Outras respostas':'Pareceres')+' · '+batch.jobs.filter(j=>j.status==='completed').length+'/'+batch.jobs.length+' prontos'+(batch.jobs.some(j=>j.approvals?.length)?' · Decisão pendente':batch.jobs.some(active)?' · Em curso':batch.jobs.some(j=>j.status!=='completed')?' · Com falhas':''),Boolean(batch.automaticCycleId));panel.dataset.batchId=batch.id;
    panel.append(node('p','opinion-caption',batch.automaticCycleId?'Revisão automática · '+(reviewModes[batch.reviewMode]||'Comentar resposta'):(batch.kind==='alternative'?'Resposta independente':reviewModes[batch.reviewMode]||'Comentar resposta')+' · não entra automaticamente no contexto da conversa.'));
    const filter=node('div','opinion-delivery-filter');filter.setAttribute('role','group');filter.setAttribute('aria-label','Filtrar pareceres por entrega');
    const pendingOnly=this.deliveryFilters.get(batch.id)===true;
@@ -224,13 +231,15 @@ export class OpinionUI{
    if(batch.comment)panel.append(node('p','opinion-focus','Foco: '+batch.comment));for(const warning of batch.warnings||[])panel.append(node('p','opinion-caption',warning));
    for(const job of batch.jobs){const delivery=opinionDelivery(job.id,state?.merges);if(pendingOnly&&delivery.state==='submitted')continue;const card=this.fold('job:'+job.id,'message assistant opinion-card','');const jobSummary=card.firstElementChild;card.dataset.provider=job.provider;card.dataset.jobId=job.id;card.dataset.delivery=delivery.state;
     const contextNote=node('p','opinion-context-status',opinionContextLabel(job,delivery)+(automaticPending&&delivery.state==='separate'&&automaticReturnMode(cycle.config)!=='manual'?' · ciclo automático em curso':''));contextNote.dataset.delivery=delivery.state;jobSummary.append(node('strong','',names[job.provider]),node('span','opinion-summary-model',this.getState().providers[job.provider]?.models.find(m=>m.id===job.model)?.name||job.model),node('span','opinion-summary-state',job.approvals?.length?'Decisão pendente':statuses[job.status]||job.status));const contextBadge=node('span','opinion-summary-context',delivery.state==='submitted'?'Enviado':delivery.state==='uncertain'?'Entrega incerta':delivery.state==='sending'?'A enviar':job.recommendation?.status==='decided'&&!job.recommendation.sendToPrincipal?'Não recomenda enviar':'Separado');contextBadge.dataset.delivery=delivery.state;contextBadge.title=contextNote.textContent;jobSummary.append(contextBadge);card.append(contextNote);
+    if(job.error)jobSummary.append(node('span','opinion-summary-error',job.error));
     card.append(node('p','opinion-access',job.allowWrite?'Escrita explicitamente ativada · autorizações nativas':'Planear / só leitura · não edita ficheiros'));
     if(job.recommendation)card.append(node('p','opinion-recommendation',(job.recommendation.status==='pending'?'Decisão pendente: ':job.recommendation.sendToPrincipal?'Recomenda enviar: ':'Não recomenda enviar: ')+job.recommendation.reason));
 
     const header=node('header','message-header'),avatar=node('span','avatar',({codex:'C',claude:'C',antigravity:'A',cursor:'G',opencode:'O'})[job.provider]),model=this.getState().providers[job.provider]?.models.find(m=>m.id===job.model),time=node('time','',new Date(job.startedAt||job.createdAt).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}));avatar.setAttribute('aria-hidden','true');time.dateTime=job.startedAt||job.createdAt;
     header.append(avatar,node('strong','',names[job.provider]),node('span','message-model',(model?.name||job.model)+' · '+(effortLabels[job.effort]||job.effort)),node('span','opinion-role',batch.kind==='alternative'?'Outra resposta':'Parecer'),time);card.append(header);
     const status=node('p','opinion-state',job.approvals?.length?'Aguarda a tua decisão':statuses[job.status]||job.status);if(active(job))status.setAttribute('role','status');card.append(status);
-    if(job.text)card.append(this.markdown(job.text));if(job.error)card.append(node('p','opinion-error',job.error));
+    if(job.activity?.length){const activity=this.fold('activity:'+job.id,'review-activity','Raciocínio e atividade comunicados pelo cliente',true);for(const item of job.activity)activity.append(node('p','opinion-caption',`${item.label} · ${item.status}`));card.append(activity);}
+    if(job.text)card.append(this.markdown(job.text));else if(active(job))card.append(node('p','opinion-caption','A aguardar texto do revisor…'));if(job.error)card.append(node('p','opinion-error',job.error));
     for(const request of job.approvals||[]){const previous=approvalNodes.get(String(request.id)),approval=previous?.approvalSignature===JSON.stringify(request)?previous:this.approval(job,request);card.append(approval);if(!this.seenApprovals.has(request.id)){this.seenApprovals.add(request.id);this.openAncestors(card);slot.pendingReveal=approval;}}
     if(job.usage){const u=job.usage;card.append(node('p','opinion-caption',`Entrada: ${u.inputTokens??u.input_tokens??'não medida'} · Saída: ${u.outputTokens??u.output_tokens??'não medida'}${job.provider==='opencode'?' · Custo: '+(Number.isFinite(job.costUSD)?job.costUSD+' USD':'não medido'):''}`));}
     const controls=node('div','opinion-card-actions');

@@ -100,6 +100,30 @@ test('falha de um revisor não aprova nem elimina o parecer concluído do outro'
  const{hub,c,main}=await setup(t,{review:{claude:'pre-fail'}});const participants=['claude','cursor'].map(provider=>({provider,model:'test',effort:'low'}));
  await send(hub,c,'one-failed',config({participants}));await wait(()=>hub.automaticReviews.cycles[0]?.status==='failed');assert.equal(main.logs.length,1);assert.equal(hub.opinions.merges.length,0);assert.equal(hub.opinions.batches[0].jobs.find(j=>j.provider==='cursor').text,'PARECER-cursor');
 });
+test('resposta vazia e aviso de pagamento terminam com erros visíveis sem bloquear a conversa',async t=>{
+ const{hub,c,main,workers}=await setup(t,{review:'hold'});
+ const participants=['antigravity','cursor'].map(provider=>({provider,model:'test',effort:'low'}));
+ await send(hub,c,'empty-and-billing',config({participants}));await wait(()=>workers.length===2&&workers.every(w=>w.logs.length));
+ for(const worker of workers)worker.finish(worker.conversations[0],worker.provider==='cursor'?'\n\nAdd a payment method to continue':'');
+ await wait(()=>hub.automaticReviews.cycles[0]?.status==='failed');
+ const cycle=hub.automaticReviews.cycles[0],jobs=hub.opinions.batches[0].jobs;
+ assert.deepEqual(jobs.map(j=>j.status),['failed','failed']);assert.match(jobs[0].error,/sem uma resposta/);assert.match(jobs[1].error,/pagamento/);
+ assert.match(cycle.error,/antigravity.*sem uma resposta.*cursor.*pagamento/);
+ assert.equal(hub.automaticReviews.holds(c.id),false);assert.equal(hub.opinions.scopes().length,0);assert.equal(main.logs.length,1);assert.equal(hub.opinions.merges.length,0);
+ await assert.rejects(hub.opinions.incorporate(c.id,{jobIds:[jobs[1].id],requestId:'not-a-review'}),/concluídos/);
+ await hub.send(c.id,'Continuar sem revisão','after-failure',{autoReview:null});await wait(()=>c.status==='completed');assert.equal(main.logs.length,2);
+});
+test('falha de quota mantém o outro parecer utilizável por escolha explícita',async t=>{
+ const{hub,c,main,workers}=await setup(t,{review:'hold'});
+ const participants=['antigravity','cursor'].map(provider=>({provider,model:'test',effort:'low'}));
+ await send(hub,c,'partial-review',config({participants}));await wait(()=>workers.length===2&&workers.every(w=>w.logs.length));
+ for(const worker of workers)worker.finish(worker.conversations[0],worker.provider==='cursor'?'Add a payment method to continue':'PARECER-VALIDO');
+ await wait(()=>hub.automaticReviews.cycles[0]?.status==='failed');
+ const batch=hub.opinions.batches[0],valid=batch.jobs.find(j=>j.provider==='antigravity');
+ assert.equal(valid.status,'completed');assert.equal(main.logs.length,1);
+ await hub.opinions.incorporate(c.id,{jobIds:[valid.id],requestId:'explicit-valid-review',settings:{autoReview:null}});
+ await wait(()=>c.status==='completed');assert.equal(main.logs.length,2);assert.match(main.logs[1].text,/PARECER-VALIDO/);assert.doesNotMatch(main.logs[1].text,/Add a payment/);
+});
 test('validação migra o revisor único e recusa duplicados, equipa excessiva e escrita ambígua',async t=>{
  const{hub,c,main}=await setup(t);const old=hub.automaticReviews.validate(config());assert.equal(old.participants.length,1);assert.equal(old.participants[0].allowWrite,false);
  let index=0;for(const participants of [[],[...Array(5)].map(()=>config().participant),[config().participant,config().participant],[{...config().participant,allowWrite:'true'}]]) await assert.rejects(send(hub,c,'invalid-team-'+index++,config({participants})),/revisor|revisores|repetido/);

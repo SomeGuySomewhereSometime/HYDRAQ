@@ -24,23 +24,26 @@ export class ClaudeSessionsUI {
       query('[data-claude-command]').hidden = false;
       if (result.warning) { query('[data-claude-command]').open = true; this.toast(result.warning); }
     });
-    const release = (confirm = []) => this.run(async () => {
+    const release = (id, confirm = [], context = this.context()) => this.run(async () => {
+      if (context !== this.context()) return;
       try {
-        const result = await this.api(`/api/conversations/${this.session().id}/claude-release`, {confirm});
+        const result = await this.api(`/api/conversations/${id}/claude-release`, {confirm});
         query('[data-claude-command]').hidden = true;
         this.toast([result.imported ? `${result.imported} pedido(s) do Claude original adicionados à conversa.` : 'Nenhum pedido novo no Claude original.', result.warning].filter(Boolean).join(' '));
-      } catch (error) { if (!this.decide(error, kind => release([...confirm, kind]))) throw error; }
+      } catch (error) { if (!this.decide(error, kind => release(id, [...confirm, kind], context), context)) throw error; }
     });
-    query('[data-claude-release]').onclick = () => release();
+    query('[data-claude-release]').onclick = () => release(this.session()?.id);
     query('[data-claude-proceed]').onclick = () => { const proceed = this.confirmation?.proceed; this.confirmation = null; this.render(); proceed?.(); };
     query('[data-claude-cancel]').onclick = () => { this.confirmation = null; this.render(); };
     query('[data-claude-list]').onclick = () => this.list(false);
     query('[data-claude-more]').onclick = () => this.list(true);
   }
   /** HYDRAQ refuses to guess; the person decides, with the server's explanation, whether to continue. */
-  decide(error, proceed) {
+  context() { return JSON.stringify([this.current()?.id, this.project()?.id, this.project()?.root]); }
+  decide(error, proceed, context = this.context()) {
     if (error.code !== 'CLAUDE_CONFIRM' || !error.confirm) return false;
-    this.confirmation = {message: error.message, kind: error.confirm, proceed: () => proceed(error.confirm)};
+    if (context !== this.context()) return true;
+    this.confirmation = {context, message: error.message, kind: error.confirm, proceed: () => { if (context === this.context()) proceed(error.confirm); }};
     return true;
   }
   session() {
@@ -69,15 +72,17 @@ export class ClaudeSessionsUI {
         const when = new Date(session.updatedAt).toLocaleString('pt-PT', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
         button.textContent = `${session.imported ? 'Abrir · ' : ''}${session.source} · ${session.title} · ${when}`;
         button.title = session.id;
+        const context = this.context(), selectedProject = this.project();
         const associate = (confirm = []) => this.run(async () => {
+          if (context !== this.context() || cwd !== this.query('[data-claude-cwd]').value.trim()) return;
           if (session.conversationId) { this.choose(session.conversationId); return; }
-          const project = this.project();
+          const project = selectedProject;
           if (project && cwd !== project.root) throw Error('Usa a pasta deste projeto ou escolhe outro projeto antes de associar.');
           try {
             const result = await this.api('/api/claude/import', {sessionId: session.id, cwd, projectId: project?.id, revision: this.state().projectCatalog?.revision, confirm});
             if (result.warning) this.toast(result.warning);
             await this.refresh(); this.choose(result.conversationId);
-          } catch (error) { if (!this.decide(error, kind => associate([...confirm, kind]))) throw error; }
+          } catch (error) { if (!this.decide(error, kind => associate([...confirm, kind]), context)) throw error; }
         });
         button.onclick = () => associate();
         results.append(button);
@@ -88,6 +93,7 @@ export class ClaudeSessionsUI {
   }
   render() {
     const state = this.state(), c = this.current(), session = this.session();
+    if (this.confirmation?.context !== this.context()) this.confirmation = null;
     this.host.classList.toggle('hidden', !state?.claudeTerminal?.available || Boolean(c && c.provider !== 'claude' && !session));
     const target = session || c;
     const busy = ['starting','running','waiting','uncertain'].includes(target?.status);
