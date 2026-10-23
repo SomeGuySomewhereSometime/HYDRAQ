@@ -1,7 +1,15 @@
 import { createInterface } from 'node:readline';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync } from 'node:fs';
-const send = value => process.stdout.write(JSON.stringify(value)+'\n');
+const threads = new Map();
+const send = value => {
+  const p = value.params, thread = threads.get(p?.threadId);
+  if (thread && value.method === 'turn/started') thread.turns.push({...p.turn,items:[]});
+  const turn = thread?.turns.find(t=>t.id === (p?.turnId || p?.turn?.id));
+  if (turn && value.method === 'item/completed') { const old=turn.items.findIndex(i=>i.id===p.item.id); if(old<0)turn.items.push(p.item);else turn.items[old]=p.item; }
+  if (turn && value.method === 'turn/completed') Object.assign(turn,p.turn);
+  process.stdout.write(JSON.stringify(value)+'\n');
+};
 let sequence = 0;
 let active;
 let approval;
@@ -45,10 +53,13 @@ createInterface({input:process.stdin}).on('line',line=> {
     {id:'gpt-other',model:'gpt-other',displayName:'Outro modelo',isDefault:false,hidden:false,defaultReasoningEffort:'medium',supportedReasoningEfforts:[{reasoningEffort:'medium'},{reasoningEffort:'high'}]},
     {id:'gpt-unknown',model:'gpt-unknown',displayName:'Sem metadados',isDefault:false,hidden:false,defaultReasoningEffort:'low',supportedReasoningEfforts:[{reasoningEffort:'low'}]},
   ]});
-  if (message.method === 'thread/start') result({thread:{id:`thread-${++sequence}`}});
+  if (message.method === 'thread/start') { const thread={id:`thread-${++sequence}`,cwd:message.params.cwd,modelProvider:'openai',turns:[]};threads.set(thread.id,thread);result({thread}); }
+  if (message.method === 'thread/read') result({thread:threads.get(message.params.threadId)});
+  if (message.method === 'thread/turns/list') result({data:threads.get(message.params.threadId)?.turns||[],nextCursor:null});
+  if (message.method === 'thread/list') result({data:[...threads.values()].filter(t=>!message.params.cwd||t.cwd===message.params.cwd),nextCursor:null});
   if (message.method === 'thread/resume') {
     if (process.env.FAKE_CODEX_WRITER_CONFLICT) send({id:message.id,error:{message:`thread ${message.params.threadId} already has an active writer`}});
-    else result({thread:{id:message.params.threadId}});
+    else result({thread:threads.get(message.params.threadId)||{id:message.params.threadId},model:'gpt-test',reasoningEffort:'low'});
   }
   if (message.method === 'turn/start') {
     if (!['readOnly','workspaceWrite'].includes(message.params.sandboxPolicy?.type)) { send({id:message.id,error:{message:'É necessária uma política explícita por turno'}}); return; }
@@ -57,6 +68,7 @@ createInterface({input:process.stdin}).on('line',line=> {
     if (process.env.FAKE_CODEX_LOG) appendFileSync(process.env.FAKE_CODEX_LOG, JSON.stringify(text)+'\n');
     active = {threadId:message.params.threadId,turnId:`turn-${++sequence}`,messageId:randomUUID()};
     send({method:'turn/started',params:{threadId:active.threadId,turn:{id:active.turnId,status:'inProgress'}}});
+    send({method:'item/completed',params:{...active,item:{id:randomUUID(),type:'userMessage',content:message.params.input}}});
     result({turn:{id:active.turnId,status:'inProgress'}});
     if (text === 'hold') return;
     if (text === 'many-tools') {

@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 54
+Versão atual: 55
 
 ## Resumo atual
+
+- Integração Codex original em curso (entrada 55, branch de trabalho): adaptador local, contexto comum e turnos externos; ainda não integrada nem ativa. Ver docs/native-terminal-checkpoint.md para provas, limites e próximos passos.
 
 - Revisão compacta (entrada 54): retorno automático reúne resposta inicial, pareceres e contexto interno num bloco fechado por omissão; resposta final fora, com expansão independente. Envio manual conserva o original visível e os pareceres separados. Síntese completa ao pedido original, com atribuição breve quando útil e fichas dos pareceres recebidos. 324 testes, 69 verificações específicas finais e browser Grafite/Atelier/móvel aprovados; Haiku real produziu plano completo após parecer simulado, sem escrita. 4318 ativada livre, mesmos 29 históricos e cinco clientes ligados. Provas em `.hydraq/review-folding-2026-10-23/VALIDACAO.md`.
 
@@ -537,3 +539,9 @@ Versão atual: 54
 - Síntese: o pedido ao principal exige resposta autónoma ao objetivo original, integrando o que continua válido e as melhorias aceites, sem se limitar às críticas. Respeita formato/concisão/foco e permissões originais; permite atribuição breve e útil ao cliente/modelo, sem alegar verificação de testes citados. Pergunta original incluída no material citado; nenhuma inferência adicional nem nova ronda de revisão.
 - Verificado: suite 324/324 e 69 testes específicos finais, sintaxe e git diff --check. Browser com clientes simulados: bloco fechado de 40 px, envio manual sem esconder original, expansão independente/teclado, navegação conservando estado, autorizações visíveis/recusáveis, contexto interno sem ação de opinião, Grafite/Atelier 1280×720 e móvel 390×844 sem overflow/erros de consola observados. Ensaio real de síntese com Claude Haiku principal e parecer Antigravity simulado: dois turnos plan concluídos, plano final completo em quatro passos e ficheiros inalterados. Não prova revisão real por Antigravity neste pedido; limite de palavras do ensaio não foi seguido rigorosamente pelo modelo.
 - Ativação livre da 4318: PID 833531, mesmos 29 históricos/IDs, dois perfis e três ciclos existentes preservados, cinco clientes ligados e arquivo sem erro. Hashes de app.js/opinions.js/style.css confirmados por HTTP. Respostas antigas não são regeneradas; nova instrução aplica-se às próximas avaliações. README e provas em `.hydraq/review-folding-2026-10-23/VALIDACAO.md`.
+
+### 55 — 2026-10-23 — Codex (trabalho em curso, branch separada)
+
+- Implementação parcial da alternância HYDRAQ/terminal Codex original: socket Unix privado, pedidos pelo envio comum, controlo por grupo, histórico nativo e associação explícita de sessões. Desktop continua indisponível.
+- 87 testes específicos aprovados antes das últimas correções; alterações finais ainda por validar. Ensaio real Codex/ChatGPT concluiu três turnos, incluindo chamada MCP de memória; aviso de reconexão/apresentação final imediata do TUI ainda por investigar. Sem ativação na 4318.
+- Guardado a pedido do utilizador para continuar com Astra. Estado e provas em docs/native-terminal-checkpoint.md.

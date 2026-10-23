@@ -4,10 +4,15 @@
   "private": true,
   "type": "module",
   "description": "Interface local para os clientes originais Codex, Antigravity, Claude Code, Cursor e OpenCode gratuito.",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node server.mjs",
     "dev": "node --watch server.mjs",
     "test": "node --test test/*.test.mjs"
+  },
+  "dependencies": {
+    "ws": "8.22.0"
   }
 }

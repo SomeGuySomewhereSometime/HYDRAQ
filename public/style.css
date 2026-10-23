@@ -4040,3 +4040,12 @@ body .opinion-thread .automatic-review-note { margin:0 0 6px; padding:4px 0; bor
 .opinion-summary-context { padding:1px 6px; border:1px solid var(--border-subtle); border-radius:12px; color:var(--text-secondary); font-size:10px; }
 .opinion-summary-context[data-delivery="submitted"] { color:var(--accent); border-color:var(--accent-line); }
 .opinion-summary-context[data-delivery="uncertain"] { color:var(--warning,#e9bd70); }
+
+/* Optional original Codex terminal and explicit native-session association. */
+#native-sessions { min-width: 0; }
+#native-sessions .native-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+#native-sessions input, #native-sessions textarea { box-sizing: border-box; width: 100%; max-width: 100%; }
+#native-sessions textarea { font: 11px/1.5 monospace; resize: vertical; overflow-wrap: anywhere; }
+#native-sessions details { margin-top: 12px; }
+#native-sessions summary { cursor: pointer; }
+#native-sessions .native-import-row { display: block; width: 100%; margin: 6px 0; text-align: left; overflow-wrap: anywhere; }

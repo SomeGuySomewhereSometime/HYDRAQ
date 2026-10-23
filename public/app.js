@@ -1,3 +1,4 @@
+import { NativeSessionsUI } from './native-sessions.js';
 import { workConflict, workReason } from './work-locks.js';
 import { captureDraftIntent, draftMode, followupOptions, followupDescriptions } from './composer.js';
 import { elicitationForm } from './elicitation.js';
@@ -97,6 +98,7 @@ const settingDrafts = new Map();
 const recoveryDrafts = new Map();
 let settingsOwner;
 let settingsBaseline;
+const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{state=await api('/api/state');render();}});
 const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
@@ -1019,7 +1021,7 @@ function renderSend() {
   const hasImages=imageAttachments.list().length>0;
   const openCodeNoImage=providerId()==='opencode'&&!providerState().models?.find(m=>m.id===$('#model').value)?.images;
   imageAttachments.render(busy || sending || openCodeNoImage || providerState().capabilities?.images===false);
-  $('#send').disabled = !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
+  $('#send').disabled = Boolean(nativeUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
   $('#send').textContent = sending ? 'A enviar…' : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
@@ -1030,7 +1032,7 @@ function renderSend() {
   $('#use-as-request').disabled = sending;
   $('#composer').classList.toggle('steering', steering || expired);
   $('#prompt').placeholder = steering ? 'Acrescenta uma orientação para a tarefa em curso…' : 'Descreve o que queres fazer…';
-  $('#composer-hint').textContent = !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
+  $('#composer-hint').textContent = nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ nas configurações.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
 }
 
 function renderUncertainty(conversation) {
@@ -1087,6 +1089,7 @@ function render() {
   if(selectedProject&&!state.projectCatalog?.projects.some(p=>p.id===selectedProject)){selectedProject=null;projectOverview=false;}
   $('.workspace').classList.toggle('hidden',projectOverview);
   projectMemory.render();
+  nativeUI.render();
   opinionUI.renderAutomatic();
   const connection = providerState().connection;
   const account = providerState().account;
@@ -1542,7 +1545,7 @@ function listen() {
   events.onerror = () => {
     events.close();
     $('#connection-state').textContent = '○ Ligação local interrompida';
-    $('#send').disabled = true;
+    $('#send').disabled = Boolean(nativeUI.session()) || true;
     $('#notice').textContent = 'A ligação ao HYDRAQ foi interrompida. A página volta a ligar automaticamente; os pedidos não são reenviados.';
     $('#notice').classList.remove('hidden');
     clearTimeout(recoveryTimer);

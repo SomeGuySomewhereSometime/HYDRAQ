@@ -1,0 +1,17 @@
+import {chromium} from '/home/sauron/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import {readFile,writeFile} from 'node:fs/promises';
+const dir=(await readFile('/tmp/hydraq-native-live-current','utf8')).trim();
+const info=JSON.parse(await readFile(dir+'/info.json','utf8'));
+const browser=await chromium.launch({headless:true,executablePath:'/usr/bin/google-chrome'});
+const page=await browser.newPage();const errors=[];
+page.on('pageerror',e=>errors.push(e.message));
+await page.addInitScript(id=>localStorage.setItem('hydraq.conversation',id),info.conversationId);
+await page.goto('http://127.0.0.1:'+info.port);
+await page.waitForTimeout(1200);
+await page.locator('#settings-details').evaluate(e=>e.open=true);
+await page.locator('#client-status').click();
+await page.locator('#native-sessions').scrollIntoViewIfNeeded();
+console.log(await page.locator('#native-sessions').innerText());
+await page.screenshot({path:dir+'/ui-desktop.png',fullPage:true});
+await writeFile(dir+'/ui-errors.json',JSON.stringify(errors));
+await browser.close();
