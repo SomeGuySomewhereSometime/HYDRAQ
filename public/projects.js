@@ -1,6 +1,6 @@
 const el = (tag, cls, text) => { const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node; };
 const inside = (root,folder) => folder===root || folder.startsWith(root==='/'?'/':root+'/');
-const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',cursor:'Cursor'};
+const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',cursor:'Cursor',opencode:'OpenCode'};
 export function conversationGroups(state) {
   const map=new Map();
   for(const chat of state.conversations)map.set(chat.group,[...(map.get(chat.group)||[]),chat]);

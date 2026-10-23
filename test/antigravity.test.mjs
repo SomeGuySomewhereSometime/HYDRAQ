@@ -10,6 +10,7 @@ import { Hydraq } from '../lib/hydraq.mjs';
 import { CodexClient } from '../lib/codex.mjs';
 import { canSteer, captureDraftIntent } from '../public/composer.js';
 import { createHttpServer } from '../lib/http.mjs';
+import { turnFacts } from '../lib/handoff.mjs';
 
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const waitFor=async predicate=>{const deadline=Date.now()+4000;while(!predicate()){if(Date.now()>deadline)throw new Error('Tempo excedido.');await new Promise(r=>setTimeout(r,10));}};
@@ -24,6 +25,10 @@ async function setup(t) {
   return {client,directory,options,settingsFile,cleanupClients};
 }
 async function chat(client,directory){return client.create({cwd:directory,model:'gemini-4-argon',effort:'low'});}
+
+test('write_file com Path nativo entra nos factos de ficheiros alterados',async t=>{
+ const{client,directory}=await setup(t),c=await chat(client,directory);await client.send(c.id,'write-file-path','native-write');await waitFor(()=>c.status==='completed');assert.deepEqual(turnFacts(c,c.turns.at(-1)).files,['/tmp/sum.mjs']);
+});
 
 test('catálogo limpa ANSI/spinner, agrupa raciocínio dos modelos nativos e rejeita modelos API personalizados',()=> {
   const models=parseAntigravityModels('\r⠋ Fetching available models...\r\x1b[32mgemini-4-argon-high\x1b[0m\tGemini 4 Argon (High)\ngemini-4-argon-low\tGemini 4 Argon (Low)\nclaude-opus-5-5-high\tClaude Opus 5.5 (High)\ngemma-4-26b\tGemma 4 26B\ncustom-paid\tAPI');

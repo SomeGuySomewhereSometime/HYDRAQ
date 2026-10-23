@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+	<title>Starfall</title>
+	<link rel="stylesheet" href="style.css">
+</head>
+<body data-mode="menu">
+	<canvas id="view" aria-hidden="true"></canvas>
+	<section id="menu" class="panel">
+		<p class="kicker">Corredor de destroços</p>
+		<h1>Starfall</h1>
+		<p>A tua nave de reconhecimento ficou presa entre esquadrões inimigos. Destrói-os, recolhe os núcleos e melhora o armamento antes que o Núcleo Estelar feche o corredor.</p>
+		<ul>
+			<li>WASD ou setas para manobrar. No ecrã tátil, usa o comando à esquerda. O disparo é automático.</li>
+			<li>Cada núcleo dá experiência. Ao subir de nível o combate pára e escolhes uma de três melhorias.</li>
+			<li>P ou Escape pausa. Se a janela perder o foco, o jogo também fica suspenso.</li>
+			<li>Objetivo: sobreviver às 6 ondas, com chefes na 3.ª e na 6.ª, e destruir o Núcleo Estelar.</li>
+		</ul>
+		<button id="start" type="button">Iniciar</button>
+	</section>
+	<section id="levelup" class="panel" hidden>
+		<p class="kicker">Progressão</p>
+		<h2>Escolhe uma melhoria</h2>
+		<p id="level-note"></p>
+		<div id="choices"></div>
+	</section>
+	<section id="paused" class="panel" hidden>
+		<h2>Em pausa</h2>
+		<p id="pause-text">Jogo em pausa.</p>
+		<button id="resume" type="button">Continuar</button>
+	</section>
+	<section id="result" class="panel" hidden>
+		<h2 id="result-title"></h2>
+		<p id="result-copy"></p>
+		<button id="again" type="button">Reiniciar</button>
+		<button id="to-menu" type="button" class="ghost">Voltar ao menu</button>
+	</section>
+	<div id="stick" aria-hidden="true"><div id="knob"></div></div>
+	<script src="game.js"></script>
+</body>
+</html>

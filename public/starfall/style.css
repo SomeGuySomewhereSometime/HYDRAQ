@@ -1,0 +1,109 @@
+* { box-sizing: border-box; }
+
+html, body {
+	margin: 0;
+	height: 100%;
+	overflow: hidden;
+	background: #070910;
+	color: #e7eef8;
+	font-family: "Segoe UI", sans-serif;
+}
+
+#view {
+	position: fixed;
+	inset: 0;
+	width: 100%;
+	height: 100%;
+	display: block;
+	touch-action: none;
+}
+
+.panel {
+	position: fixed;
+	left: 50%;
+	top: 50%;
+	transform: translate(-50%, -50%);
+	width: min(440px, calc(100vw - 28px));
+	max-height: calc(100dvh - 28px);
+	overflow: auto;
+	padding: 22px 22px 18px;
+	border: 1px solid rgba(94, 242, 255, 0.45);
+	border-radius: 18px;
+	background: rgba(8, 12, 24, 0.92);
+	box-shadow: 0 0 40px rgba(94, 242, 255, 0.12);
+}
+
+.kicker {
+	margin: 0 0 4px;
+	color: #7d8eaa;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
+	font-size: 12px;
+}
+
+h1, h2 { margin: 0 0 10px; font-weight: 650; }
+h1 { font-size: 40px; color: #f3fbff; }
+h2 { font-size: 28px; }
+
+p, li { color: #c5d2e4; line-height: 1.45; }
+ul { margin: 0 0 16px; padding-left: 18px; }
+
+button {
+	font: inherit;
+	min-height: 44px;
+	margin: 8px 8px 0 0;
+	padding: 10px 16px;
+	border: 0;
+	border-radius: 999px;
+	background: #5ef2ff;
+	color: #062028;
+	cursor: pointer;
+}
+
+button.ghost { background: transparent; color: #d5e7f5; border: 1px solid #5c6d86; }
+
+.choice {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	width: 100%;
+	margin: 8px 0 0;
+	border-radius: 14px;
+	text-align: left;
+	background: #10192c;
+	color: #e7eef8;
+	border: 1px solid rgba(255, 196, 87, 0.45);
+}
+
+.choice strong { color: #ffe56a; }
+.choice span { color: #c5d2e4; font-size: 14px; }
+
+#stick {
+	display: none;
+	position: fixed;
+	left: max(16px, env(safe-area-inset-left));
+	bottom: max(16px, env(safe-area-inset-bottom));
+	width: 116px;
+	height: 116px;
+	border-radius: 50%;
+	border: 1px solid rgba(94, 242, 255, 0.4);
+	background: rgba(8, 16, 32, 0.45);
+	touch-action: none;
+}
+
+#knob {
+	width: 48px;
+	height: 48px;
+	margin: 34px;
+	border-radius: 50%;
+	background: rgba(94, 242, 255, 0.85);
+}
+
+body[data-mode="playing"] #stick,
+body[data-mode="paused"] #stick {
+	display: block;
+}
+
+@media (min-width: 900px) and (pointer: fine) {
+	#stick { display: none; }
+}

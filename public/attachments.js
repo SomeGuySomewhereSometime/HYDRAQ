@@ -8,7 +8,7 @@ export class ImageAttachments {
     this.tray=node('div','attachment-tray hidden');this.tray.setAttribute('aria-label','Imagens a enviar');composer.prepend(this.tray);
     this.input=node('input','sr-only');this.input.type='file';this.input.accept='image/png,image/jpeg,image/webp';this.input.multiple=true;this.input.id='image-input';this.input.setAttribute('aria-label','Selecionar imagens');
     this.button=node('button','attach-image','＋ Imagem');this.button.type='button';this.button.id='attach-image';this.button.title='Anexar imagens · até 4 imagens de 5 MB · também podes colar ou arrastar';
-    composer.querySelector('.composer-footer').prepend(this.button);composer.append(this.input);
+    (composer.querySelector('.composer-controls')||composer.querySelector('.composer-footer')).prepend(this.button);composer.append(this.input);
     this.button.addEventListener('click',()=>this.input.click());
     this.input.addEventListener('change',()=>{this.add([...this.input.files]);this.input.value='';});
     composer.addEventListener('paste',event=>{

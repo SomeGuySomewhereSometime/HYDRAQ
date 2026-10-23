@@ -17,8 +17,8 @@ const model = option('--model'), effort = option('--effort'), mode = option('--p
 const resolved = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' }[model] || model;
 let count = 0;
 try { count = JSON.parse(readFileSync(stateFile, 'utf8')).count; } catch {}
-let pending = null, holding = null;
-const result = (text, extra = {}) => emit({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sessionId, terminal_reason: 'completed', usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 900, output_tokens: 20, output_tokens_details: { thinking_tokens: 5 } }, ...extra });
+let pending = null, holding = null, currentUuid=null, deferredSteer=null;
+const result = (text, extra = {}) => emit({ type: 'result', subtype: 'success', is_error: false, result: text, session_id: sessionId, terminal_reason: 'completed', user_message_uuid:currentUuid,user_message_uuids:currentUuid?[currentUuid]:undefined, usage: { input_tokens: 10, cache_creation_input_tokens: 100, cache_read_input_tokens: 900, output_tokens: 20, output_tokens_details: { thinking_tokens: 5 } }, ...extra });
 const say = (id, text) => {
   emit({ type: 'stream_event', session_id: sessionId, parent_tool_use_id: null, event: { type: 'message_start', message: { id } } });
   emit({ type: 'stream_event', session_id: sessionId, parent_tool_use_id: null, event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: text.slice(0, 4) } } });
@@ -49,11 +49,19 @@ createInterface({ input: process.stdin }).on('line', line => {
     const allowed = input.response.response.behavior === 'allow';
     emit({ type: 'user', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: pending.tool, is_error: !allowed, content: allowed ? 'File created' : 'Permission denied by host' }] } });
     say(`msg-${count}-b`, allowed ? 'Permitido.' : 'Recusado.');
-    result(allowed ? 'Permitido.' : 'Recusado.');
+    if(deferredSteer){const steer=deferredSteer;deferredSteer=null;emit({type:'user',uuid:steer.uuid,session_id:sessionId,message:steer.message});say('deferred-steer',steer.message.content);result(steer.message.content,{user_message_uuids:[currentUuid,steer.uuid]});}else result(allowed ? 'Permitido.' : 'Recusado.');
     pending = null;
     return;
   }
   if (input.type !== 'user') process.exit(5);
+  if(input.priority){
+    if(input.message.content==='steer-disconnect')process.exit(1);
+    if(pending){deferredSteer=input;return;}
+    if(input.priority==='now')result('Ciclo interrompido antes da orientação.',{user_message_uuids:[currentUuid]});
+    const first=currentUuid;holding=null;
+    setTimeout(()=>{emit({type:'user',uuid:input.uuid,session_id:sessionId,message:input.message});say('steered-'+count,input.message.content);result(input.message.content,{user_message_uuid:input.uuid,user_message_uuids:input.priority==='now'?[input.uuid]:[first,input.uuid]});},35);return;
+  }
+  currentUuid=input.uuid;
   if(process.env.FAKE_CLAUDE_IMAGE_LOG)writeFileSync(process.env.FAKE_CLAUDE_IMAGE_LOG,JSON.stringify(input.message.content));
   const text = Array.isArray(input.message.content)?input.message.content.filter(block=>block.type==='text').map(block=>block.text).join('\n'):input.message.content;
   if (text === 'disconnect') process.exit(1);
@@ -61,6 +69,7 @@ createInterface({ input: process.stdin }).on('line', line => {
   writeFileSync(stateFile, JSON.stringify({ count }));
   writeFileSync(`.fake-claude-last-${sessionId}`, text);
   emit({ type: 'system', subtype: 'init', session_id: sessionId, model: resolved, permissionMode: mode });
+  if (text === 'slow') { holding=true;say('slow-'+count,'A trabalhar…');setTimeout(()=>{if(holding){holding=null;say('slow-done-'+count,'Concluído.');result('Concluído.');}},180);return;}
   if (text === 'hold') { holding = true; say(`msg-${count}`, 'A trabalhar…'); return; }
   if (text === 'subagent-tools') {
     const parent=`parent-${count}`;

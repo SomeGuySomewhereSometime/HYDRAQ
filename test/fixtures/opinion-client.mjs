@@ -1,0 +1,16 @@
+import {EventEmitter} from 'node:events';import {mkdir,writeFile} from 'node:fs/promises';import {randomUUID} from 'node:crypto';
+export class OpinionClient extends EventEmitter{
+ constructor(provider,directory,{behavior='success',answer}={}){super();Object.assign(this,{provider,dataDir:directory,defaultCwd:directory,behavior,answer,connection:'connected',approvals:new Map(),conversations:[],models:[{id:'test',name:'Modelo teste',efforts:['low','high'],defaultEffort:'low',free:true}],logs:[]});}
+ async load(){await mkdir(this.dataDir,{recursive:true});}async connect(){}snapshot(){return {connection:this.connection,models:this.models,conversations:this.conversations,approvals:[...this.approvals.values()],defaultCwd:this.defaultCwd,account:{type:'chatgpt'},capabilities:{steer:false}};}
+ changed(){this.emit('state');}async persist(){await writeFile(this.dataDir+'/state.json',JSON.stringify({conversations:this.conversations}));}
+ conversation(id){const c=this.conversations.find(c=>c.id===id);if(!c)throw Error('Conversa não encontrada');return c;}
+ async create(body){const c={id:randomUUID(),...body,threadId:randomUUID(),title:'Teste',provider:this.provider,messages:[],turns:[],items:[],status:'idle',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};this.conversations.push(c);return c;}
+ async send(id,text,requestId,settings={}){const c=this.conversation(id);if(c.messages.some(m=>m.requestId===requestId))return {accepted:true,duplicate:true};if(this.behavior==='pre-fail')throw Error('Falha antes do envio');const t={id:randomUUID(),requestId,status:'running',delivery:'sending',startedAt:new Date().toISOString(),...(settings.internal?{internal:settings.internal}:{})};c.status='running';c.turnId=t.id;c.turns.push(t);c.messages.push({id:randomUUID(),requestId,turnId:t.id,role:'user',text:settings.displayText||text,at:new Date().toISOString()});this.logs.push({text,settings,id,requestId});this.changed();
+ if(this.behavior==='permission'){const approval={id:randomUUID(),method:'claude/canUseTool',conversationId:id,params:{toolName:'Read',input:{file_path:'test.txt'}}};this.approvals.set(approval.id,approval);c.status=t.status='waiting';this.changed();}
+ else if(this.behavior==='lost'){c.status=t.status='uncertain';c.error='Ligação perdida';this.changed();}
+ else if(this.behavior!=='hold')this.timer=setTimeout(()=>this.finish(c,this.answer||'PARECER-'+this.provider),35);return {accepted:true};}
+ finish(c,text){const t=c.turns.at(-1);if(!['running','waiting'].includes(t.status))return;c.status=t.status='completed';c.turnId=null;t.delivery='confirmed';t.finalAnswer=text;t.completedAt=new Date().toISOString();t.usage={inputTokens:100,outputTokens:20};c.messages.push({id:randomUUID(),requestId:t.requestId,turnId:t.id,role:'assistant',text,at:new Date().toISOString()});this.changed();}
+ async respond(id,body){if(!this.approvals.has(id))throw Error('Expirada');this.lastDecision=body;const a=this.approvals.get(id);this.approvals.delete(id);this.finish(this.conversation(a.conversationId),'DECISAO-'+body.decision);return {sent:true};}
+ async interrupt(id){const c=this.conversation(id);if(c.turns.length){c.status=c.turns.at(-1).status='interrupted';c.turnId=null;}this.approvals.clear();this.changed();return {requested:true};}
+ async close(){clearTimeout(this.timer);await this.persist();}
+}

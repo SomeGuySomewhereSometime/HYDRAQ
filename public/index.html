@@ -9,49 +9,236 @@
   <link rel="stylesheet" href="/style.css">
   <script type="module" src="/app.js"></script>
 </head>
-<body>
+<body data-sidebar="open" data-inspector="open" data-theme="atelier">
   <div class="app-shell">
-    <aside class="sidebar" id="projects-sidebar">
-      <a class="brand" href="/" aria-label="HYDRAQ início"><img src="/icon.svg" alt=""><span>HYDRAQ<span class="brand-dot">.</span><small>O TEU ESPAÇO DE TRABALHO</small></span></a>
-      <button class="new-project" id="new-project">＋ Novo projeto</button>
-      <button class="new-chat" id="new-chat"><span>＋</span> Nova conversa <kbd>N</kbd></button>
-      <label class="sr-only" for="project-search">Pesquisar projetos e conversas</label><input id="project-search" class="project-search" type="search" placeholder="Pesquisar…">
+    <aside class="sidebar" id="projects-sidebar" aria-label="Projetos e conversas">
+      <a class="brand" href="/" aria-label="HYDRAQ início"><span class="brand-mark"><svg class="hydra-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="hydra-necks" d="M16 28V13M16 28c0-6.2-8.4-6.6-8.4-13.4M16 28c0-6.2 8.4-6.6 8.4-13.4"/><circle class="hydra-head" cx="7.6" cy="11.6" r="3.3"/><circle class="hydra-head hydra-head-main" cx="16" cy="8.2" r="3.5"/><circle class="hydra-head" cx="24.4" cy="11.6" r="3.3"/></svg></span><span class="brand-name">HYDRAQ<span class="brand-dot">.</span></span><span class="brand-heads" id="brand-heads" aria-hidden="true"><i data-client="codex"></i><i data-client="antigravity"></i><i data-client="claude"></i><i data-client="cursor"></i><i data-client="opencode"></i></span></a>
+      <div class="sidebar-actions">
+        <button class="new-chat" id="new-chat" data-tip="Começa uma conversa nova no projeto selecionado. Atalho: N"><span>＋</span> Nova conversa <kbd>N</kbd></button>
+        <button class="new-project" id="new-project" data-tip="Cria um projeto com uma pasta fixa, memória própria e conversas organizadas.">＋ Novo projeto</button>
+      </div>
+      <label class="sr-only" for="project-search">Pesquisar projetos e conversas</label><input id="project-search" class="project-search" type="search" placeholder="Pesquisar projetos e conversas…">
       <div class="section-label">PROJETOS E CONVERSAS <span id="conversation-count">00</span></div>
       <nav id="conversation-list" aria-label="Conversas guardadas"></nav>
-      <div class="organization-tools"><button id="organize-projects">Organizar existentes</button><button id="show-archived">Arquivados</button></div>
-      <div class="sidebar-bottom"><div class="provider-icon"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M5.6 18.4 18.4 5.6"/></svg></div><div><strong id="provider-label">Codex original</strong><small id="account-label">A verificar sessão…</small></div><span class="connection-dot" id="connection-dot"></span></div>
+      <div class="organization-tools"><button id="organize-projects" data-tip="Associa conversas soltas a projetos existentes.">Organizar existentes</button><button id="show-archived" data-tip="Mostra ou esconde projetos e conversas arquivados.">Arquivados</button></div>
+      <button class="sidebar-bottom client-status" id="client-status" type="button" aria-controls="inspector" data-tip="Ver a ligação e os detalhes do cliente ativo.">
+        <span class="provider-icon" aria-hidden="true"><span id="client-glyph"></span><span class="connection-dot" id="connection-dot"></span></span>
+        <span class="client-status-copy"><strong id="provider-label">Codex</strong><small id="model-label">A carregar modelo…</small><span id="account-label" class="sr-only">A verificar sessão…</span></span>
+        <svg class="client-status-chevron ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg>
+      </button>
     </aside>
+    <div class="panel-resizer" id="sidebar-resizer" data-panel="sidebar" role="separator" aria-orientation="vertical" aria-controls="projects-sidebar" aria-label="Largura dos projetos" tabindex="0" data-tip="Arrasta para ajustar a largura · setas também ajustam · duplo clique repõe · Enter esconde"></div>
     <button id="sidebar-scrim" class="sidebar-scrim hidden" aria-label="Fechar projetos"></button>
     <main>
-      <header class="topbar"><button id="sidebar-toggle" class="sidebar-toggle" aria-controls="projects-sidebar" aria-expanded="false">☰ Projetos</button><div><span class="breadcrumb">ESPAÇO LOCAL</span><span class="breadcrumb-slash">/</span><strong id="project-name">Nova conversa</strong></div><nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false">Colaboração</button></nav><div class="connection-state" id="connection-state">A ligar ao Codex…</div></header>
+      <header class="topbar">
+        <button id="sidebar-toggle" class="icon-button panel-toggle" type="button" aria-controls="projects-sidebar" aria-expanded="true" data-tip="Mostrar ou esconder projetos e conversas"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M9 4v16"/></svg><span class="sr-only">Projetos</span></button>
+        <div class="topbar-title">
+          <strong id="project-name" data-tip="">Nova conversa</strong>
+          <div class="topbar-context">
+            <span id="folder-chip" class="folder-chip" tabindex="0" data-tip=""><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3Z M3 7V4h7l2 3"/></svg><span id="folder-label"></span></span>
+            <label class="sr-only" for="cwd">Pasta de trabalho</label><input id="cwd" class="folder-input" placeholder="/caminho/do/projeto" autocomplete="off" spellcheck="false" data-tip="Pasta onde o cliente vai trabalhar. Fica fixa depois do primeiro pedido.">
+            <span id="session-badge" class="status-chip">Uma tarefa. Todo o contexto.</span>
+          </div>
+        </div>
+        <div id="handoff-box" class="handoff-box hidden">
+          <label for="handoff-mode">Passagem</label>
+          <select id="handoff-mode" data-tip=""><option value="quick" selected>Rápida</option><option value="model">Completa · resumo</option></select>
+          <span id="handoff-hint" class="sr-only"></span>
+        </div>
+        <nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true" data-tip="Conversas com um cliente de cada vez, com passagem de contexto entre clientes.">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false" data-tip="Equipa: o Codex planeia, o Grok executa e o Claude pode rever.">Colaboração</button></nav>
+        <button id="command-palette-trigger" class="command-trigger atelier-only" type="button" data-tip="Abrir paleta rápida de comandos, conversas, projetos e clientes (Ctrl+K)"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Comandos</span><kbd>⌃K</kbd></button>
+        <button id="theme-toggle" class="theme-switch" type="button" data-tip="Escolher a aparência"><span class="appearance-swatch" data-swatch="atelier" aria-hidden="true"></span><span id="theme-label">Atelier</span><svg class="ui-icon theme-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="connection-state" id="connection-state" data-tip="Estado da ligação ao cliente escolhido.">A ligar ao Codex…</div>
+        <button id="inspector-toggle" class="icon-button panel-toggle" type="button" aria-controls="inspector" aria-expanded="true" data-tip="Mostrar ou esconder o último pedido, a atividade e as configurações"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg><span class="sr-only">Painel de atividade</span></button>
+      </header>
       <div id="catalog-error" class="notice hidden" role="alert"></div>
       <button id="global-task" class="global-task hidden"></button>
       <section id="project-overview" class="project-overview hidden" aria-label="Projeto"></section>
       <div class="workspace" id="chat-workspace">
         <section class="conversation-panel">
-          <div class="conversation-toolbar"><span class="eyebrow"><span class="tiny-dot"></span><span id="agent-label">CODEX</span></span><span id="session-badge">Uma tarefa. Todo o contexto.</span></div>
           <div id="notice" class="notice hidden" role="alert"></div>
           <section id="uncertainty-panel" class="uncertainty-panel hidden" aria-label="Resultado por confirmar"></section>
           <section id="handoff-recovery-panel" class="handoff-recovery-panel hidden" aria-label="Rever contexto da passagem"></section>
           <section id="progress-panel" class="progress-panel hidden" aria-label="Progresso da tarefa" aria-live="polite"></section>
           <div id="messages" class="messages" aria-live="polite">
-            <div class="welcome" id="welcome"><div class="welcome-mark">H<span>↗</span></div><p class="eyebrow">DA IDEIA À EXECUÇÃO</p><h1>O que vamos<br>construir hoje<span>?</span></h1><p class="welcome-copy">Os clientes originais, num espaço teu.<br>Escolhe um cliente e um projeto para começar.</p><div class="suggestions"><button data-prompt="Analisa este projeto e explica a sua estrutura. Não alteres ficheiros."><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v18M16 3v18M3 8h18M3 16h18"/></svg></span> Explorar o projeto <span>↗</span></button><button data-prompt="Revê o código deste projeto e identifica os problemas mais importantes. Não alteres ficheiros."><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 9-9 9-9-9Z M9 12l2 2 4-4"/></svg></span> Rever o código <span>↗</span></button></div></div>
+            <div class="welcome" id="welcome">
+              <div class="welcome-mark"><svg class="hydra-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="hydra-necks" d="M16 28V13M16 28c0-6.2-8.4-6.6-8.4-13.4M16 28c0-6.2 8.4-6.6 8.4-13.4"/><circle class="hydra-head" cx="7.6" cy="11.6" r="3.3"/><circle class="hydra-head hydra-head-main" cx="16" cy="8.2" r="3.5"/><circle class="hydra-head" cx="24.4" cy="11.6" r="3.3"/></svg></div>
+              <p class="eyebrow">DA IDEIA À EXECUÇÃO</p>
+              <h1>O que vamos<br>construir hoje<span>?</span></h1>
+              <p class="welcome-copy">Os clientes originais, num espaço teu.<br>Escolhe o cliente, o modelo e o raciocínio na caixa de mensagens.</p>
+              <div class="atelier-fleet atelier-only" id="welcome-fleet" role="group" aria-label="Motores locais disponíveis">
+                <button type="button" class="fleet-card" data-select-provider="codex">
+                  <span class="fleet-head"><span class="fleet-badge">SOL · OPENAI</span><span class="fleet-dot" data-fleet-dot="codex"></span></span>
+                  <strong>Codex</strong>
+                  <small data-fleet-meta="codex">Sessão nativa ChatGPT</small>
+                </button>
+                <button type="button" class="fleet-card" data-select-provider="antigravity">
+                  <span class="fleet-head"><span class="fleet-badge">AGY · GOOGLE</span><span class="fleet-dot" data-fleet-dot="antigravity"></span></span>
+                  <strong>Antigravity</strong>
+                  <small data-fleet-meta="antigravity">Gemini &amp; Claude nativos</small>
+                </button>
+                <button type="button" class="fleet-card" data-select-provider="claude">
+                  <span class="fleet-head"><span class="fleet-badge">ANTHROPIC · CLI</span><span class="fleet-dot" data-fleet-dot="claude"></span></span>
+                  <strong>Claude Code</strong>
+                  <small data-fleet-meta="claude">Sessão claude.ai local</small>
+                </button>
+                <button type="button" class="fleet-card" data-select-provider="cursor">
+                  <span class="fleet-head"><span class="fleet-badge">ACP · GROK</span><span class="fleet-dot" data-fleet-dot="cursor"></span></span>
+                  <strong>Cursor</strong>
+                  <small data-fleet-meta="cursor">Motor Grok nativo</small>
+                </button>
+                <button type="button" class="fleet-card" data-select-provider="opencode">
+                  <span class="fleet-head"><span class="fleet-badge">ACP · GRÁTIS</span><span class="fleet-dot" data-fleet-dot="opencode"></span></span>
+                  <strong>OpenCode</strong><small data-fleet-meta="opencode">Modelos gratuitos OpenCode</small>
+                </button>
+              </div>
+              <div class="suggestions">
+                <button data-prompt="Analisa este projeto e explica a sua estrutura. Não alteres ficheiros.">
+                  <span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3v18M16 3v18M3 8h18M3 16h18"/></svg></span>
+                  <div class="suggestion-body"><strong>Explorar o projeto</strong><small>Mapeia módulos, arquitetura e pontos de entrada sem tocar em ficheiros.</small></div>
+                  <span>↗</span>
+                </button>
+                <button data-prompt="Revê o código deste projeto e identifica os problemas mais importantes. Não alteres ficheiros.">
+                  <span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m12 3 9 9-9 9-9-9Z M9 12l2 2 4-4"/></svg></span>
+                  <div class="suggestion-body"><strong>Rever o código</strong><small>Deteta riscos, bugs subtis e melhorias prioritárias com rigor técnico.</small></div>
+                  <span>↗</span>
+                </button>
+                <button data-prompt="Analisa os testes existentes neste projeto, identifica falhas potenciais ou casos em falta. Não alteres ficheiros.">
+                  <span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 3h6m-5 0v5.2L5.4 17a2 2 0 0 0 1.7 3h9.8a2 2 0 0 0 1.7-3L14 8.2V3"/></svg></span>
+                  <div class="suggestion-body"><strong>Diagnosticar testes</strong><small>Avalia cobertura, casos limite e estabilidade da suite de verificação.</small></div>
+                  <span>↗</span>
+                </button>
+                <button data-prompt="Propõe um plano técnico passo a passo para a próxima melhoria ou refatoração deste projeto. Não alteres ficheiros.">
+                  <span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h10M4 18h7m9-4 3 3-3 3"/></svg></span>
+                  <div class="suggestion-body"><strong>Traçar plano de execução</strong><small>Desenha etapas verificáveis antes de avançar para a implementação.</small></div>
+                  <span>↗</span>
+                </button>
+              </div>
+            </div>
           </div>
           <section id="approvals" class="approvals" aria-label="Pedidos do Codex"></section>
-          <div class="composer-area"><form id="composer" class="composer"><div id="steer-mode" class="steer-mode hidden" role="status"><div id="steer-title">↳ Orientar a tarefa em curso</div><span id="steer-description">A orientação mantém o pedido atual.</span><button type="button" id="use-as-request" class="use-as-request hidden">Usar como novo pedido</button></div><label class="sr-only" id="prompt-label" for="prompt">Pedido para o Codex</label><textarea id="prompt" rows="3" placeholder="Descreve o que queres fazer…" maxlength="100000"></textarea><div class="composer-footer"><span id="composer-hint">Enter para enviar · Shift + Enter para nova linha</span><button type="button" id="stop" class="stop hidden">■ Parar</button><button type="submit" id="send" class="send" disabled>Enviar <span>↗</span></button></div></form><p class="composer-note"><span>◉</span> Execução no teu PC <span>·</span> Sessão original <span>·</span> Histórico local</p></div>
+          <div class="composer-area">
+            <div id="project-suggestion" class="project-suggestion hidden"></div>
+            <div id="switch-note" class="switch-note hidden" role="status"></div>
+            <section id="review-unavailable" class="review-unavailable" role="alert" hidden></section>
+            <form id="composer" class="composer">
+              <div class="atelier-agent-dock atelier-only" id="agent-dock" role="toolbar" aria-label="Escolher agente ativo">
+                <button type="button" class="agent-pill" data-agent="codex" aria-pressed="true" data-tip="Mudar para Codex (OpenAI · sessão local)">
+                  <span class="agent-pill-dot"></span>
+                  <span class="agent-pill-name">Codex</span>
+                  <small class="agent-pill-tag">OpenAI</small>
+                </button>
+                <button type="button" class="agent-pill" data-agent="antigravity" aria-pressed="false" data-tip="Mudar para Antigravity (Google · agy nativo)">
+                  <span class="agent-pill-dot"></span>
+                  <span class="agent-pill-name">Antigravity</span>
+                  <small class="agent-pill-tag">Google</small>
+                </button>
+                <button type="button" class="agent-pill" data-agent="claude" aria-pressed="false" data-tip="Mudar para Claude Code (Anthropic · CLI)">
+                  <span class="agent-pill-dot"></span>
+                  <span class="agent-pill-name">Claude Code</span>
+                  <small class="agent-pill-tag">Anthropic</small>
+                </button>
+                <button type="button" class="agent-pill" data-agent="cursor" aria-pressed="false" data-tip="Mudar para Cursor (Grok · ACP)">
+                  <span class="agent-pill-dot"></span>
+                  <span class="agent-pill-name">Cursor</span>
+                  <small class="agent-pill-tag">Grok</small>
+                </button>
+                <button type="button" class="agent-pill" data-agent="opencode" aria-pressed="false" data-tip="OpenCode original · só modelos gratuitos do fornecedor OpenCode">
+                  <span class="agent-pill-dot"></span><span class="agent-pill-name">OpenCode</span><small class="agent-pill-tag">Grátis</small>
+                </button>
+              </div>
+              <section id="followup-queue" class="followup-queue hidden" aria-label="Mensagens em fila"></section>
+              <div id="steer-mode" class="steer-mode hidden" role="group" aria-label="Mensagem durante a execução"><div id="steer-title">↳ Mensagem durante a execução</div><label class="sr-only" for="followup-mode">Quando entregar a mensagem</label><select id="followup-mode" class="pill-select" data-tip="Escolhe quando esta mensagem chega ao cliente. As opções dependem do protocolo de cada cliente."></select><span id="steer-description">A orientação mantém o pedido atual.</span><button type="button" id="use-as-request" class="use-as-request hidden">Usar como novo pedido</button></div>
+              <label class="sr-only" id="prompt-label" for="prompt">Pedido para o Codex</label>
+              <textarea id="prompt" rows="3" placeholder="Descreve o que queres fazer…" maxlength="100000"></textarea>
+              <div class="composer-footer">
+                <div class="composer-controls" role="group" aria-label="Opções do próximo pedido">
+                  <label class="sr-only" for="provider">Cliente</label>
+                  <select id="provider" class="pill-select provider-select" data-tip=""><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="claude">Claude Code</option><option value="cursor">Cursor</option><option value="opencode">OpenCode · gratuitos</option></select>
+                  <label class="sr-only" for="model">Modelo</label>
+                  <select id="model" class="pill-select" data-tip=""><option>A carregar modelos…</option></select>
+                  <label class="sr-only" for="effort">Raciocínio</label>
+                  <select id="effort" class="pill-select" data-tip="Raciocínio: quanto o modelo pensa antes de responder. Mais raciocínio é mais lento e consome mais utilização."><option>Automático</option></select>
+                  <span id="cursor-settings" class="hidden"><span id="context-field"><label class="sr-only" for="context">Contexto</label><select id="context" class="pill-select" data-tip="Janela de contexto do Grok no Cursor."></select></span><label id="fast-field" class="pill-toggle" data-tip="Fast: respostas mais rápidas com maior consumo de utilização do Cursor."><input id="fast" type="checkbox"> Fast</label></span>
+                  <button type="button" id="review-toggle" class="pill-toggle" aria-pressed="false" data-tip="Escolher revisor automático">Revisor · Desligado</button>
+                  <span class="control-divider" aria-hidden="true"></span>
+                  <button type="button" id="plan-toggle" class="pill-toggle plan-toggle" aria-pressed="false" data-tip="">Planear</button>
+                  <label class="sr-only" for="sandbox">Permissões</label>
+                  <select id="sandbox" class="pill-select" data-tip=""><option value="workspace-write">Leitura e escrita</option><option value="read-only">Só leitura</option></select>
+                </div>
+                <button type="button" id="stop" class="stop hidden" data-tip="Interrompe o pedido em curso. Ações já feitas não são desfeitas.">■ Parar</button>
+                <button type="submit" id="send" class="send" disabled>Enviar <span>↗</span></button>
+              </div>
+            </form>
+            <p class="composer-note"><span id="composer-hint">Enter para enviar · Shift + Enter para nova linha</span><span class="composer-note-fixed" data-tip="Os clientes originais correm no teu computador, com as suas sessões. O histórico fica guardado localmente.">◉ Execução local · sessão original</span></p>
+          </div>
         </section>
-        <aside class="inspector">
-          <div class="inspector-heading"><h2>Configuração</h2><span>01</span></div>
-          <div class="config-card"><label for="provider">CLIENTE ORIGINAL</label><select id="provider"><option value="codex">Codex</option><option value="antigravity">Antigravity · Gemini e Claude</option><option value="claude">Claude Code · Opus, Sonnet, Fable, Haiku</option><option value="cursor">Cursor · Grok</option></select><p id="provider-hint">Cada cliente usa a sua sessão original.</p><div id="handoff-box" class="handoff-box hidden"><label for="handoff-mode">PASSAGEM DE CONTEXTO</label><select id="handoff-mode"><option value="model">Completa · com resumo</option><option value="quick" selected>Incremental · sem resumo adicional</option></select><p id="handoff-hint"></p></div><label for="cwd">PASTA DE TRABALHO</label><div class="input-with-icon"><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3Z M3 7V4h7l2 3"/></svg></span><input id="cwd" placeholder="/caminho/do/projeto" autocomplete="off" spellcheck="false"></div><p id="cwd-hint">A pasta onde o Codex vai trabalhar.</p><div id="project-suggestion" class="project-suggestion hidden"></div><label for="model">MODELO</label><select id="model"><option>A carregar modelos…</option></select><div class="model-description" id="model-description"></div><label for="effort">RACIOCÍNIO</label><select id="effort"><option>Automático</option></select><div id="cursor-settings" class="hidden"><div id="context-field"><label for="context">CONTEXTO</label><select id="context"></select></div><label id="fast-field" class="toggle-field"><input id="fast" type="checkbox"> Fast · maior consumo de utilização</label></div><p id="settings-hint">Aplicam-se ao próximo pedido.</p><div id="cache-info" class="cache-info" aria-live="polite"></div><details class="capability-details"><summary>Comparar suporte dos modelos</summary><div id="model-capabilities"></div></details><label for="sandbox">ACESSO AO PROJETO</label><select id="sandbox"><option value="workspace-write">Leitura e escrita</option><option value="read-only">Só leitura</option></select><div class="config-footnote" id="permissions-hint">As autorizações adicionais aparecem na conversa.</div></div>
+        <div class="panel-resizer" id="inspector-resizer" data-panel="inspector" role="separator" aria-orientation="vertical" aria-controls="inspector" aria-label="Largura do painel de atividade" tabindex="0" data-tip="Arrasta para ajustar a largura · setas também ajustam · duplo clique repõe · Enter esconde"></div>
+        <aside class="inspector" id="inspector" aria-label="Último pedido, atividade e configurações" data-inspector-tab="all">
+          <div class="atelier-inspector-tabs atelier-only" id="inspector-tabs" role="tablist" aria-label="Vista do painel lateral">
+            <button type="button" role="tab" data-inspector-view="all" aria-selected="true" data-tip="Mostra consumo, atividade e sistema num único painel">Tudo</button>
+            <button type="button" role="tab" data-inspector-view="activity" aria-selected="false" data-tip="Foca na linha temporal de comandos, ficheiros e ferramentas">Atividade</button>
+            <button type="button" role="tab" data-inspector-view="telemetry" aria-selected="false" data-tip="Foca nos contadores de tokens, cache e diffs do turno">Consumo</button>
+            <button type="button" role="tab" data-inspector-view="system" aria-selected="false" data-tip="Mostra capacidades dos modelos, cache e disposição">Sistema</button>
+          </div>
+          <div id="inspector-content" class="inspector-content" tabindex="0" role="region" aria-label="Conteúdo do painel lateral">
           <section id="turn-usage" class="turn-usage hidden" aria-label="Consumo do último pedido"></section>
-          <div class="inspector-heading activity-heading"><h2>Atividade</h2><span id="activity-count">00</span></div><div id="activity" class="activity"><div class="empty-activity"><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></span><p>O trabalho aparece aqui.</p><small>Comandos, ferramentas e alterações,<br>à medida que acontecem.</small></div></div>
+          <div class="inspector-heading activity-heading"><h2>Atividade</h2><span id="activity-count">00</span></div>
+          <div id="activity-filter" class="activity-filter" role="group" aria-label="Filtrar atividade"></div>
+          <div id="activity" class="activity"><div class="empty-activity"><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></span><p>O trabalho aparece aqui.</p><small>Comandos, ferramentas e alterações,<br>à medida que acontecem.</small></div></div>
           <details id="diff-panel" class="diff-panel hidden"><summary>Ver alterações</summary><pre id="diff"></pre></details>
+          <details id="settings-details" class="settings-details">
+            <summary>Configurações e detalhes</summary>
+            <div class="config-card">
+              <section class="next-request" aria-labelledby="next-request-title">
+                <p class="settings-title" id="next-request-title">Próximo pedido</p>
+                <div class="next-request-grid" id="next-request-grid"></div>
+              </section>
+              <p id="provider-hint">Cada cliente usa a sua sessão original.</p>
+              <div class="model-description" id="model-description"></div>
+              <p id="settings-hint">Aplicam-se ao próximo pedido.</p>
+              <div id="cache-info" class="cache-info" aria-live="polite"></div>
+              <details class="capability-details"><summary>Comparar suporte dos modelos</summary><div id="model-capabilities"></div></details>
+              <div class="config-footnote" id="permissions-hint">As autorizações adicionais aparecem na conversa.</div>
+              <div class="appearance-inline-wrap"><p class="appearance-inline-title">Aparência</p><div id="appearance-choices" class="appearance-inline" role="radiogroup" aria-label="Aparência"></div></div>
+              <div class="settings-block"><p class="appearance-inline-title" id="column-title">Largura da conversa</p><div id="column-choices" class="column-choices" role="radiogroup" aria-labelledby="column-title"></div></div>
+              <section class="settings-block reading-settings" aria-labelledby="reading-title">
+                <div class="settings-block-head"><p class="appearance-inline-title" id="reading-title">Texto da conversa</p><button type="button" id="reset-text" class="text-button" data-tip="Repõe o tamanho do texto a 15 px, sem mudar a largura ou os painéis.">Repor</button></div>
+                <div class="text-size-heading"><label for="text-size">Tamanho</label><output id="text-size-value" for="text-size">15 px</output></div>
+                <div class="text-size-control"><span aria-hidden="true">A</span><input id="text-size" type="range" min="13" max="22" step="1" value="15" data-tip="Ajusta o texto das perguntas, respostas e pareceres. Não altera o tamanho dos menus ou da caixa de escrita."><span aria-hidden="true">A</span></div>
+                <p class="reading-hint">Só neste browser · aplicado ao histórico todo.</p>
+              </section>
+              <div class="settings-block"><div class="settings-block-head"><p class="appearance-inline-title">Cores dos clientes</p><button type="button" id="reset-colors" class="text-button" data-tip="Volta às cores originais: Codex esmeralda, Antigravity ciano, Claude laranja, Cursor violeta e OpenCode rosa.">Repor</button></div><div id="client-colors" class="client-colors"></div></div>
+              <div class="layout-options">
+                <button type="button" id="prose-width" class="text-button" aria-pressed="false" data-tip="Alterna entre linhas de texto com largura confortável e a largura total da conversa. Código e tabelas usam sempre a largura disponível.">Largura total do texto</button>
+                <button type="button" id="reset-layout" class="text-button" data-tip="Repõe a largura e a visibilidade dos painéis laterais.">Repor disposição</button>
+              </div>
+            </div>
+          </details>
+          </div>
           <div class="inspector-bottom"><span class="tiny-dot"></span><span id="usage">Pronto para começar</span><button id="reconnect" class="text-button hidden">Voltar a ligar</button></div>
         </aside>
+        <button id="inspector-scrim" class="inspector-scrim hidden" aria-label="Fechar painel de atividade"></button>
       </div>
       <section id="collaboration-view" class="collaboration-view hidden" aria-label="Colaboração entre modelos"></section>
     </main>
   </div>
+  <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
   <div id="toast" class="toast hidden" role="status"></div>
+  <dialog id="command-palette" class="command-palette" aria-label="Paleta rápida de comandos">
+    <div class="command-palette-shell">
+      <div class="command-palette-header">
+        <svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="command-palette-input" type="search" placeholder="Saltar para conversa, projeto, cliente ou executar ação…" autocomplete="off" spellcheck="false">
+        <kbd class="command-esc" id="command-palette-close">ESC</kbd>
+      </div>
+      <div id="command-palette-list" class="command-palette-list" role="listbox" aria-label="Resultados e comandos"></div>
+      <div class="command-palette-footer">
+        <span><kbd>↑</kbd><kbd>↓</kbd> navegar</span>
+        <span><kbd>↵</kbd> executar</span>
+        <span><kbd>Ctrl+K</kbd> abrir/fechar</span>
+      </div>
+    </div>
+  </dialog>
 </body>
 </html>

@@ -73,9 +73,11 @@ test('HTTP mantém UTF-8 entre blocos e aceita pedidos Unicode dentro do limite 
 
 test('ACP inválido rejeita a chamada e encerra o processo mesmo se ignorar SIGTERM',async t=>{
   const dir=await directory(t);
-  const peer="process.on('SIGTERM',()=>{});require('node:readline').createInterface({input:process.stdin}).on('line',s=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:JSON.parse(s).id})+'\\n'));";
+  const peer="process.on('SIGTERM',()=>{});require('node:readline').createInterface({input:process.stdin}).on('line',s=>process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:JSON.parse(s).id})+'\\n'));process.stderr.write('ready\\n');";
   const rpc=new CursorRpc({executable:process.execPath,args:['-e',peer,'--'],cwd:dir,env:process.env,secret:'FAKE-ONLY'});t.after(()=>rpc.close());
-  await assert.rejects(Promise.race([rpc.call('initialize',{},100),new Promise((_,reject)=>setTimeout(()=>reject(Error('PROMESSA-PENDURADA')),700))]),/Resposta ACP sem resultado/);
+  // Wait for startup so this checks malformed ACP, rather than cold-start scheduling.
+  await new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(Error('FIXTURE-NÃO-ARRANCOU')),5000);rpc.child.stderr.once('data',()=>{clearTimeout(timer);resolve();});rpc.child.once('error',reject);});
+  await assert.rejects(Promise.race([rpc.call('initialize',{},1000),new Promise((_,reject)=>setTimeout(()=>reject(Error('PROMESSA-PENDURADA')),3000))]),/Resposta ACP sem resultado/);
   await rpc.closed;assert.equal(rpc.child.signalCode,'SIGKILL');assert.equal(rpc.pending.size,0);
 });
 

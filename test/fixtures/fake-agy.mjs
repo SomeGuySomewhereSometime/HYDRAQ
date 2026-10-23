@@ -13,6 +13,7 @@ const nativeId=args.includes('--conversation')?args[args.indexOf('--conversation
 const model=args[args.indexOf('--model')+1];
 const mode=args.includes('--mode')?args[args.indexOf('--mode')+1]:'request-review';
 let count=0;
+process.on('SIGINT',()=>{if(process.env.FAKE_AGY_STOP==='native'){emit({event:'result',result:{conversation_id:nativeId,status:'ERROR',error:'interrupted',response:''}});process.exit(1);}if(process.env.FAKE_AGY_STOP!=='confirmed')process.exit(1);emit({event:'result',result:{conversation_id:nativeId,status:'CANCELED',response:''}});process.exit(0);});
 try{count=JSON.parse(readFileSync('.fake-agy-'+nativeId,'utf8')).count;}catch{}
 const startedAt=process.pid;
 emit({event:'init',conversation_id:nativeId,init:{model,cwd:process.cwd(),permission_mode:mode}});
@@ -34,7 +35,9 @@ createInterface({input:process.stdin}).on('line',line=> {
     emit({event:'step_update',step_update:{...step,step_index:count*10+3,state:'ACTIVE',step_type:'agent_response',text_delta:'Segundo bloco parcial.'}});
     return;
   }
-  if(text==='many-tools') {
+  if(text==='write-file-path') {
+    emit({event:'step_update',step_update:{...step,step_index:count*10+1,state:'DONE',step_type:'tool',tool_name:'write_file',tool_info:{parameters:{Path:'/tmp/sum.mjs'},output:'ok'}}});
+  } else if(text==='many-tools') {
     emit({event:'step_update',step_update:{...step,step_index:1,state:'DONE',step_type:'tool',tool_name:'write_to_file',tool_info:{parameters:{TargetFile:'first.txt'},output:'ok'}}});
     for(let i=0;i<205;i++)emit({event:'step_update',step_update:{...step,step_index:i+2,state:'DONE',step_type:'tool',tool_name:'run_command',tool_info:{parameters:{CommandLine:`command-${i}`},output:'ok',...(i===0?{error:{message:'exit 42'}}:{})}}});
   }

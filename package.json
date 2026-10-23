@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Interface local para os clientes originais Codex, Antigravity, Claude Code e Cursor.",
+  "description": "Interface local para os clientes originais Codex, Antigravity, Claude Code, Cursor e OpenCode gratuito.",
   "engines": { "node": ">=22" },
   "scripts": {
     "start": "node server.mjs",
