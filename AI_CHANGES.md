@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 59
+Versão atual: 60
 
 ## Resumo atual
+
+- Permissões Antigravity (entrada 60): aprovação automática global `always-proceed` aplicada por pedido explícito, com cópia privada anterior e restantes opções preservadas. Cliente real confirmou a política e executou em Planear o `git grep` antes recusado. Processo Antigravity inativo renovado sem reiniciar o servidor; 34 históricos e pareceres preservados, cinco clientes ligados.
 
 - Diagnósticos Antigravity (entrada 59): distingue quota/limite explícito, ferramenta recusada e ausência de resposta; mantém texto válido com aviso e identifica sucesso vazio como falha. Avisos na conversa, parecer fechado e contexto enviado ao principal; stderr por pedido e evidência filtrada. Condições publicadas de acesso documentadas, sem mudar autenticação/faturação/permissões ou migrar ACP. 367 testes e browser isolado Grafite/Atelier/móvel aprovados; sem novas inferências reais. Ativa na 4318, 31 históricos preservados e cinco clientes ligados.
 
@@ -581,3 +583,9 @@ Versão atual: 59
 - Avisos junto da última mensagem do pedido (junto da pergunta se não houver resposta), no resumo do parecer fechado e com detalhes expansíveis. Texto válido permanece concluído com aviso; SUCCESS sem texto fica falhado. Avisos seguem com o parecer selecionado para o principal. Registos antigos recuperam recusas dos factos, sem reescrever históricos nativos nem reconstruir stderr inexistente. Diagnósticos de stderr separados por pedido/processo aquecido, com UTF-8, filtragem de segredos conhecidos e indicação de abreviação.
 - README/docs/antigravity.md registam as condições publicadas pela Google em 2026-10-23 e distinguem funcionamento técnico de autorização da modalidade de acesso. Conta local/autorização específica por esclarecer com o fornecedor; sem ACP, instalação, nova autenticação, alterações globais de permissões/créditos ou API paga.
 - Verificado: 367/367 e 23 verificações finais de diagnóstico; browser isolado com CLI agy simulado e principal simulado (Grafite/Atelier, 1440/390 px), resposta válida com recusa, pedido vazio, quota em stderr, parecer fechado e envio do aviso ao principal, sem erros de JavaScript ou overflow horizontal. Sem novas inferências reais. Ativada livre na 4318 (PID 1033727): 31 históricos/conteúdos, 8 lotes, 5 ciclos e políticas preservados, cinco clientes ligados e ficheiros servidos iguais; novas projeções de diagnóstico, sem reenvios. Provas em `.hydraq/antigravity-diagnostics-2026-10-23/`.
+
+### 60 — 2026-10-23 — Codex
+
+- Diagnóstico real isolado: o comando original com `git grep` foi recusado em Planear e Execução; `git grep` simples também recusado, enquanto `grep … || true` funcionou em Planear. Todas as execuções usavam `request-review`. A falha não depende exclusivamente do papel de revisor ou de Planear; `grep` estava autorizado e `git grep` não. O 503 observado noutro pedido é um erro distinto de disponibilidade.
+- Por pedido explícito de acesso a tudo, configuração global do Antigravity passou a `toolPermission: always-proceed`. Cópia anterior privada, ficheiro 0600 e restantes opções semanticamente iguais, incluindo regras, autenticação e créditos. Afeta principal/revisores e CLI original; não altera limites da sandbox/sistema nem os outros clientes. Planear preservado, sem o apresentar como isolamento de escrita.
+- Verificado com cliente/modelo reais: política efetiva `always-proceed`, consulta `git grep` em Planear executada com código 0 e resposta sem recusas. O CLI normalizou a formatação do JSON; só o valor de `toolPermission` mudou. Processo Antigravity inativo terminado para carregar a configuração no próximo pedido, sem reiniciar a HYDRAQ; mesmos 34 históricos, mensagens, IDs, estados e pareceres, cinco clientes ligados e zero reservas. Sem alterações ao código da aplicação; provas em `.hydraq/antigravity-permissions-2026-10-23/`.
