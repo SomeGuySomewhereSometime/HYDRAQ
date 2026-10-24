@@ -20,10 +20,23 @@ const active=j=>['queued','starting','running','stopping'].includes(j.status);
 const reviewModes={comment:'Comentar resposta',plan:'Criticar plano',implementation:'Rever implementação'};
 const cycleStates={'waiting-main':'Resposta inicial em curso',preparing:'Resposta inicial pronta · a consultar revisores',reviewing:'Revisores a analisar',delivering:'Pareceres prontos · a enviar ao principal',assessing:'Principal a preparar resposta final',completed:'Revisão concluída',skipped:'Revisão dispensada',failed:'Revisão falhou',suspended:'Revisão suspensa',cancelled:'Revisão parada','needs-decision':'Decisão de envio pendente'};
 const shortNames={codex:'Codex',claude:'Claude',antigravity:'Antigravity',opencode:'OpenCode',cursor:'Cursor'};
+const REVIEW_VIEW_KEY='hydraq.review.view',REVIEW_VIEWS=['panels','list','collapsed'];
 const glyphPaths={
  opinion:['M3.5 6A2.5 2.5 0 0 1 6 3.5h7A2.5 2.5 0 0 1 15.5 6v4a2.5 2.5 0 0 1-2.5 2.5H8.5L5 15.5v-3.1A2.5 2.5 0 0 1 3.5 10z','M18.5 8.5h.5a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2v3l-3.5-3H12a2 2 0 0 1-2-2v-.5'],
  alternative:['M12 21v-7','M12 14 6.5 7.5','M12 14l5.5-6.5','M6 11.5V7h4.5','M18 11.5V7h-4.5'],
  close:['M6 6l12 12','M18 6 6 18'],
+ expand:['M14 4h6v6','M10 20H4v-6','M20 4l-6.5 6.5','M4 20l6.5-6.5'],
+ shrink:['M4 14h6v6','M20 10h-6V4','M10 14l-6.5 6.5','M14 10l6.5-6.5'],
+ copy:['M9 9h10.5v11.5H9z','M15 9V4.5H4.5V15H9'],
+ panels:['M3.5 4.5h7.5v7h-7.5z','M13 4.5h7.5v7H13z','M3.5 13.5h17v6h-17z'],
+ list:['M4 6h16','M4 12h16','M4 18h11'],
+ fold:['M4 8h16','M4 16h16','M9.5 12h5'],
+ check:['M5.5 12.5l4 4L18.5 7.5'],
+ cross:['M7.5 7.5l9 9','M16.5 7.5l-9 9'],
+ alert:['M12 7v6.5','M12 17h.01'],
+ dash:['M7.5 12h9'],
+ stop:['M8 8h8v8H8z'],
+ down:['M12 5v13','M6.5 12.5 12 18l5.5-5.5'],
 };
 // Inline SVG built through the DOM, so the CSP needs no exceptions.
 const glyph=(name,cls='opinion-glyph')=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [k,v] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',class:cls}))svg.setAttribute(k,v);for(const d of glyphPaths[name]){const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',d);svg.append(path);}return svg;};
@@ -78,6 +91,44 @@ export function reviewProgress(cycle, jobs = []) {
  const phase=cycle?.status==='waiting-main'?'Resposta inicial a ser escrita':cycle?.status==='preparing'?'Resposta inicial pronta · a consultar revisores':cycle?.status==='reviewing'?(pending?'Aguarda a tua decisão':'Revisores a analisar'):cycleStates[cycle?.status]||'Consulta concluída';
  return [phase,count].filter(Boolean).join(' · ');
 }
+// The live cursor ends the last line of prose, never inside a code block.
+const streamingTarget=container=>{let last=container.lastElementChild;if(/^(UL|OL)$/.test(last?.tagName))last=last.lastElementChild;return last&&/^(P|LI|H[1-6]|BLOCKQUOTE)$/.test(last.tagName)?last:container;};
+const pendingCycle=status=>['waiting-main','preparing','reviewing','delivering','assessing'].includes(status);
+/** Four fixed stages shown under the review panels: initial answer, reviewers, delivery, final answer. */
+export function reviewSteps(cycle, jobs = [], context = {}) {
+ const status=cycle?.status,final=context.final||{},total=jobs.length||automaticParticipants(cycle?.config).length;
+ const ready=jobs.filter(j=>j.status==='completed'&&j.text?.trim()).length,missing=jobs.filter(j=>['failed','uncertain','interrupted'].includes(j.status)).length,deciding=jobs.some(j=>j.approvals?.length);
+ const sent=cycle?.selectedJobIds?.length??ready,separate=cycle?.selectedJobIds?Math.max(0,total-sent):0;
+ const count=total?`${ready}/${total} ${total===1?'parecer':'pareceres'}`:'';
+ const steps=[
+  {key:'initial',label:'Resposta inicial',state:'done',detail:'Pronta'},
+  {key:'review',label:total>1?'Revisores':'Revisor',state:'done',detail:count+(missing?` · ${missing} sem parecer`:'')},
+  {key:'delivery',label:'Envio ao principal',state:'done',detail:`${sent} ${sent===1?'enviado':'enviados'}${separate?` · ${separate} ${separate===1?'separado':'separados'}`:''}`},
+  {key:'final',label:'Resposta final',state:'done',detail:'Pronta'},
+ ];
+ const set=(i,state,detail)=>{steps[i]={...steps[i],state,...(detail===undefined?{}:{detail})};};
+ const from=i=>{for(let k=i;k<steps.length;k++)set(k,'pending','');};
+ const stopAt=()=>context.initial&&!['starting','running','waiting'].includes(context.initial)?(!jobs.length||ready<total?1:final.exists?3:2):0;
+ switch(status){
+  case 'waiting-main':set(0,'active','A escrever');from(1);if(total)set(1,'pending',`${total} à espera`);break;
+  case 'preparing':set(1,'active','A consultar');from(2);break;
+  case 'reviewing':set(1,deciding?'warn':'active',deciding?'Aguarda a tua decisão':count);from(2);break;
+  case 'delivering':set(2,'active',`A enviar ${sent}`);from(3);break;
+  case 'assessing':set(3,'active',final.streaming?'A escrever':'A preparar');break;
+  case 'completed':if(!final.exists){set(2,'skipped','Nenhum recomendado');set(3,'done','Mantida a inicial');}else if(!final.confirmed)set(3,'warn','Parcial');break;
+  case 'needs-decision':set(2,'warn','Decisão pendente');from(3);break;
+  case 'suspended':set(3,'warn','Suspensa · nada reenviado');break;
+  case 'failed':
+   if(!jobs.length&&context.initial&&context.initial!=='completed'){set(0,'failed','Sem resposta');from(1);}
+   else if(final.exists)set(3,'failed','Sem confirmação');
+   else if(cycle?.selectedJobIds?.length&&ready===total){set(2,'failed','Envio falhou');from(3);}
+   else{set(1,'failed',jobs.length?(missing?`${missing} sem parecer`:'Falhou'):'Não iniciada');from(2);}
+   break;
+  case 'cancelled':{const at=stopAt();from(at);set(at,'stopped','Parada');break;}
+ }
+ if(steps[1].state==='done'&&missing)steps[1]={...steps[1],state:'warn'};
+ return steps;
+}
 export function opinionContextLabel(job, delivery) {
  if (delivery.state !== 'separate') return delivery.label;
  const recommendation = job.recommendation;
@@ -96,6 +147,8 @@ export function opinionDelivery(jobId, merges = []) {
 export class OpinionUI{
  constructor({getState,api,getTarget,getSettings,getKey,refresh,toast,markdown}){Object.assign(this,{getState,api,getTarget,getSettings,getKey,refresh,toast,markdown});this.refreshState=refresh;delete this.refresh;this.selected=new Set();this.deliveryFilters=new Map();this.slots=new Set();this.submissions=new Map();this.quickDrafts=new Map();this.automaticDrafts=new Map();this.archived=new Map();this.archiveRevision=0;this.sequence=0;this.dialog=node('dialog','opinion-dialog');this.dialog.setAttribute('aria-label','Consultar outros modelos');document.body.append(this.dialog);
   this.folds=new Map();this.reviewGroups=new Set();this.seenApprovals=new Set();
+  this.panelScroll=new Map();this.focusPanels=new Map();this.staged={batches:new Set(),cycles:new Set()};
+  try{this.reviewView=REVIEW_VIEWS.includes(localStorage.getItem(REVIEW_VIEW_KEY))?localStorage.getItem(REVIEW_VIEW_KEY):'panels';}catch{this.reviewView='panels';}
   this.quick=node('section','opinion-quick');this.quick.id='opinion-quick';this.quick.hidden=true;this.quick.setAttribute('role','dialog');this.quick.setAttribute('aria-modal','false');this.quick.setAttribute('aria-label','Escolha rápida de modelos');document.body.append(this.quick);
   this.quick.addEventListener('pointerenter',()=>clearTimeout(this.hoverClose));this.quick.addEventListener('pointerleave',()=>this.scheduleClose());
   document.getElementById('review-toggle')?.addEventListener('click',()=>this.configureAutomatic());
@@ -119,30 +172,194 @@ export class OpinionUI{
  submission(message,owner){if(message.role!=='user')return null;const state=this.viewState();return state?.merges.find(m=>m.requestId===message.requestId&&m.conversationId===owner.id)||state?.automatic?.cycles.find(c=>c.returnRequestId===message.requestId&&c.conversationId===owner.id);}
  organizeTranscript(view,timeline){
   for(const slot of this.slots)if(!slot.isConnected)this.slots.delete(slot);
-  for(const details of this.reviewGroups)if(!details.isConnected)this.reviewGroups.delete(details);
-  const state=this.viewState(),groups=opinionTranscriptGroups(timeline,state),articles=new Map([...view.querySelectorAll(':scope > [data-timeline-index]')].map(e=>[Number(e.dataset.timelineIndex),e]));
-  for(const group of groups){
-   const first=articles.get(group.anchor);if(!first)continue;
-   const cycle=(state?.automatic?.cycles||[]).find(c=>group.cycleIds.includes(c.id));
-   const writing=cycle?.status==='waiting-main';
-   const details=this.fold('process:'+group.id,'review-process','Resposta inicial e revisão',!group.finals.length),body=node('div','review-process-body');details.dataset.reviewGroup=group.id;details.reviewGroup=group;details.append(body);group.original.length?first.before(details):first.after(details);
-   const original=this.fold('original:'+group.id,'review-original',`Resposta inicial · ${names[timeline[group.anchor].owner.provider]} · ${writing?'a responder':'pronta para consultar'}`,writing);body.append(original);
-   for(const at of group.original){const article=articles.get(at);if(article){const message=timeline[at].message;article.prepend(node('p','review-message-phase',message.phase==='final_answer'||!writing&&at===group.original.at(-1)?'Resposta inicial':'Progresso da resposta inicial'));original.append(article);}}
-   const source=timeline[group.anchor],turn=source.owner.turns?.find(t=>t.requestId===source.message.requestId||t.id===source.message.turnId),items=source.owner.items?.filter(i=>i.turnId===turn?.id).slice(-8)||[];
-   if(items.length){const activity=this.fold('initial-activity:'+group.id,'review-activity','Raciocínio e atividade comunicados pelo cliente',writing);for(const item of items){activity.append(node('p','opinion-caption',`${item.type==='reasoning'?'A analisar o pedido':item.command||item.title||item.tool||item.type} · ${item.status||''}`));if(item.type==='reasoning'&&item.summary?.length)activity.append(node('p','opinion-caption',Array.isArray(item.summary)?item.summary.join('\n'):String(item.summary)));}original.append(activity);}
-   const sourceIndices=new Set([...group.original,...group.questions]);
-   for(const slot of this.slots)if(slot.isConnected&&sourceIndices.has(Number(slot.dataset.sourceIndex)))body.append(slot);
-   for(const at of group.deliveries){const article=articles.get(at);if(article)body.append(article);}
-   const sentIds=new Set((state?.merges||[]).filter(m=>group.deliveries.some(i=>timeline[i].message.requestId===m.requestId)).flatMap(m=>m.jobIds||[]));
-   const reviewers=(state?.batches||[]).filter(b=>group.batchIds.includes(b.id)).flatMap(b=>b.jobs).filter(j=>sentIds.has(j.id));
-   if(group.finals.length>1){const assessment=this.fold('assessment:'+group.id,'review-original','Etapas da avaliação do principal');for(const at of group.finals.slice(0,-1)){const article=articles.get(at);if(article)assessment.append(article);}body.append(assessment);}
-   const finalAt=group.finals.at(-1),final=articles.get(finalAt);
-   if(final){const {owner,message}=timeline[finalAt],turn=owner.turns?.find(t=>t.requestId===message.requestId||t.id===message.turnId),confirmed=turn?.status==='completed';final.classList.add('review-final');const label=node('div','review-final-label',confirmed?'Resposta final':message.streaming||['running','starting','waiting'].includes(turn?.status)?'A preparar resposta final':'Resposta da avaliação · parcial');if(confirmed)label.append(node('span','review-final-hint','· após os pareceres recebidos'));for(const provider of new Set(reviewers.map(j=>j.provider))){const badge=node('span','opinion-provider review-provider-badge',names[provider]);badge.dataset.provider=provider;badge.title='Parecer recebido deste cliente; a resposta indica quais as sugestões aceites.';label.append(badge);}final.prepend(label);}
-   this.reviewGroups.add(details);this.updateGroup(details);
-   if(body.querySelector('.opinion-approval'))this.openAncestors(body.querySelector('.opinion-approval'));
-  }
+  for(const stage of this.reviewGroups)if(!stage.isConnected)this.reviewGroups.delete(stage);
+  const state=this.viewState(),articles=new Map([...view.querySelectorAll(':scope > [data-timeline-index]')].map(e=>[Number(e.dataset.timelineIndex),e]));
+  const groups=opinionTranscriptGroups(timeline,state).filter(group=>articles.has(group.anchor));
+  // Automatic review records live in their stage; slots keep only manual opinions on the same messages.
+  this.staged={batches:new Set(groups.flatMap(g=>g.batchIds)),cycles:new Set(groups.flatMap(g=>g.cycleIds))};
+  for(const slot of this.slots){slot.signature='';this.renderSlot(slot);}
+  for(const group of groups)this.buildStage(group,timeline,articles,state);
  }
- updateGroup(details){const state=this.viewState(),group=details.reviewGroup,cycles=(state?.automatic?.cycles||[]).filter(c=>group.cycleIds.includes(c.id)),jobs=(state?.batches||[]).filter(b=>group.batchIds.includes(b.id)).flatMap(b=>b.jobs),cycle=cycles.at(-1);const pending=jobs.some(j=>j.approvals?.length);const summary=details.firstElementChild;summary.replaceChildren(node('span','review-process-title','Resposta inicial e revisão'),node('span','review-process-state',reviewProgress(cycle,jobs)));details.dataset.waiting=String(pending);details.dataset.failed=String(cycle?.status==='failed'||jobs.some(j=>['failed','uncertain'].includes(j.status)));}
+ buildStage(group,timeline,articles,state){
+  const first=articles.get(group.anchor),source=timeline[group.anchor],owner=source.owner;
+  const cycle=(state?.automatic?.cycles||[]).filter(c=>group.cycleIds.includes(c.id)).at(-1);
+  const turn=owner.turns?.find(t=>t.requestId===(cycle?.requestId||source.message.requestId)||t.id===source.message.turnId);
+  const finalAt=group.finals.at(-1),finalEntry=finalAt===undefined?null:timeline[finalAt],finalTurn=finalEntry?.owner.turns?.find(t=>t.requestId===finalEntry.message.requestId||t.id===finalEntry.message.turnId);
+  const writing=cycle?.status==='waiting-main'||['starting','running','waiting'].includes(turn?.status);
+  const stage=node('section','review-stage');stage.dataset.reviewGroup=group.id;stage.dataset.client=owner.provider;stage.reviewGroup=group;stage.setAttribute('aria-label','Resposta inicial e revisão');
+  stage.context={initial:turn?.status||null,final:{exists:Boolean(finalEntry),confirmed:finalTurn?.status==='completed',streaming:Boolean(finalEntry?.message.streaming)||['starting','running','waiting'].includes(finalTurn?.status)}};
+  // Once the cycle ends without a final answer, the initial answer is the answer: show it whole.
+  stage.defaultFocus=cycle&&!pendingCycle(cycle.status)&&!finalEntry?group.id+':initial':null;
+  const head=node('header','review-stage-head'),heading=node('div','review-stage-heading'),tools=node('div','review-stage-tools');
+  stage.stateText=node('span','review-stage-state');stage.stateText.setAttribute('role','status');
+  heading.append(node('strong','review-stage-title','Resposta inicial e revisão'),stage.stateText);
+  stage.stopButton=this.button('',async()=>{if(!stage.cycle)return;stage.stopButton.disabled=true;try{await this.api('/api/automatic-reviews/'+stage.cycle.id+'/cancel',{});await this.refreshState();}catch(e){this.toast(e.message);}finally{stage.stopButton.disabled=false;}},'review-stage-stop');
+  stage.stopButton.append(glyph('stop','review-icon'),node('span','','Parar revisão'));stage.stopButton.dataset.tip='Parar a revisão automática. A resposta inicial e os pareceres já recebidos ficam guardados.';
+  tools.append(this.viewSwitch(),stage.stopButton);head.append(heading,tools);
+  stage.grid=node('div','review-grid');stage.reviewers=[];
+  const initial=this.panel({key:group.id+':initial',client:owner.provider,title:'Resposta inicial',role:'initial'});stage.initial=initial;stage.grid.append(initial.panel);
+  stage.steps=node('ol','review-steps');stage.steps.setAttribute('aria-label','Etapas da revisão');
+  stage.note=node('p','review-stage-note');stage.note.hidden=true;
+  stage.actions=node('div','review-stage-actions');stage.actions.hidden=true;
+  const extra=node('div','review-stage-extra');
+  stage.append(head,stage.grid,stage.steps,stage.note,stage.actions,extra);
+  group.original.length?first.before(stage):first.after(stage);
+  const last=group.original.length?timeline[group.original.at(-1)].message:null,model=last?.model||turn?.model||cycle?.settings?.model,effort=last?.effort||turn?.effort||cycle?.settings?.effort;
+  initial.meta.textContent=[names[owner.provider],this.modelName(owner.provider,model),effortLabels[effort]||effort].filter(Boolean).join(' · ');
+  initial.panel.dataset.live=String(writing);initial.panel.dataset.status=writing?'running':turn?.status||'completed';
+  this.statusPill(initial,writing?(turn?.status==='waiting'?'Aguarda decisão':'A responder'):({failed:'Falhou',interrupted:'Interrompida',uncertain:'Resultado incerto'})[turn?.status]||'Pronta',writing?(turn?.status==='waiting'?'warn':'active'):['failed','interrupted','uncertain'].includes(turn?.status)?'failed':'done');
+  const items=owner.items?.filter(i=>i.turnId===turn?.id).slice(-8)||[];
+  if(items.length){
+   const activity=this.fold('initial-activity:'+group.id,'review-activity',`Raciocínio e atividade · ${items.length} ${items.length===1?'passo':'passos'}`,!group.original.length);
+   for(const item of items){activity.append(node('p','opinion-caption',`${item.type==='reasoning'?'A analisar o pedido':item.command||item.title||item.tool||item.type} · ${item.status||''}`));if(item.type==='reasoning'&&item.summary?.length)activity.append(node('p','opinion-caption',Array.isArray(item.summary)?item.summary.join('\n'):String(item.summary)));}
+   initial.body.append(activity);
+  }
+  for(const at of group.original){
+   const article=articles.get(at);if(!article)continue;const message=timeline[at].message;
+   if(group.original.length>1)article.prepend(node('p','review-message-phase',message.phase==='final_answer'||!writing&&at===group.original.at(-1)?'Resposta':'Progresso'));
+   const folded=article.querySelector(':scope > .message-body');if(folded)folded.hidden=false;article.classList.remove('message-folded');
+   initial.body.append(article);
+  }
+  if(!group.original.length)initial.body.append(this.placeholder(writing?'A preparar a resposta inicial…':'Sem resposta inicial visível.'));
+  const latest=items.at(-1);if(writing&&latest){initial.foot.append(this.activityLine(latest.type==='reasoning'?'A analisar o pedido':latest.command||latest.title||latest.tool||latest.type,latest.status));initial.foot.hidden=false;}
+  initial.text=last?.text||'';initial.copy.hidden=!initial.text;initial.body.setAttribute('aria-label','Resposta inicial de '+names[owner.provider]);
+  const sourceIndices=new Set([...group.original,...group.questions]);
+  for(const slot of this.slots)if(slot.isConnected&&sourceIndices.has(Number(slot.dataset.sourceIndex)))extra.append(slot);
+  for(const at of group.deliveries){const article=articles.get(at);if(article)extra.append(article);}
+  const sentIds=new Set((state?.merges||[]).filter(m=>group.deliveries.some(i=>timeline[i].message.requestId===m.requestId)).flatMap(m=>m.jobIds||[]));
+  const reviewers=(state?.batches||[]).filter(b=>group.batchIds.includes(b.id)).flatMap(b=>b.jobs).filter(j=>sentIds.has(j.id));
+  if(group.finals.length>1){const assessment=this.fold('assessment:'+group.id,'review-original','Etapas da avaliação do principal');for(const at of group.finals.slice(0,-1)){const article=articles.get(at);if(article)assessment.append(article);}extra.append(assessment);}
+  const final=articles.get(finalAt);
+  if(final){const {message}=finalEntry,confirmed=finalTurn?.status==='completed';final.classList.add('review-final');const label=node('div','review-final-label',confirmed?'Resposta final':message.streaming||['running','starting','waiting'].includes(finalTurn?.status)?'A preparar resposta final':'Resposta da avaliação · parcial');if(confirmed)label.append(node('span','review-final-hint','· após os pareceres recebidos'));for(const provider of new Set(reviewers.map(j=>j.provider))){const badge=node('span','opinion-provider review-provider-badge',names[provider]);badge.dataset.provider=provider;badge.title='Parecer recebido deste cliente; a resposta indica quais as sugestões aceites.';label.append(badge);}final.prepend(label);}
+  this.reviewGroups.add(stage);this.updateGroup(stage);
+ }
+ /** A fixed-size column: header, decisions, scrolling text that follows new output, and a footer. */
+ panel({key,client,title,role}){
+  const panel=node('article','review-panel'),head=node('header','review-panel-head'),avatar=node('span','review-panel-avatar',({codex:'C',claude:'C',antigravity:'A',cursor:'G',opencode:'O'})[client]||'·'),titles=node('div','review-panel-titles'),name=node('strong','review-panel-title',title),meta=node('span','review-panel-meta'),status=node('span','review-panel-status'),tools=node('span','review-panel-tools');
+  panel.dataset.role=role;panel.dataset.panelKey=key;if(client)panel.dataset.client=client;avatar.setAttribute('aria-hidden','true');
+  const viewport=node('div','review-panel-viewport'),body=node('div','review-panel-body'),alert=node('div','review-panel-alert'),foot=node('footer','review-panel-foot');
+  body.id='review-panel-'+(++this.sequence);body.tabIndex=0;body.setAttribute('role','region');body.dataset.panelKey=key;alert.hidden=true;foot.hidden=true;
+  const view={panel,avatar,name,meta,status,tools,alert,body,foot,key,text:''};
+  const jump=this.button('',()=>{this.panelScroll.set(key,{top:0,follow:true});this.restorePanel(body);},'review-panel-jump');jump.append(glyph('down','review-icon'),node('span','','Mais recente'));jump.dataset.tip='Voltar a acompanhar o texto mais recente';
+  view.copy=this.button('',async()=>{try{await navigator.clipboard.writeText(view.text);view.copy.dataset.copied='true';view.copy.dataset.tip='Copiado';setTimeout(()=>{delete view.copy.dataset.copied;view.copy.dataset.tip='Copiar o texto deste painel';},1600);}catch{this.toast('Não foi possível copiar o texto.');}},'review-panel-tool');
+  view.copy.append(glyph('copy','review-icon'));view.copy.setAttribute('aria-label','Copiar texto · '+title);view.copy.dataset.tip='Copiar o texto deste painel';view.copy.hidden=true;
+  view.expand=this.button('',()=>this.toggleFocus(panel),'review-panel-tool review-panel-expand');view.expand.setAttribute('aria-controls',body.id);
+  tools.append(view.copy,view.expand);titles.append(name,meta);head.append(avatar,titles,status,tools);viewport.append(body,jump);panel.append(head,alert,viewport,foot);
+  body.addEventListener('scroll',()=>{const follow=body.scrollHeight-body.scrollTop-body.clientHeight<28;this.panelScroll.set(key,{top:body.scrollTop,follow});panel.toggleAttribute('data-behind',panel.dataset.live==='true'&&!follow);},{passive:true});
+  panel.view=view;return view;
+ }
+ /** Live panels follow new text until the reader scrolls up; finished panels open at the top. */
+ restorePanel(body){
+  const panel=body.closest('.review-panel');if(!panel)return;
+  const record=this.panelScroll.get(body.dataset.panelKey),live=panel.dataset.live==='true',follow=record?record.follow:live;
+  if(follow)body.scrollTop=body.scrollHeight;else if(record)body.scrollTop=record.top;
+  panel.toggleAttribute('data-behind',live&&!follow&&body.scrollHeight>body.clientHeight+28);
+ }
+ statusPill(view,label,tone){view.status.textContent=label;view.status.title=label;view.status.dataset.tone=tone;}
+ placeholder(text){return node('p','review-panel-empty',text);}
+ activityLine(label,status){const line=node('span','review-panel-activity');line.append(node('i','review-activity-dot'),node('span','',label));line.title=label+(status?' · '+status:'');return line;}
+ modelName(provider,id){return this.getState()?.providers?.[provider]?.models?.find(m=>m.id===id)?.name||id||'';}
+ viewSwitch(){
+  const group=node('div','review-view-switch');group.setAttribute('role','group');group.setAttribute('aria-label','Apresentação da revisão');
+  for(const [value,label,tip,icon] of [['panels','Painéis','Resposta inicial e revisores lado a lado, em painéis de tamanho fixo','panels'],['list','Lista','Mensagens completas, umas por baixo das outras','list'],['collapsed','Recolhido','Mostrar só as etapas; a resposta final continua visível','fold']]){
+   const option=this.button('',()=>this.setReviewView(value),'review-view-option');option.dataset.view=value;option.dataset.tip=tip;option.setAttribute('aria-label',label);option.append(glyph(icon,'review-icon'),node('span','',label));group.append(option);
+  }
+  return group;
+ }
+ setReviewView(value){this.reviewView=value;try{localStorage.setItem(REVIEW_VIEW_KEY,value);}catch{}for(const stage of this.reviewGroups)if(stage.isConnected)this.applyStageView(stage);}
+ // A pending decision is never hidden behind the collapsed view.
+ applyStageView(stage){
+  const view=this.reviewView==='collapsed'&&stage.querySelector('.review-panel[data-attention]')?'panels':this.reviewView;stage.dataset.view=view;
+  for(const option of stage.querySelectorAll('.review-view-option'))option.setAttribute('aria-pressed',String(option.dataset.view===view));
+  for(const panel of stage.grid.children)this.restorePanel(panel.view.body);
+ }
+ focusKey(stage){const id=stage.reviewGroup.id;return this.focusPanels.has(id)?this.focusPanels.get(id):stage.defaultFocus;}
+ toggleFocus(panel){const stage=panel.closest('.review-stage');if(!stage)return;const key=panel.dataset.panelKey;this.focusPanels.set(stage.reviewGroup.id,this.focusKey(stage)===key?null:key);this.applyFocus(stage);panel.scrollIntoView({block:'nearest'});panel.view.expand.focus({preventScroll:true});}
+ applyFocus(stage){
+  const key=this.focusKey(stage),panels=[...stage.grid.children],focused=panels.some(p=>p.dataset.panelKey===key);
+  stage.grid.dataset.focus=String(focused);stage.grid.style.setProperty('--rest-span',String(12/Math.max(1,Math.min(4,panels.length-1))));
+  for(const panel of panels){const on=focused&&panel.dataset.panelKey===key,button=panel.view.expand;panel.toggleAttribute('data-expanded',on);button.replaceChildren(glyph(on?'shrink':'expand','review-icon'));button.setAttribute('aria-expanded',String(on));button.setAttribute('aria-label',(on?'Repor tamanho · ':'Expandir · ')+panel.view.name.textContent);button.dataset.tip=on?'Repor o tamanho fixo':'Expandir este painel em largura total';this.restorePanel(panel.view.body);}
+ }
+ step(step,index){
+  const item=node('li','review-step'),mark=node('span','review-step-mark'),text=node('span','review-step-text'),icon={done:'check',failed:'cross',warn:'alert',skipped:'dash',stopped:'stop'}[step.state];
+  item.dataset.state=step.state;item.dataset.step=step.key;mark.setAttribute('aria-hidden','true');if(icon)mark.append(glyph(icon,'review-icon'));else if(step.state==='pending')mark.textContent=String(index+1);
+  text.append(node('strong','',step.label));if(step.detail)text.append(node('small','',step.detail));item.append(mark,text);
+  item.setAttribute('aria-label',`${step.label}: ${({done:'concluído',active:'em curso',pending:'por fazer',warn:'requer atenção',failed:'falhou',skipped:'dispensado',stopped:'parado'})[step.state]}${step.detail?' · '+step.detail:''}`);
+  if(step.state==='active')item.setAttribute('aria-current','step');return item;
+ }
+ updateGroup(stage){
+  const state=this.viewState(),group=stage.reviewGroup,cycle=(state?.automatic?.cycles||[]).filter(c=>group.cycleIds.includes(c.id)).at(-1);
+  const entries=(state?.batches||[]).filter(b=>group.batchIds.includes(b.id)).flatMap(batch=>batch.jobs.map(job=>({job,batch}))),jobs=entries.map(e=>e.job),pending=pendingCycle(cycle?.status);
+  stage.cycle=cycle;stage.stateText.textContent=reviewProgress(cycle,jobs);stage.stopButton.hidden=!pending;
+  stage.dataset.waiting=String(jobs.some(j=>j.approvals?.length));stage.dataset.failed=String(cycle?.status==='failed'||jobs.some(j=>['failed','uncertain'].includes(j.status)));
+  const wanted=entries.length?entries.map(({job,batch})=>({key:'job:'+job.id,job,batch,who:job})):automaticParticipants(cycle?.config).map((participant,index)=>({key:group.id+':reviewer:'+index,participant,who:participant}));
+  if(stage.reviewers.map(r=>r.key).join()!==wanted.map(w=>w.key).join()){
+   for(const view of stage.reviewers)view.panel.remove();
+   stage.reviewers=wanted.map(w=>{const view=this.panel({key:w.key,client:w.who.provider,title:names[w.who.provider]||w.who.provider,role:'reviewer'});stage.grid.append(view.panel);return view;});
+  }
+  let changed=false;
+  wanted.forEach((w,i)=>{changed=(w.job?this.fillReviewer(stage,stage.reviewers[i],w.job,cycle):this.fillPlaceholder(stage.reviewers[i],w.participant,cycle))||changed;});
+  stage.grid.dataset.reviewers=String(stage.reviewers.length);
+  const steps=reviewSteps(cycle,jobs,stage.context),signature=JSON.stringify(steps);
+  if(stage.steps.signature!==signature){stage.steps.signature=signature;stage.steps.replaceChildren(...steps.map((s,i)=>this.step(s,i)));}
+  const note=cycle?.error||(['completed','needs-decision','suspended','cancelled'].includes(cycle?.status)?cycle.reason:'')||'';
+  stage.note.textContent=note;stage.note.hidden=!note;stage.note.classList.toggle('opinion-error',Boolean(cycle?.error));
+  this.stageActions(stage,entries,pending);this.applyStageView(stage);this.applyFocus(stage);
+  return changed;
+ }
+ // Opinions kept separate (manual or not recommended) can still be sent once the cycle is over.
+ stageActions(stage,entries,pending){
+  const state=this.viewState(),separate=pending?[]:entries.filter(({job})=>job.status==='completed'&&job.text&&opinionDelivery(job.id,state?.merges).state==='separate'),chosen=separate.filter(({job})=>this.selected.has(job.id));
+  stage.actions.hidden=!separate.length;if(!separate.length)return stage.actions.replaceChildren();
+  const send=this.button(chosen.length?`Enviar ${chosen.length} ${chosen.length===1?'selecionado':'selecionados'} à conversa`:'Enviar selecionados à conversa',()=>this.incorporate(chosen[0].batch,chosen.map(e=>e.job.id)),'secondary-button');
+  send.disabled=!chosen.length||new Set(chosen.map(e=>e.batch.id)).size>1;send.dataset.tip='Enviar ao principal os pareceres selecionados que ficaram separados, com um comentário opcional.';
+  stage.actions.replaceChildren(node('span','opinion-caption',`${separate.length} ${separate.length===1?'parecer separado':'pareceres separados'} do contexto principal`),send);
+ }
+ fillPlaceholder(view,participant,cycle){
+  const signature=JSON.stringify([participant,cycle?.status]);if(view.signature===signature)return false;view.signature=signature;
+  view.panel.dataset.live='false';view.panel.dataset.status='queued';view.panel.removeAttribute('data-attention');
+  view.meta.textContent=['Revisor',this.modelName(participant.provider,participant.model),effortLabels[participant.effort]||participant.effort].filter(Boolean).join(' · ');
+  this.statusPill(view,cycle?.status==='preparing'?'A preparar':'À espera','idle');
+  view.body.replaceChildren(this.placeholder(cycle?.status==='preparing'?'A preparar o revisor…':'Começa quando a resposta inicial estiver pronta.'));
+  view.body.setAttribute('aria-label','Revisor '+(names[participant.provider]||participant.provider));view.text='';view.copy.hidden=true;view.alert.hidden=true;view.foot.hidden=true;return true;
+ }
+ fillReviewer(stage,view,job,cycle){
+  const state=this.viewState(),delivery=opinionDelivery(job.id,state?.merges),pending=pendingCycle(cycle?.status),signature=JSON.stringify([job,delivery,pending]);
+  if(view.signature===signature)return false;view.signature=signature;
+  const live=active(job),deciding=Boolean(job.approvals?.length),focused=view.panel.contains(document.activeElement)?document.activeElement:null;
+  view.panel.dataset.live=String(live&&!deciding);view.panel.dataset.status=deciding?'waiting':job.status;view.panel.toggleAttribute('data-attention',deciding);
+  view.meta.replaceChildren(document.createTextNode(['Revisor',this.modelName(job.provider,job.model),effortLabels[job.effort]||job.effort].filter(Boolean).join(' · ')));
+  view.meta.title=job.allowWrite?'Escrita explicitamente ativada · autorizações nativas':'Planear / só leitura · não edita ficheiros';
+  if(job.allowWrite)view.meta.append(node('span','review-panel-tag','Escrita ativada'));
+  this.statusPill(view,deciding?'Aguarda decisão':statuses[job.status]||job.status,deciding?'warn':live?'active':job.status==='completed'?'done':['failed','uncertain','interrupted'].includes(job.status)?'failed':'idle');
+  // Decisions sit above the scrolling text, so they stay visible whatever the scroll position.
+  const previous=new Map([...view.alert.querySelectorAll('.opinion-approval')].map(e=>[e.dataset.approvalId,e]));
+  view.alert.replaceChildren(...(job.approvals||[]).map(request=>{const old=previous.get(String(request.id));return old?.approvalSignature===JSON.stringify(request)?old:this.approval(job,request);}));view.alert.hidden=!deciding;
+  const content=[];
+  if(job.recommendation)content.push(node('p','opinion-recommendation',(job.recommendation.status==='pending'?'Decisão pendente: ':job.recommendation.sendToPrincipal?'Recomenda enviar: ':'Não recomenda enviar: ')+job.recommendation.reason));
+  if(job.text){const text=this.markdown(job.text);if(live)streamingTarget(text).append(node('span','streaming-indicator'));content.push(text);}
+  else if(live||deciding)content.push(this.placeholder(deciding?'O revisor aguarda a tua decisão.':'A analisar a resposta inicial…'));
+  if(job.error)content.push(node('p','opinion-error',job.error));
+  if(job.diagnostics?.length)content.push(diagnosticsView(job.diagnostics));
+  if(!content.length)content.push(this.placeholder('Sem texto comunicado pelo revisor.'));
+  view.body.replaceChildren(...content);view.body.setAttribute('aria-label','Parecer de '+names[job.provider]);view.text=job.text||'';view.copy.hidden=!view.text;
+  const foot=[],latest=job.activity?.at(-1);
+  if(live&&latest)foot.push(this.activityLine(latest.label,latest.status));
+  if(job.status==='completed'&&job.text){const badge=node('span','review-delivery-badge',delivery.state==='submitted'?'Enviado ao principal':delivery.state==='uncertain'?'Entrega incerta':delivery.state==='sending'?'A enviar':job.recommendation?.status==='decided'&&!job.recommendation.sendToPrincipal?'Não recomenda enviar':'Separado');badge.dataset.delivery=delivery.state;badge.title=opinionContextLabel(job,delivery);foot.push(badge);}
+  if(job.usage&&!live){const u=job.usage,usage=node('span','review-panel-usage',`Entrada ${u.inputTokens??u.input_tokens??'—'} · Saída ${u.outputTokens??u.output_tokens??'—'}${job.provider==='opencode'?' · '+(Number.isFinite(job.costUSD)?job.costUSD+' USD':'custo não medido'):''}`);usage.title=usage.textContent;foot.push(usage);}
+  const controls=node('span','review-panel-actions');
+  if(live&&!deciding)controls.append(this.button('Parar',async()=>{try{await this.api('/api/opinions/'+job.id+'/stop',{});await this.refreshState();}catch(e){this.toast(e.message);}},'review-panel-action'));
+  if(job.status==='completed'&&job.text&&delivery.state==='separate'&&!pending){
+   const label=node('label','review-panel-select'),check=node('input');check.type='checkbox';check.checked=this.selected.has(job.id);check.setAttribute('aria-label','Selecionar parecer de '+names[job.provider]);
+   check.addEventListener('change',()=>{check.checked?this.selected.add(job.id):this.selected.delete(job.id);this.updateGroup(stage);});label.append(check,document.createTextNode('Selecionar'));
+   const batch=(state?.batches||[]).find(b=>b.jobs.some(j=>j.id===job.id));controls.append(label,this.button('Enviar este',()=>this.incorporate(batch,[job.id]),'review-panel-action'));
+  }
+  if(controls.childElementCount)foot.push(controls);
+  view.foot.replaceChildren(...foot);view.foot.hidden=!foot.length;
+  this.restorePanel(view.body);
+  if(focused?.isConnected&&document.activeElement!==focused)focused.focus({preventScroll:true});
+  return true;
+ }
  field(parent,label,tag='select'){const wrap=node('label','opinion-field',label),e=node(tag);e.id='opinion-control-'+(++this.sequence);wrap.htmlFor=e.id;e.setAttribute('aria-label',label);wrap.append(e);parent.append(wrap);return e;}
  options(select,values,value){select.replaceChildren(...values.map(v=>{const o=node('option','',v.label||v.value);o.value=v.value;o.disabled=Boolean(v.disabled);return o;}));select.value=values.some(v=>v.value===value&&!v.disabled)?value:values.find(v=>!v.disabled)?.value||'';}
  header(title){this.dialog.classList.remove('automatic-review-dialog');this.dialog.replaceChildren();const h=node('div','opinion-dialog-heading');h.append(node('h2','',title),this.button('Fechar',()=>this.dialog.close()));this.dialog.append(h);}
@@ -229,10 +446,10 @@ export class OpinionUI{
  refresh(){
   const view=document.querySelector('#messages'),top=view?.scrollTop||0,nearBottom=view?view.scrollHeight-top-view.clientHeight<120:false;let changed=false;
   for(const slot of this.slots){if(!slot.isConnected){this.slots.delete(slot);continue;}const previous=slot.signature;this.renderSlot(slot);changed ||= previous!==slot.signature;}
-  for(const details of this.reviewGroups){if(!details.isConnected)this.reviewGroups.delete(details);else this.updateGroup(details);}
+  for(const stage of this.reviewGroups){if(!stage.isConnected)this.reviewGroups.delete(stage);else changed=this.updateGroup(stage)||changed;}
   if(changed&&view)view.scrollTop=nearBottom?view.scrollHeight:top;this.positionQuick();
  }
- renderSlot(slot){const state=this.viewState(),batches=state?.batches.filter(b=>b.conversationId===slot.dataset.conversationId&&b.sourceKey===slot.dataset.messageKey)||[],cycles=slot.dataset.role==='user'?(state?.automatic?.cycles||[]).filter(r=>r.conversationId===slot.dataset.conversationId&&r.requestId===slot.dataset.requestId):[];const signature=JSON.stringify([batches,cycles,state?.merges,state?.automatic?.cycles,state?.error,batches.map(batch=>this.deliveryFilters.get(batch.id))]);if(slot.signature===signature)return;slot.signature=signature;const focused=slot.contains(document.activeElement)?document.activeElement:null,approvalNodes=new Map([...slot.querySelectorAll('.opinion-approval')].map(e=>[e.dataset.approvalId,e]));slot.opinionList.replaceChildren();slot.hidden=!batches.length&&!cycles.length;
+ renderSlot(slot){const state=this.viewState(),batches=state?.batches.filter(b=>b.conversationId===slot.dataset.conversationId&&b.sourceKey===slot.dataset.messageKey&&!this.staged.batches.has(b.id))||[],cycles=slot.dataset.role==='user'?(state?.automatic?.cycles||[]).filter(r=>r.conversationId===slot.dataset.conversationId&&r.requestId===slot.dataset.requestId&&!this.staged.cycles.has(r.id)):[];const signature=JSON.stringify([batches,cycles,state?.merges,state?.automatic?.cycles,state?.error,batches.map(batch=>this.deliveryFilters.get(batch.id))]);if(slot.signature===signature)return;slot.signature=signature;const focused=slot.contains(document.activeElement)?document.activeElement:null,approvalNodes=new Map([...slot.querySelectorAll('.opinion-approval')].map(e=>[e.dataset.approvalId,e]));slot.opinionList.replaceChildren();slot.hidden=!batches.length&&!cycles.length;
   for(const cycle of cycles){const note=node('div','automatic-review-note');note.setAttribute('role','status');note.append(node('strong','','Revisão automática · '+(cycleStates[cycle.status]||cycle.status)));if(cycle.reason||cycle.error)note.append(node('p',cycle.error?'opinion-error':'opinion-caption',cycle.error||cycle.reason));if(['waiting-main','preparing','reviewing','delivering','assessing'].includes(cycle.status))note.append(this.button('Parar revisão automática',async()=>{try{await this.api('/api/automatic-reviews/'+cycle.id+'/cancel',{});await this.refreshState();}catch(e){this.toast(e.message);}}));slot.opinionList.append(note);}
   if(state?.error&&batches.length)slot.opinionList.append(node('p','opinion-error',state.error));
   for(const batch of batches){const panel=this.fold('batch:'+batch.id,'opinion-batch',(batch.kind==='alternative'?'Outras respostas':'Pareceres')+' · '+batch.jobs.filter(j=>j.status==='completed').length+'/'+batch.jobs.length+' prontos'+(batch.jobs.some(j=>j.approvals?.length)?' · Decisão pendente':batch.jobs.some(active)?' · Em curso':batch.jobs.some(j=>j.status!=='completed')?' · Com falhas':''),Boolean(batch.automaticCycleId));panel.dataset.batchId=batch.id;

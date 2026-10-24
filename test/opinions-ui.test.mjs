@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {opinionTranscriptGroups,opinionResultAnchors,opinionDelivery,automaticParticipants,automaticReturnMode,opinionContextLabel,reviewProgress} from '../public/opinions.js';
+import {opinionTranscriptGroups,opinionResultAnchors,opinionDelivery,automaticParticipants,automaticReturnMode,opinionContextLabel,reviewProgress,reviewSteps} from '../public/opinions.js';
 const entry=(role,requestId,extra={},owner='source')=>({owner:{id:owner},message:{role,requestId,...extra}});
 
 test('interface conserva políticas antigas e mostra o modo condicional explícito',()=>{
@@ -93,4 +93,30 @@ test('IDs iguais noutro cliente e notas internas não entram no grupo de revisã
 });
 test('ciclo arquivado ainda agrupa o original quando o lote não está na página carregada',()=>{
  const state=reviewState();state.batches=[];const [group]=opinionTranscriptGroups(reviewedTimeline(),state);assert.deepEqual(group.original,[1,2]);assert.deepEqual(group.deliveries,[3]);assert.deepEqual(group.finals,[4]);
+});
+test('etapas da revisão acompanham resposta inicial, revisores, envio e resposta final',()=>{
+ const states=(cycle,jobs,context)=>reviewSteps(cycle,jobs,context).map(s=>s.state);
+ const config={participants:[{provider:'claude'},{provider:'cursor'}]},done={status:'completed',text:'OK'};
+ assert.deepEqual(states({status:'waiting-main',config}),['active','pending','pending','pending']);
+ assert.equal(reviewSteps({status:'waiting-main',config})[1].detail,'2 à espera');
+ assert.deepEqual(states({status:'reviewing',config},[done,{status:'running'}]),['done','active','pending','pending']);
+ assert.equal(reviewSteps({status:'reviewing',config},[done,{status:'running'}])[1].detail,'1/2 pareceres');
+ const deciding=reviewSteps({status:'reviewing',config},[done,{status:'running',approvals:[{id:1}]}]);assert.equal(deciding[1].state,'warn');assert.match(deciding[1].detail,/decisão/);
+ assert.deepEqual(states({status:'delivering',config,selectedJobIds:['a','b']},[done,done]),['done','done','active','pending']);
+ assert.deepEqual(states({status:'assessing',config},[done,done],{final:{exists:true,streaming:true}}),['done','done','done','active']);
+ assert.deepEqual(states({status:'completed',config,selectedJobIds:['a','b']},[done,done],{final:{exists:true,confirmed:true}}),['done','done','done','done']);
+});
+test('etapas distinguem envio dispensado, falhas e paragem sem tratar ausência como aprovação',()=>{
+ const config={participants:[{provider:'claude'},{provider:'cursor'}]},done={status:'completed',text:'OK'};
+ const kept=reviewSteps({status:'completed',config,selectedJobIds:[]},[done,done],{final:{exists:false}});
+ assert.deepEqual(kept.map(s=>s.state),['done','done','skipped','done']);assert.equal(kept[2].detail,'Nenhum recomendado');assert.equal(kept[3].detail,'Mantida a inicial');
+ const partial=reviewSteps({status:'completed',config,selectedJobIds:['a']},[done,done],{final:{exists:true,confirmed:true}});assert.equal(partial[2].detail,'1 enviado · 1 separado');
+ const failed=reviewSteps({status:'failed',config,failedJobIds:['b']},[done,{status:'failed'}],{initial:'completed'});
+ assert.deepEqual(failed.map(s=>s.state),['done','failed','pending','pending']);assert.equal(failed[1].detail,'1 sem parecer');
+ assert.equal(reviewSteps({status:'failed',config},[],{initial:'failed'})[0].state,'failed');
+ assert.equal(reviewSteps({status:'failed',config,selectedJobIds:['a','b']},[done,done],{initial:'completed',final:{exists:true}})[3].state,'failed');
+ assert.deepEqual(reviewSteps({status:'needs-decision',config},[done,done]).map(s=>s.state),['done','done','warn','pending']);
+ assert.deepEqual(reviewSteps({status:'cancelled',config},[done,{status:'interrupted'}],{initial:'completed'}).map(s=>s.state),['done','stopped','pending','pending']);
+ assert.deepEqual(reviewSteps({status:'cancelled',config},[],{initial:'running'}).map(s=>s.state),['stopped','pending','pending','pending']);
+ assert.equal(reviewSteps({status:'completed',config,selectedJobIds:['a']},[done,{status:'failed'}],{final:{exists:true,confirmed:true}})[1].state,'warn');
 });
