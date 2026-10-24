@@ -11,6 +11,9 @@ import { CollaborationUI } from './collaboration.js';
 import { ModelPicker } from './model-picker.js';
 import { OpinionUI, opinionResultAnchors, diagnosticsView } from './opinions.js';
 import { Layout, Tooltips, AppearanceMenu, ClientColors, APPEARANCES, COLUMNS } from './layout.js';
+// A server started before the dual routes does not serve dual.js: the composer then works without Dual.
+const dualModule = await import('./dual.js').catch(() => null);
+const { isReadMode: dualRead, dualSendLabel } = dualModule || {};
 
 const $ = selector => document.querySelector(selector);
 const element = (tag, className, text) => {
@@ -71,6 +74,8 @@ function diffContent(target, text) {
 
 let state;
 let token;
+// Assigned once the composer helpers exist; read through optional chaining before that.
+let dualUI;
 let selected = localStorage.getItem('hydraq.conversation') || null;
 let selectedProject = localStorage.getItem('hydraq.project') || null;
 let projectOverview = !selected && localStorage.getItem('hydraq.projectView') === 'true';
@@ -99,15 +104,22 @@ const settingDrafts = new Map();
 const recoveryDrafts = new Map();
 let settingsOwner;
 let settingsBaseline;
-const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{state=await api('/api/state');render();}});
-const claudeUI = new ClaudeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{state=await api('/api/state');render();}});
-const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,refresh:async()=>{state=await api('/api/state');render();}});
+const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{accept(await api('/api/state'));render();}});
+const claudeUI = new ClaudeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{accept(await api('/api/state'));render();}});
+const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,refresh:async()=>{accept(await api('/api/state'));render();}});
 const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
 const imageAttachments = new ImageAttachments({composer:$('#composer'),getKey:()=>composerKey(),getToken:()=>token,isBusy:()=>anyBusy() || sending,changed:()=>renderSend(),toast});
 const statusLabels = { idle: 'Pronta', starting: 'A iniciar…', running: 'A trabalhar…', waiting: 'A aguardar a tua resposta', completed: 'Concluída', interrupted: 'Interrompida', failed: 'Falhou', uncertain: 'Estado por confirmar', inProgress: 'Em execução' };
 const effortLabels = { default: 'Automático', none: 'Sem raciocínio', minimal: 'Mínimo', low: 'Leve', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo', ultra: 'Ultra' };
+
+// Snapshots arrive by SSE and in request responses; an older one never replaces a newer one.
+function accept(next) {
+  if (next && state && next.stateInstance === state.stateInstance && next.stateRevision < state.stateRevision) return state;
+  state = next;
+  return state;
+}
 
 function toast(message) {
   $('#toast').textContent = message;
@@ -127,7 +139,7 @@ async function api(route, body) {
   return result;
 }
 
-function providerId() { const conversation = current(); return conversation ? switchTargets.get(conversation.id) || conversation.provider : selectedProvider; }
+function providerId() { const conversation = current(); const dual = dualUI?.focusProvider(conversation); if (dual) return dual; return conversation ? switchTargets.get(conversation.id) || conversation.provider : selectedProvider; }
 function providerState(id = providerId()) { const info=state?.providers?.[id] || state || {}; if(id!=='opencode')return info; const cwd=openCodeCwd(),catalog=info.catalogs?.[resolvedOpenCodeScopes.get(cwd)||cwd]; return {...info,models:catalog?.models||[],catalog}; }
 const resolvedOpenCodeScopes=new Map(),openCodeChecks=new Map();
 function openCodeCwd(){return current()?.cwd||project()?.root||$('#cwd').value||state?.defaultCwd||'';}
@@ -135,7 +147,7 @@ async function checkOpenCodeModels(force=false){
   const cwd=openCodeCwd();if(!cwd)return;
   const old=openCodeChecks.get(cwd);if(old?.promise)return old.promise;
   if(!force&&!providerState('opencode').catalog?.stale&&old?.at&&Date.now()-old.at<10*60_000)return;
-  const promise=api('/api/opencode/models',{cwd,force}).then(result=>{resolvedOpenCodeScopes.set(cwd,result.catalog.cwd);state=result.state;render();return result.catalog;}).finally(()=>openCodeChecks.set(cwd,{at:Date.now()}));
+  const promise=api('/api/opencode/models',{cwd,force}).then(result=>{resolvedOpenCodeScopes.set(cwd,result.catalog.cwd);accept(result.state);render();return result.catalog;}).finally(()=>openCodeChecks.set(cwd,{at:Date.now()}));
   openCodeChecks.set(cwd,{at:Date.now(),promise});return promise;
 }
 const modelPicker=new ModelPicker({select:$('#model'),getCatalog:()=>providerState('opencode').catalog,refresh:checkOpenCodeModels,toast});
@@ -144,7 +156,9 @@ function composerKey() { return draftKey(current(),selectedProject); }
 function project() { return state?.projectCatalog?.projects.find(p=>p.id===(current()?.organization?.projectId || (!current()?selectedProject:null))); }
 function settingsKey(conversation = current()) { return `${draftKey(conversation,selectedProject)}:${providerId()}`; }
 function members(conversation = current()) { return conversation ? state.conversations.filter(entry => entry.group === conversation.group) : []; }
-function switching(conversation = current()) { return Boolean(conversation && providerId() !== conversation.provider); }
+function switching(conversation = current()) { return Boolean(conversation && !dualUI?.record(conversation) && providerId() !== conversation.provider); }
+// A dual conversation never steers a running turn: the next message waits for the round to end.
+function steerTarget(conversation = current()) { return dualUI?.record(conversation) ? null : conversation; }
 function targetMember(conversation = current()) { return members(conversation).filter(entry => entry.provider === providerId()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null; }
 function focusConversation(conversation = current()) { return members(conversation).find(entry => activeStatuses.includes(entry.status)) || conversation; }
 function workBlock(){return state?.workLocks?.find(lock=>workConflict(lock,{cwd:current()?.cwd||project()?.root||$('#cwd').value,projectId:project()?.id,resources:['normal-preparation','normal:'+providerId()]}));}
@@ -194,6 +208,13 @@ function renderPermissionTips() {
 function saveSettingsDraft() {
   settingDrafts.set(settingsKey(), { model: $('#model').value, effort: $('#effort').value, sandbox: sandboxValue(), context: $('#context').value || null, fast: $('#fast').checked });
 }
+// The member shown in the composer reads its controls; the other keeps its draft or its last round's choice.
+function dualMemberSettings(record, key) {
+  const provider = record?.members[key].provider || providerId(), member = record?.members[key] || {};
+  if (provider === providerId()) return { model: $('#model').value, effort: $('#effort').value, ...(provider === 'cursor' ? { context: $('#context').value || null, fast: $('#fast').checked } : {}) };
+  const draft = settingDrafts.get(`${draftKey(current(), selectedProject)}:${provider}`) || {};
+  return { model: draft.model || member.model, effort: draft.effort || member.effort, ...(provider === 'cursor' ? { context: draft.context ?? member.context ?? null, fast: draft.fast ?? member.fast ?? false } : {}) };
+}
 function shortPath(value) {
   const path = String(value || '').replace(/^\/home\/[^/]+(?=\/|$)/, '~');
   const parts = path.split('/');
@@ -222,10 +243,13 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
   messageSignature=activitySignature=approvalsSignature=progressSignature='';settingsOwner=null;render();
   if(!overview)$('#prompt').focus();
 }
-const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{state=await api('/api/state');render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id)});
+const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{accept(await api('/api/state'));render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id)});
 const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:current,getProject:project,getKey:composerKey,getProvider:providerId,toast,renderImages:(target,images)=>imageAttachments.renderMessage(target,images),changed:()=>render()});
 const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
-const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{state=await api('/api/state');render();},toast,markdown});
+const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
+
+dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id)}):null;
+$('#dual-toggle').classList.toggle('hidden',!dualUI);
 
 function populateEfforts(value) {
   const model = providerState().models.find(entry => entry.id === $('#model').value);
@@ -301,7 +325,7 @@ function renderSettings(conversation) {
   const defaults=!conversation?project()?.defaults?.clients?.[provider]||{}:{};
   const baseline = JSON.stringify([!conversation?project()?.defaults:null,basis?.id,basis?.model,basis?.effort,basis?.sandbox,basis?.context,basis?.fast,pendingSettings]);
   $('#provider').value = provider;
-  $('#provider').disabled = sending || Boolean(conversation && (anyBusy() || group.some(needsUncertaintyReview)));
+  $('#provider').disabled = sending || Boolean(conversation && (anyBusy() || group.some(needsUncertaintyReview))) || Boolean(dualUI?.record(conversation) || dualUI?.pendingFor());
   $('#provider-hint').textContent = { opencode: 'OpenCode original · apenas gratuitos do fornecedor OpenCode', cursor: 'Cursor original · Grok da tua conta', antigravity: 'agy original · Gemini e Claude da tua conta', claude: 'Claude Code original · sessão claude.ai existente', codex: 'Codex original · sessão ChatGPT existente' }[provider] + (conversation ? ' · podes mudar de cliente entre pedidos' : '');
   $('#provider').dataset.tip = `Cliente: ${$('#provider-hint').textContent}.${conversation ? ' Escolher outro cliente nesta conversa faz uma passagem de contexto no próximo pedido.' : ''}`;
   $('#permissions-hint').textContent = { opencode: 'Autorizações e perguntas na conversa. Planear usa o agente nativo; sem sandbox do sistema operativo comprovada. Sem aprovação automática. Só o fornecedor OpenCode gratuito, sem subagentes nesta versão.', cursor: 'Autorizações, perguntas e planos aparecem na conversa. Planear/Perguntar são modos nativos; isolamento do sistema operativo não comprovado. Sem orientação do turno ativo.', antigravity: 'Políticas nativas do agy. Durante a execução: redirecionar com interrupção confirmada e retoma, ou enviar depois. Não há injeção no mesmo turno nativo.', claude: 'Autorizações na conversa. Durante a execução: orientar na próxima oportunidade, redirecionar agora ou enviar depois. Orientar não aprova ações pendentes.' }[provider] || 'As autorizações adicionais aparecem na conversa.';
@@ -348,6 +372,9 @@ function renderSettings(conversation) {
   const locked = sending || providerState().connection !== 'connected' || anyBusy() || group.some(needsUncertaintyReview) || basis?.status === 'uncertain';
   for (const selector of ['#model', '#effort', '#sandbox', '#context', '#fast']) $(selector).disabled = locked;
   $('#plan-toggle').disabled = locked || !planSupport[provider];
+  // Questions to both models stay read-only; the composer shows the principal's read mode.
+  if (dualUI?.readOnly(conversation) && !dualRead(sandboxValue())) setSandbox('plan');
+  dualUI?.renderComposer(conversation, { locked });
   modelPicker.sync(provider==='opencode');
   if(provider==='opencode' && state?.providers?.opencode?.connection==='connected')queueMicrotask(()=>checkOpenCodeModels(false).catch(()=>{}));
   renderPermissionTips();
@@ -511,7 +538,7 @@ function renderAgentDock() {
 function wireSuggestions() {
   for (const button of document.querySelectorAll('[data-prompt]')) button.addEventListener('click', () => {
     $('#prompt').value = button.dataset.prompt;
-    composerIntent = captureDraftIntent(null, $('#prompt').value, current(), chosenDelivery());
+    composerIntent = captureDraftIntent(null, $('#prompt').value, steerTarget(), chosenDelivery());
     $('#prompt').focus();
     renderSend();
   });
@@ -553,7 +580,7 @@ function pendingHandoff(entry) {
 function renderMessages(conversation) {
   const group = members(conversation);
   const opinionState=opinionUI.viewState();
-  const signature = JSON.stringify([conversation?.id,opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage,turn.diagnostics]), entry.handoffState])]);
+  const signature = JSON.stringify([conversation?.id,dualUI?.signature(conversation),opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage,turn.diagnostics]), entry.handoffState])]);
   if (signature === messageSignature) {opinionUI.refresh();return;}
   messageSignature = signature;
   const view = $('#messages');
@@ -573,7 +600,7 @@ function renderMessages(conversation) {
   let previousOwner = null;
   for (const [index,{ message, owner }] of timeline.entries()) {
     if (message.internal) { view.append(internalMessage(message, owner)); continue; }
-    if (previousOwner && previousOwner !== owner.id) view.append(element('div', 'provider-divider', `Continuação no ${providerName(owner.provider)}`));
+    if (previousOwner && previousOwner !== owner.id && !dualUI?.anyRecord(conversation)) view.append(element('div', 'provider-divider', `Continuação no ${providerName(owner.provider)}`));
     previousOwner = owner.id;
     const article = element('article', `message ${message.role}${message.kind === 'steer' ? ' steering-message' : ''}`);
     article.dataset.provider = owner.provider;
@@ -637,6 +664,7 @@ function renderMessages(conversation) {
     view.append(article);
     for(const source of resultsAt.get(index)||[])opinionUI.mountResults(view,source.owner,source.message,timeline.indexOf(source));
   }
+  dualUI?.organize(view,timeline,conversation);
   opinionUI.organizeTranscript(view,timeline);
   for (const entry of group) if (entry.handoffState) {
     if (previousOwner && previousOwner !== entry.id) view.append(element('div', 'provider-divider', `Continuação no ${providerName(entry.provider)}`));
@@ -937,6 +965,7 @@ function renderApprovals(conversation) {
     } else if (request.method === 'claude/canUseTool') {
       const input = request.params.input || {};
       card.append(element('h3','',`O Claude Code pede autorização: ${request.params.displayName || request.params.toolName}`));
+      if (request.params.toolName === 'ExitPlanMode') card.append(element('p','','Aprovar o plano tira o Claude de Planear até ao fim deste pedido: pode começar a implementar, pedindo autorização para cada alteração. No pedido seguinte volta ao modo escolhido na caixa de mensagens.'));
       if (request.params.description) card.append(element('p','',request.params.description));
       const preview = input.command || input.plan || (input.file_path ? `${input.file_path}\n${input.content ?? input.new_string ?? ''}` : JSON.stringify(input,null,2));
       card.append(element('pre','',String(preview).slice(0,8000)));
@@ -1017,7 +1046,7 @@ function renderFollowupQueue(conversation) {
     const detail=element('details','');detail.append(element('summary','',record.text.slice(0,100)),element('p','',record.text));row.append(detail);
     if(record.error)row.append(element('p','followup-error',record.error));
     if(record.status!=='dispatching'){
-      const cancel=element('button','secondary-button',record.status==='uncertain'?'Dispensar aviso':'Cancelar mensagem');cancel.type='button';cancel.addEventListener('click',async()=>{try{await api(`/api/conversations/${owner.id}/steer`,{cancelId:record.id});state=await api('/api/state');render();}catch(e){toast(e.message);}});row.append(cancel);
+      const cancel=element('button','secondary-button',record.status==='uncertain'?'Dispensar aviso':'Cancelar mensagem');cancel.type='button';cancel.addEventListener('click',async()=>{try{await api(`/api/conversations/${owner.id}/steer`,{cancelId:record.id});accept(await api('/api/state'));render();}catch(e){toast(e.message);}});row.append(cancel);
       if(record.status==='blocked'){
         const edit=element('button','secondary-button','Editar e enviar como novo pedido');edit.type='button';edit.addEventListener('click',async()=>{if($('#prompt').value.trim()){toast('Guarda ou limpa primeiro o texto da caixa de mensagens.');return;}try{await api(`/api/conversations/${owner.id}/steer`,{cancelId:record.id});choose(owner.id,selectedProject,false,true);$('#prompt').value=record.text;composerIntent={kind:'send'};saveComposerDraft();renderSend();$('#prompt').focus();}catch(e){toast(e.message);}});row.append(edit);
       }
@@ -1031,7 +1060,9 @@ function renderSend() {
   const conversation = current();
   const focus = focusConversation(conversation);
   const moving = switching(conversation);
-  const mode = draftMode(composerIntent, conversation);
+  const dual = dualUI?.record(conversation), pendingDual = dualUI?.pendingFor();
+  if (dual && composerIntent?.kind === 'steer') composerIntent = { kind: 'send' };
+  const mode = draftMode(composerIntent, steerTarget(conversation));
   const steering = mode === 'steer';
   const expired = mode === 'expired-steer';
   const pending = conversation?.messages.some(message => message.kind === 'steer' && ['sending','preparing'].includes(message.delivery));
@@ -1045,12 +1076,12 @@ function renderSend() {
   deliverySelect.classList.toggle('hidden',expired);
   renderFollowupQueue(conversation);
   const hasImages=imageAttachments.list().length>0;
-  const openCodeNoImage=providerId()==='opencode'&&!providerState().models?.find(m=>m.id===$('#model').value)?.images;
+  const openCodeNoImage=(providerId()==='opencode'&&!providerState().models?.find(m=>m.id===$('#model').value)?.images)||Boolean(dualUI?.imagesBlocked(conversation));
   imageAttachments.render(busy || sending || openCodeNoImage || providerState().capabilities?.images===false);
-  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
+  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain') || Boolean(dual && dualUI.unavailable(conversation));
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
-  $('#send').textContent = sending ? 'A enviar…' : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
+  $('#send').textContent = sending ? 'A enviar…' : dual && busy ? 'Aguarda o fim da ronda' : dual ? dualSendLabel(dual, { writing: !dualRead(sandboxValue()) }) : pendingDual ? 'Enviar aos dois ↗' : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
   $('#steer-mode').classList.toggle('hidden', !steering && !expired);
   $('#steer-title').textContent = expired ? 'O turno desta orientação já terminou.' : '↳ Mensagem durante a execução';
   $('#steer-description').textContent = expired ? 'O texto foi guardado. Escolhe usá-lo como novo pedido ou limpa-o.' : followupDescriptions[delivery]?.[1]||'A orientação mantém o pedido atual.';
@@ -1059,6 +1090,12 @@ function renderSend() {
   $('#composer').classList.toggle('steering', steering || expired);
   $('#prompt').placeholder = steering ? 'Acrescenta uma orientação para a tarefa em curso…' : 'Descreve o que queres fazer…';
   $('#composer-hint').textContent = openCodeUI.session() ? 'Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ nas configurações.' : nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ nas configurações.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ nas configurações.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
+  if ((dual || pendingDual) && !nativeUI.session() && !claudeUI.session() && !openCodeUI.session()) {
+    const name = key => providerName(dual.members[key].provider);
+    $('#composer-hint').textContent = dual && busy ? (dualUI.running(conversation) ? 'Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.' : workReason(workBlock()) + ' · Este projeto/pasta ou cliente está reservado.')
+      : !dual || dual.target === 'both' ? 'Enter para enviar aos dois · respondem sem ver a resposta um do outro'
+      : `Enter para enviar só ao ${name(dual.target)} · o ${name(dual.target === 'a' ? 'b' : 'a')} recebe esta troca quando voltares a falar com ele`;
+  }
 }
 
 function renderUncertainty(conversation) {
@@ -1081,7 +1118,7 @@ function renderUncertainty(conversation) {
         button.disabled = true;
         try {
           await api(`/api/conversations/${entry.id}/acknowledge-uncertainty`,{expectedRequestId:uncertaintyKey(entry)});
-          state = await api('/api/state'); $('#handoff-mode').value = 'quick'; render();
+          accept(await api('/api/state')); $('#handoff-mode').value = 'quick'; render();
         } catch(error) { button.disabled = false; toast(error.message); }
       });
       panel.append(button);
@@ -1103,7 +1140,7 @@ function renderHandoffRecovery(conversation) {
   view.append(approvalButton('Usar este resumo na próxima passagem',async()=>{
     await api(`/api/conversations/${owner.id}/handoff-recovery`,{expectedRecoveryId:owner.handoffRecovery.id,summary:input.value});
     recoveryDrafts.delete(owner.id);
-    state=await api('/api/state');render();toast('Resumo guardado. Revê e envia o próximo pedido; o original continua no histórico.');
+    accept(await api('/api/state'));render();toast('Resumo guardado. Revê e envia o próximo pedido; o original continua no histórico.');
   }));
 }
 
@@ -1218,14 +1255,15 @@ $('#effort').addEventListener('change',()=> {
 });
 $('#context').addEventListener('change',()=>saveSettingsDraft());
 $('#fast').addEventListener('change',()=>saveSettingsDraft());
-$('#sandbox').addEventListener('change',()=> { renderPermissionTips(); saveSettingsDraft(); renderCacheInfo(current()); });
+$('#sandbox').addEventListener('change',()=> { renderPermissionTips(); saveSettingsDraft(); renderCacheInfo(current()); dualUI?.enforceWrite(!dualRead(sandboxValue())); });
 $('#plan-toggle').addEventListener('click',()=> {
   if (!planSupport[providerId()]) return;
   planMode = !planMode;
   renderPermissionTips(); saveSettingsDraft();
+  dualUI?.enforceWrite(!dualRead(sandboxValue()));
 });
 $('#prompt').addEventListener('input',()=> {
-  composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, current(), chosenDelivery());
+  composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, steerTarget(), chosenDelivery());
   saveComposerDraft();renderSend();
 });
 $('#cwd').addEventListener('input',()=>{saveComposerDraft();renderProjectSuggestion();});
@@ -1333,6 +1371,7 @@ mirrorSelect('Contexto', $('#context'));
 mirrorToggle('Fast', $('#fast'));
 mirrorToggle('Planear', $('#plan-toggle'));
 mirrorToggle('Revisor', $('#review-toggle'));
+mirrorToggle('Dual', $('#dual-toggle'));
 mirrorSelect('Permissões', $('#sandbox'));
 $('#next-request-grid').replaceChildren(...nextRequest.map(entry => entry.row));
 function syncNextRequest() {
@@ -1494,9 +1533,56 @@ $('#new-chat').addEventListener('click',()=>choose(null));
 document.addEventListener('keydown',event=> {
   if (event.key.toLowerCase() === 'n' && !event.ctrlKey && !event.metaKey && !event.altKey && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) { event.preventDefault(); choose(null); }
 });
+// One request to the chosen recipients of a dual conversation; a new conversation starts dual first.
+async function submitDual({ text, draftImages, imageDraftKey, importedContext, conversationAtSubmit, record, pending }) {
+  if (importedContext) { toast('A importação de contexto ainda não segue nas perguntas Dual. Envia-a com o Dual desligado.'); return; }
+  const target = record ? record.target : 'both', keys = target === 'both' ? ['a', 'b'] : [target];
+  // Read now, while the composer still shows these choices.
+  const settings = Object.fromEntries(keys.map(key => {
+    const provider = record ? record.members[key].provider : key === 'a' ? providerId() : pending.provider;
+    const base = record ? dualMemberSettings(record, key) : key === 'a' ? dualMemberSettings(null, 'a') : { model: pending.model, effort: pending.effort };
+    return [key, { ...base, sandbox: keys.length > 1 ? mapSandbox(sandboxValue(), provider) : sandboxValue() }];
+  }));
+  const autoReview = opinionUI.automaticSetting();
+  sending = true;
+  renderSend();
+  renderSettings(current());
+  try {
+    let conversation = conversationAtSubmit;
+    if (!conversation) {
+      conversation = await api('/api/conversations', { provider: providerId(), cwd: $('#cwd').value, ...settings.a, ...(selectedProject ? { projectId: selectedProject, revision: state.projectCatalog.revision } : {}) });
+      const createdIndex = state.conversations.findIndex(entry => entry.id === conversation.id);
+      if (createdIndex < 0) state.conversations.unshift(conversation); else state.conversations[createdIndex] = conversation;
+      saveComposerDraft();
+      for (const store of [composerDrafts, imageAttachments, projectMemory]) store.move(imageDraftKey, draftKey(conversation, selectedProject));
+      opinionUI.moveAutomatic(imageDraftKey, draftKey(conversation, selectedProject));
+      choose(conversation.id, selectedProject, false, true);
+      composerDrafts.records.delete(imageDraftKey);
+      try { record = (await api(`/api/conversations/${conversation.id}/dual`, pending)).dual; }
+      catch (error) { throw new Error(`O Dual não foi ativado: ${error.message} Nada foi enviado.`); }
+      dualUI.consumePending(imageDraftKey);
+    }
+    const attachments = await imageAttachments.upload(draftImages, conversation);
+    const result = await api(`/api/dual/${record.id}/send`, { text, requestId: crypto.randomUUID(), target, settings, ...(attachments.length ? { attachments } : {}), ...(keys.length === 1 ? { autoReview } : {}) });
+    // One recipient failed: the other already has the question, so the draft is not kept; the panel offers a resend.
+    const failed = Object.keys(result.errors || {});
+    if (failed.length) {
+      const sent = keys.filter(key => !failed.includes(key)).map(key => providerName(record.members[key].provider));
+      toast(`Enviado ao ${sent.join(' e ')}. Falhou no ${failed.map(key => `${providerName(record.members[key].provider)}: ${String(result.errors[key]).replace(/[.!?]?$/, '.')}`).join(' ')} Usa «Reenviar» no painel quando a outra resposta terminar.`);
+    }
+    const key = draftKey(conversation, selectedProject);
+    opinionUI.consumeAutomatic(imageDraftKey);
+    opinionUI.consumeAutomatic(key);
+    imageAttachments.consume(draftImages);
+    for (const member of keys) settingDrafts.delete(`${key}:${record.members[member].provider}`);
+    composerDrafts.clear(key, text);
+    if (selected === conversation.id && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
+  } catch (error) { toast(error.message); }
+  finally { sending = false; try { accept(await api('/api/state')); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
+}
 $('#composer').addEventListener('submit',async event=> {
   event.preventDefault();
-  composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, current(), chosenDelivery());
+  composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, steerTarget(), chosenDelivery());
   renderSend();
   if ($('#send').disabled) return;
   const text = $('#prompt').value;
@@ -1504,10 +1590,12 @@ $('#composer').addEventListener('submit',async event=> {
   const imageDraftKey=composerKey();
   const importedContext=projectMemory.pending.get(imageDraftKey);
   const conversationAtSubmit = current();
-  const steeringTarget = draftMode(composerIntent, conversationAtSubmit) === 'steer' ? composerIntent.turnId : null;
+  const steeringTarget = draftMode(composerIntent, steerTarget(conversationAtSubmit)) === 'steer' ? composerIntent.turnId : null;
   const settings = { autoReview:opinionUI.automaticSetting(), model: $('#model').value, effort: $('#effort').value, sandbox: sandboxValue(), ...(providerId()==='cursor' ? {context:$('#context').value || null,fast:$('#fast').checked} : {}) };
   const settingsDraftKey = settingsKey(conversationAtSubmit);
   const handoff = switching(conversationAtSubmit) ? { provider: providerId(), handoffMode: $('#handoff-mode').value, sandbox: sandboxValue() } : {};
+  const dualAtSubmit = dualUI?.record(conversationAtSubmit), dualPending = conversationAtSubmit ? null : dualUI?.pendingFor();
+  if (!steeringTarget && (dualAtSubmit || dualPending)) { await submitDual({ text, draftImages, imageDraftKey, importedContext, conversationAtSubmit, record: dualAtSubmit, pending: dualPending }); return; }
   sending = true;
   renderSend();
   renderSettings(current());
@@ -1543,21 +1631,21 @@ $('#composer').addEventListener('submit',async event=> {
     if (selected === conversation.id && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
     if (result.conversationId && result.conversationId !== conversation.id) {
       switchTargets.delete(conversation.id);
-      if (!state.conversations.some(entry => entry.id === result.conversationId)) state = await api('/api/state');
+      if (!state.conversations.some(entry => entry.id === result.conversationId)) accept(await api('/api/state'));
       choose(result.conversationId,selectedProject,false,true);
     }
   } catch (error) { if(error.code==='REVIEW_UNAVAILABLE'&&error.beforeSend)opinionUI.offerWithoutReview(error);else toast(error.message); }
-  finally { sending = false; try { state = await api('/api/state'); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
+  finally { sending = false; try { accept(await api('/api/state')); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
 });
 $('#stop').addEventListener('click',async()=> {
   $('#stop').disabled = true;
-  try { await api(`/api/conversations/${focusConversation()?.id || selected}/interrupt`,{}); }
+  try { const dual = dualUI?.record(current()); if (dual) await api(`/api/dual/${dual.id}/interrupt`,{}); else await api(`/api/conversations/${focusConversation()?.id || selected}/interrupt`,{}); }
   catch (error) { toast(error.message); }
   finally { $('#stop').disabled = false; }
 });
 $('#reconnect').addEventListener('click',async()=> {
   $('#reconnect').disabled = true;
-  try { state = await api('/api/connect',{provider:providerId()}); render(); }
+  try { accept(await api('/api/connect',{provider:providerId()})); render(); }
   catch (error) { toast(error.message); }
   finally { $('#reconnect').disabled = false; }
 });
@@ -1567,7 +1655,7 @@ function listen() {
   events = new EventSource(`/api/events?token=${encodeURIComponent(token)}`);
   events.addEventListener('state',event=> {
     recoveryDelay = 1000;
-    state = JSON.parse(event.data);
+    accept(JSON.parse(event.data));
     render();
   });
   events.onerror = () => {

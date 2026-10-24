@@ -1,8 +1,18 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 67
+Versão atual: 69
 
 ## Resumo atual
+
+- Correções do Dual após o primeiro ensaio real (entrada 69):
+  - o Claude em Planear volta mesmo a Planear depois de um plano aprovado, e numa pergunta Dual o plano não o tira de Planear;
+  - todos os envios para o grupo seguem «só o principal escreve»;
+  - uma falha parcial é avisada e pode ser reenviada só a quem falhou, sem a resposta do outro dessa ronda;
+  - modelo e imagens são verificados por destinatário antes de enviar (no OpenCode, na pasta da conversa);
+  - desligar abre o principal.
+  - Verificado: 413/413 e 40 verificações em browser isolado. Falta reiniciar a 4318 para ativar o servidor.
+
+- Dual (entrada 68): dois modelos de clientes diferentes na mesma conversa, como conversas normais do grupo; perguntas aos dois em Planear/Só leitura, preparadas antes de qualquer envio, sem um ver a resposta do outro na mesma ronda; na seguinte, cada um recebe o que o outro disse (excerto/resumo assinalado). Seletor Codex · Os dois · Claude, escrita só pelo principal, painéis lado a lado da revisão, Parar por modelo. Snapshots ordenados por revisão. 408/408 testes e 30 verificações em browser isolado; ativado na 4318 (PID 1270676); por validar com clientes reais.
 
 - Revisão em painéis (entrada 67): resposta inicial e revisores lado a lado em painéis de tamanho fixo que seguem o texto em direto (1 revisor: metades; 2: inicial em cima; 3/4: duas filas), expansão em largura total, quatro etapas por baixo e resposta final como mensagem normal. Vistas Painéis/Lista/Recolhido guardadas no browser; decisões pendentes sempre visíveis; sem resposta final, a inicial aparece expandida. Só interface: 394 testes e 13 verificações em browser isolado com clientes simulados (Grafite/Atelier, 1440/1024/390 px). Servido pela 4318 sem reinício; sem revisão real com clientes originais.
 
@@ -655,3 +665,43 @@ Versão atual: 67
 - Quatro etapas por baixo (resposta inicial, revisores, envio ao principal, resposta final) calculadas por `reviewSteps` a partir do ciclo, sem novo estado no backend; distinguem envio dispensado, decisão pendente, falha, suspensão e paragem. Resposta final continua fora da área, como mensagem normal. Vistas Painéis (omissão), Lista e Recolhido guardadas no `localStorage`; uma decisão pendente aparece por cima do texto do revisor e prevalece sobre Recolhido. Sem resposta final no fim do ciclo, a inicial aparece expandida. Pareceres separados continuam enviáveis à mão. Cartões antigos dos ciclos automáticos deixam de duplicar os painéis; envio manual e pareceres avulsos inalterados. Regras CSS `.review-process` sem uso removidas; README atualizado.
 - Verificado: 394/394 testes (sequencial), incluindo duas regressões novas de `reviewSteps`; sintaxe e diff --check. Browser isolado com clientes simulados, sem inferência: 13 verificações (acompanhamento, scroll manual, persistência, conclusão, decisão pendente, falha, «se necessário», Grafite/Atelier a 1440/1024/390 px sem overflow, sem erros JavaScript) e capturas com 1–4 revisores. A 4318 serve `public/` do disco sem cache: hashes servidos iguais ao disco, sem reinício. Provas em `.hydraq/review-panels-2026-10-24/`.
 - Por validar: revisão real com os clientes originais e uso com leitores de ecrã.
+
+### 68 — 2026-10-24 — Claude
+
+- Por pedido do utilizador, modo **Dual** com o plano consolidado com o Codex: duas conversas normais do mesmo grupo (clientes diferentes), coordenadas por `lib/dual.mjs` (participantes, principal, destinatário, rondas e entrega por destinatário, gravados antes de qualquer envio; arranque sem reenvio: entregas por confirmar ficam `uncertain`/`failed` conforme o que a conversa registou). Rotas `POST /api/conversations/:id/dual`, `/api/dual/:id` (destinatário/principal), `/send`, `/interrupt`, `/end`. `#deliver` separado em `#prepare`/`#commit`: numa ronda a dois os dois pedidos são preparados do mesmo ponto de corte antes de qualquer envio, com exclusão adicional do turno do outro nessa ronda. Com os dois só modos de leitura; escrita só ao principal; revisão automática do grupo nunca armada nas rondas a dois; mudança de cliente e orientação durante a execução recusadas com o Dual ativo.
+- Contexto cruzado em `buildHandoff` (modo dual): cabeçalho próprio, pergunta partilhada não repetida, respostas do outro até 24 000 caracteres antes de encurtar e cobertura registada na entrega (`complete`/`excerpt`/`summary`). Consultas MCP e atividade do projeto já excluíam o próprio grupo, pelo que não expõem a resposta da ronda (verificado no código, sem teste dedicado).
+- Interface em `public/dual.js`: botão Dual com diálogo (segundo modelo, principal, desligar), seletor de destinatário na caixa com modelo/raciocínio de cada um, botão de envio que nomeia o destinatário, escrita com os dois passa ao principal, painéis da revisão lado a lado (altura até ao limite, Parar por modelo e os dois, contexto recebido com cobertura), pergunta única por ronda (identidade da ronda, nunca o texto) e marca «Só para…»/«principal · implementação» nos pedidos individuais; sidebar marca Dual. `PanelKit` extraído para uso comum dentro de `public/opinions.js` (comportamento da revisão igual). `dual.js` carregado dinamicamente: um servidor ainda sem a rota serve a interface sem Dual (verificado com o servidor do HEAD).
+- Corrigida corrida pré-existente: a resposta de `/api/state` podia chegar depois de um evento SSE mais recente e repor um estado antigo (pedido terminado aparecia em curso); snapshots passam a ter `stateInstance`/`stateRevision` e o browser ignora os mais antigos. Sidebar traduz «interrupted».
+- Verificado: 408/408 testes em execução sequencial (14 novos: coordenação, independência com resposta rápida, silenciar, escrita, revisão, falha parcial, parar, reinício, cobertura, rotas, interface); browser isolado com clientes simulados, sem inferência: 30 verificações em Grafite/Atelier a 1440 e 1024 px, sem erros JavaScript nem scroll horizontal; 13 verificações da revisão em painéis repetidas sem regressão. O teste de colaboração «entrega falhada ao principal…» falha de forma intermitente também no HEAD sem alterações (3/30), independente desta entrada. Provas em `.hydraq/dual-2026-10-24/`.
+- Ativado na 4318 por pedido do utilizador, livre de pedidos, autorizações, reservas, ciclos, colaboração e terminais: SIGTERM só ao processo confirmado, saída completa do scope em 2 s, novo arranque com o mesmo Node/ambiente/pasta no scope `hydraq-20261024T121415Z.scope`; PID 1183589 → 1270676. Cinco clientes ligados; hashes iguais antes/depois das 36 conversas, pareceres, políticas/ciclos automáticos, colaborações e projetos; `dual` sem registos nem erro. `dual.js`, `app.js`, `opinions.js`, `style.css` e `index.html` servidos iguais ao disco. Página real aberta só para leitura: botão Dual visível, diálogo abre/fecha, nenhum pedido de escrita nem erro JavaScript. Fotografias privadas e resumos em `.hydraq/dual-2026-10-24/restart/`. Sem commit/push.
+- Por validar: ensaio com os clientes reais; dois modelos do mesmo cliente, mensagens durante rondas a dois e importação de contexto nas perguntas Dual ficam para depois.
+
+### 69 — 2026-10-24 — Claude
+
+- **Pedido do utilizador:** corrigir os pontos 1–4 da avaliação do primeiro ensaio real do Dual, em que Codex e Claude reviram o próprio Dual.
+- **Problema confirmado na transcrição nativa do Claude:** depois de aprovado o `ExitPlanMode`, as rondas seguintes correram com `permissionMode: default`, embora a HYDRAQ mostrasse Planear.
+- **`lib/claude.mjs`:**
+  - a sessão guarda o modo real e muda-o para `default` quando um plano é aprovado;
+  - o pedido seguinte com outro modo retira o processo e retoma com `--resume` e o modo certo;
+  - num pedido dual em Planear (aos dois, ou ao modelo que não é principal), o `ExitPlanMode` é recusado sem perguntar, com a indicação de escrever o plano na resposta final;
+  - o cartão de aprovação explica o que aprovar o plano faz.
+- **`lib/providers.mjs`:**
+  - o envio normal recusa escrita a qualquer conversa do grupo que não seja a do principal (pareceres, mensagens em espera, API);
+  - `sendDual` foi dividido em validação por destinatário, reserva, preparação com corte fixo e envio, partilhados com o novo `retryDual`;
+  - o OpenCode atualiza a lista de modelos da pasta da conversa antes de validar, também ao ativar;
+  - as imagens são validadas por modelo, incluindo as que vêm do contexto, antes de qualquer envio;
+  - a falha parcial devolve o erro de cada destinatário.
+- **`lib/dual.mjs`:** `retryDelivery` dá um novo ID ao destinatário falhado e guarda as tentativas anteriores, que contam como a mesma pergunta partilhada.
+- **`lib/http.mjs`:** nova rota `/api/dual/:id/retry`.
+- **Interface:**
+  - `public/dual.js`: falar com os dois ou só com o outro força Planear/Só leitura e escolher escrita passa ao principal; imagens verificadas para cada destinatário; «Reenviar ao …» no painel do falhado, só na última ronda e com os dois livres; desligar abre a conversa do principal; as tentativas juntam-se na mesma ronda.
+  - `public/app.js`: aviso imediato «Enviado ao X. Falhou no Y: …».
+- **README** atualizado: Dual e Claude Code original.
+- **Verificado:**
+  - 413/413 testes em execução sequencial, 5 novos. O teste do Planear falha sem a correção com «modo default», como no ensaio real.
+  - Browser isolado com clientes simulados, sem inferência: 40 verificações em Grafite/Atelier a 1440/1024 px, 10 delas novas, sem erros JavaScript nem scroll horizontal.
+  - Provas em `.hydraq/dual-fixes-2026-10-24/`.
+- **Por fazer/validar:**
+  - reiniciar a 4318: até lá, o servidor ativo mantém o problema do Planear e não tem a rota de reenvio;
+  - ensaio das correções com os clientes reais;
+  - continuam para depois os pontos menores da avaliação: cancelar durante a preparação, 400 rondas, nomes após reativar com outro cliente, conversa solta se a gravação falhar e peso das rondas no estado.

@@ -153,6 +153,7 @@
               <textarea id="prompt" rows="3" placeholder="Descreve o que queres fazer…" maxlength="100000"></textarea>
               <div class="composer-footer">
                 <div class="composer-controls" role="group" aria-label="Opções do próximo pedido">
+                  <div id="dual-targets" class="dual-targets" role="group" aria-label="Destinatário do pedido" hidden></div>
                   <label class="sr-only" for="provider">Cliente</label>
                   <select id="provider" class="pill-select provider-select" data-tip=""><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="claude">Claude Code</option><option value="cursor">Cursor</option><option value="opencode">OpenCode · gratuitos</option></select>
                   <label class="sr-only" for="model">Modelo</label>
@@ -161,6 +162,7 @@
                   <select id="effort" class="pill-select" data-tip="Raciocínio: quanto o modelo pensa antes de responder. Mais raciocínio é mais lento e consome mais utilização."><option>Automático</option></select>
                   <span id="cursor-settings" class="hidden"><span id="context-field"><label class="sr-only" for="context">Contexto</label><select id="context" class="pill-select" data-tip="Janela de contexto do Grok no Cursor."></select></span><label id="fast-field" class="pill-toggle" data-tip="Fast: respostas mais rápidas com maior consumo de utilização do Cursor."><input id="fast" type="checkbox"> Fast</label></span>
                   <button type="button" id="review-toggle" class="pill-toggle" aria-pressed="false" data-tip="Escolher revisor automático">Revisor · Desligado</button>
+                  <button type="button" id="dual-toggle" class="pill-toggle dual-toggle" aria-pressed="false" data-tip="">Dual</button>
                   <span class="control-divider" aria-hidden="true"></span>
                   <button type="button" id="plan-toggle" class="pill-toggle plan-toggle" aria-pressed="false" data-tip="">Planear</button>
                   <label class="sr-only" for="sandbox">Permissões</label>

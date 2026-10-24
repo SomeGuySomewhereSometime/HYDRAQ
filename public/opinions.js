@@ -39,7 +39,9 @@ const glyphPaths={
  down:['M12 5v13','M6.5 12.5 12 18l5.5-5.5'],
 };
 // Inline SVG built through the DOM, so the CSP needs no exceptions.
-const glyph=(name,cls='opinion-glyph')=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [k,v] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',class:cls}))svg.setAttribute(k,v);for(const d of glyphPaths[name]){const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',d);svg.append(path);}return svg;};
+export const glyph=(name,cls='opinion-glyph')=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');for(const [k,v] of Object.entries({viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.7','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',class:cls}))svg.setAttribute(k,v);for(const d of glyphPaths[name]){const path=document.createElementNS(svg.namespaceURI,'path');path.setAttribute('d',d);svg.append(path);}return svg;};
+// The live cursor ends the last line of prose, never inside a code block.
+export const streamingTarget=container=>{let last=container.lastElementChild;if(/^(UL|OL)$/.test(last?.tagName))last=last.lastElementChild;return last&&/^(P|LI|H[1-6]|BLOCKQUOTE)$/.test(last.tagName)?last:container;};
 export const opinionMessageKey=(message,index)=>message.id||`${message.requestId||message.turnId||'legacy'}:${message.role}:${index}`;
 // Presentation only: keep independent alternatives after the original reply.
 export function opinionResultAnchors(timeline){
@@ -91,8 +93,6 @@ export function reviewProgress(cycle, jobs = []) {
  const phase=cycle?.status==='waiting-main'?'Resposta inicial a ser escrita':cycle?.status==='preparing'?'Resposta inicial pronta · a consultar revisores':cycle?.status==='reviewing'?(pending?'Aguarda a tua decisão':'Revisores a analisar'):cycleStates[cycle?.status]||'Consulta concluída';
  return [phase,count].filter(Boolean).join(' · ');
 }
-// The live cursor ends the last line of prose, never inside a code block.
-const streamingTarget=container=>{let last=container.lastElementChild;if(/^(UL|OL)$/.test(last?.tagName))last=last.lastElementChild;return last&&/^(P|LI|H[1-6]|BLOCKQUOTE)$/.test(last.tagName)?last:container;};
 const pendingCycle=status=>['waiting-main','preparing','reviewing','delivering','assessing'].includes(status);
 /** Four fixed stages shown under the review panels: initial answer, reviewers, delivery, final answer. */
 export function reviewSteps(cycle, jobs = [], context = {}) {
@@ -144,10 +144,50 @@ export function opinionDelivery(jobId, merges = []) {
  if (deliveries.some(merge => merge.status === 'failed')) return {state:'separate', label:'Envio falhou · separado do contexto principal'};
  return {state:'separate', label:'Separado · ainda não enviado ao principal'};
 }
+let sequence=0;
+
+/** Panels with their own scroll and expansion memory, so a rebuilt transcript keeps the reader's place. Shared with dual.js. */
+export class PanelKit{
+ constructor({toast}){this.toast=toast;this.scroll=new Map();this.focus=new Map();}
+ button(text,fn,cls='secondary-button'){const b=node('button',cls,text);b.type='button';b.addEventListener('click',fn);return b;}
+ /** A fixed-size column: header, decisions, scrolling text that follows new output, and a footer. */
+ panel({key,client,title,role}){
+  const panel=node('article','review-panel'),head=node('header','review-panel-head'),avatar=node('span','review-panel-avatar',({codex:'C',claude:'C',antigravity:'A',cursor:'G',opencode:'O'})[client]||'·'),titles=node('div','review-panel-titles'),name=node('strong','review-panel-title',title),meta=node('span','review-panel-meta'),status=node('span','review-panel-status'),tools=node('span','review-panel-tools');
+  panel.dataset.role=role;panel.dataset.panelKey=key;if(client)panel.dataset.client=client;avatar.setAttribute('aria-hidden','true');
+  const viewport=node('div','review-panel-viewport'),body=node('div','review-panel-body'),alert=node('div','review-panel-alert'),foot=node('footer','review-panel-foot');
+  body.id='review-panel-'+(++sequence);body.tabIndex=0;body.setAttribute('role','region');body.dataset.panelKey=key;alert.hidden=true;foot.hidden=true;
+  const view={panel,avatar,name,meta,status,tools,alert,body,foot,key,text:''};
+  const jump=this.button('',()=>{this.scroll.set(key,{top:0,follow:true});this.restore(body);},'review-panel-jump');jump.append(glyph('down','review-icon'),node('span','','Mais recente'));jump.dataset.tip='Voltar a acompanhar o texto mais recente';
+  view.copy=this.button('',async()=>{try{await navigator.clipboard.writeText(view.text);view.copy.dataset.copied='true';view.copy.dataset.tip='Copiado';setTimeout(()=>{delete view.copy.dataset.copied;view.copy.dataset.tip='Copiar o texto deste painel';},1600);}catch{this.toast('Não foi possível copiar o texto.');}},'review-panel-tool');
+  view.copy.append(glyph('copy','review-icon'));view.copy.setAttribute('aria-label','Copiar texto · '+title);view.copy.dataset.tip='Copiar o texto deste painel';view.copy.hidden=true;
+  view.expand=this.button('',()=>this.toggleFocus(panel),'review-panel-tool review-panel-expand');view.expand.setAttribute('aria-controls',body.id);
+  tools.append(view.copy,view.expand);titles.append(name,meta);head.append(avatar,titles,status,tools);viewport.append(body,jump);panel.append(head,alert,viewport,foot);
+  body.addEventListener('scroll',()=>{const follow=body.scrollHeight-body.scrollTop-body.clientHeight<28;this.scroll.set(key,{top:body.scrollTop,follow});panel.toggleAttribute('data-behind',panel.dataset.live==='true'&&!follow);},{passive:true});
+  panel.view=view;return view;
+ }
+ /** Live panels follow new text until the reader scrolls up; finished panels open at the top. */
+ restore(body){
+  const panel=body.closest('.review-panel');if(!panel)return;
+  const record=this.scroll.get(body.dataset.panelKey),live=panel.dataset.live==='true',follow=record?record.follow:live;
+  if(follow)body.scrollTop=body.scrollHeight;else if(record)body.scrollTop=record.top;
+  panel.toggleAttribute('data-behind',live&&!follow&&body.scrollHeight>body.clientHeight+28);
+ }
+ status(view,label,tone){view.status.textContent=label;view.status.title=label;view.status.dataset.tone=tone;}
+ placeholder(text){return node('p','review-panel-empty',text);}
+ activity(label,status){const line=node('span','review-panel-activity');line.append(node('i','review-activity-dot'),node('span','',label));line.title=label+(status?' · '+status:'');return line;}
+ // A stage marks itself with data-panel-stage and names its grid, id and default expanded panel.
+ focusKey(stage){const id=stage.panelStageId;return this.focus.has(id)?this.focus.get(id):stage.defaultFocus;}
+ toggleFocus(panel){const stage=panel.closest('[data-panel-stage]');if(!stage)return;const key=panel.dataset.panelKey;this.focus.set(stage.panelStageId,this.focusKey(stage)===key?null:key);this.applyFocus(stage);panel.scrollIntoView({block:'nearest'});panel.view.expand.focus({preventScroll:true});}
+ applyFocus(stage){
+  const key=this.focusKey(stage),panels=[...stage.grid.children],focused=panels.some(p=>p.dataset.panelKey===key);
+  stage.grid.dataset.focus=String(focused);stage.grid.style.setProperty('--rest-span',String(12/Math.max(1,Math.min(4,panels.length-1))));
+  for(const panel of panels){const on=focused&&panel.dataset.panelKey===key,button=panel.view.expand;panel.toggleAttribute('data-expanded',on);button.replaceChildren(glyph(on?'shrink':'expand','review-icon'));button.setAttribute('aria-expanded',String(on));button.setAttribute('aria-label',(on?'Repor tamanho · ':'Expandir · ')+panel.view.name.textContent);button.dataset.tip=on?'Repor o tamanho fixo':'Expandir este painel em largura total';this.restore(panel.view.body);}
+ }
+}
 export class OpinionUI{
  constructor({getState,api,getTarget,getSettings,getKey,refresh,toast,markdown}){Object.assign(this,{getState,api,getTarget,getSettings,getKey,refresh,toast,markdown});this.refreshState=refresh;delete this.refresh;this.selected=new Set();this.deliveryFilters=new Map();this.slots=new Set();this.submissions=new Map();this.quickDrafts=new Map();this.automaticDrafts=new Map();this.archived=new Map();this.archiveRevision=0;this.sequence=0;this.dialog=node('dialog','opinion-dialog');this.dialog.setAttribute('aria-label','Consultar outros modelos');document.body.append(this.dialog);
   this.folds=new Map();this.reviewGroups=new Set();this.seenApprovals=new Set();
-  this.panelScroll=new Map();this.focusPanels=new Map();this.staged={batches:new Set(),cycles:new Set()};
+  this.panels=new PanelKit({toast:message=>this.toast(message)});this.staged={batches:new Set(),cycles:new Set()};
   try{this.reviewView=REVIEW_VIEWS.includes(localStorage.getItem(REVIEW_VIEW_KEY))?localStorage.getItem(REVIEW_VIEW_KEY):'panels';}catch{this.reviewView='panels';}
   this.quick=node('section','opinion-quick');this.quick.id='opinion-quick';this.quick.hidden=true;this.quick.setAttribute('role','dialog');this.quick.setAttribute('aria-modal','false');this.quick.setAttribute('aria-label','Escolha rápida de modelos');document.body.append(this.quick);
   this.quick.addEventListener('pointerenter',()=>clearTimeout(this.hoverClose));this.quick.addEventListener('pointerleave',()=>this.scheduleClose());
@@ -186,7 +226,7 @@ export class OpinionUI{
   const turn=owner.turns?.find(t=>t.requestId===(cycle?.requestId||source.message.requestId)||t.id===source.message.turnId);
   const finalAt=group.finals.at(-1),finalEntry=finalAt===undefined?null:timeline[finalAt],finalTurn=finalEntry?.owner.turns?.find(t=>t.requestId===finalEntry.message.requestId||t.id===finalEntry.message.turnId);
   const writing=cycle?.status==='waiting-main'||['starting','running','waiting'].includes(turn?.status);
-  const stage=node('section','review-stage');stage.dataset.reviewGroup=group.id;stage.dataset.client=owner.provider;stage.reviewGroup=group;stage.setAttribute('aria-label','Resposta inicial e revisão');
+  const stage=node('section','review-stage');stage.dataset.reviewGroup=group.id;stage.dataset.client=owner.provider;stage.reviewGroup=group;stage.dataset.panelStage='review';stage.panelStageId=group.id;stage.setAttribute('aria-label','Resposta inicial e revisão');
   stage.context={initial:turn?.status||null,final:{exists:Boolean(finalEntry),confirmed:finalTurn?.status==='completed',streaming:Boolean(finalEntry?.message.streaming)||['starting','running','waiting'].includes(finalTurn?.status)}};
   // Once the cycle ends without a final answer, the initial answer is the answer: show it whole.
   stage.defaultFocus=cycle&&!pendingCycle(cycle.status)&&!finalEntry?group.id+':initial':null;
@@ -233,31 +273,12 @@ export class OpinionUI{
   if(final){const {message}=finalEntry,confirmed=finalTurn?.status==='completed';final.classList.add('review-final');const label=node('div','review-final-label',confirmed?'Resposta final':message.streaming||['running','starting','waiting'].includes(finalTurn?.status)?'A preparar resposta final':'Resposta da avaliação · parcial');if(confirmed)label.append(node('span','review-final-hint','· após os pareceres recebidos'));for(const provider of new Set(reviewers.map(j=>j.provider))){const badge=node('span','opinion-provider review-provider-badge',names[provider]);badge.dataset.provider=provider;badge.title='Parecer recebido deste cliente; a resposta indica quais as sugestões aceites.';label.append(badge);}final.prepend(label);}
   this.reviewGroups.add(stage);this.updateGroup(stage);
  }
- /** A fixed-size column: header, decisions, scrolling text that follows new output, and a footer. */
- panel({key,client,title,role}){
-  const panel=node('article','review-panel'),head=node('header','review-panel-head'),avatar=node('span','review-panel-avatar',({codex:'C',claude:'C',antigravity:'A',cursor:'G',opencode:'O'})[client]||'·'),titles=node('div','review-panel-titles'),name=node('strong','review-panel-title',title),meta=node('span','review-panel-meta'),status=node('span','review-panel-status'),tools=node('span','review-panel-tools');
-  panel.dataset.role=role;panel.dataset.panelKey=key;if(client)panel.dataset.client=client;avatar.setAttribute('aria-hidden','true');
-  const viewport=node('div','review-panel-viewport'),body=node('div','review-panel-body'),alert=node('div','review-panel-alert'),foot=node('footer','review-panel-foot');
-  body.id='review-panel-'+(++this.sequence);body.tabIndex=0;body.setAttribute('role','region');body.dataset.panelKey=key;alert.hidden=true;foot.hidden=true;
-  const view={panel,avatar,name,meta,status,tools,alert,body,foot,key,text:''};
-  const jump=this.button('',()=>{this.panelScroll.set(key,{top:0,follow:true});this.restorePanel(body);},'review-panel-jump');jump.append(glyph('down','review-icon'),node('span','','Mais recente'));jump.dataset.tip='Voltar a acompanhar o texto mais recente';
-  view.copy=this.button('',async()=>{try{await navigator.clipboard.writeText(view.text);view.copy.dataset.copied='true';view.copy.dataset.tip='Copiado';setTimeout(()=>{delete view.copy.dataset.copied;view.copy.dataset.tip='Copiar o texto deste painel';},1600);}catch{this.toast('Não foi possível copiar o texto.');}},'review-panel-tool');
-  view.copy.append(glyph('copy','review-icon'));view.copy.setAttribute('aria-label','Copiar texto · '+title);view.copy.dataset.tip='Copiar o texto deste painel';view.copy.hidden=true;
-  view.expand=this.button('',()=>this.toggleFocus(panel),'review-panel-tool review-panel-expand');view.expand.setAttribute('aria-controls',body.id);
-  tools.append(view.copy,view.expand);titles.append(name,meta);head.append(avatar,titles,status,tools);viewport.append(body,jump);panel.append(head,alert,viewport,foot);
-  body.addEventListener('scroll',()=>{const follow=body.scrollHeight-body.scrollTop-body.clientHeight<28;this.panelScroll.set(key,{top:body.scrollTop,follow});panel.toggleAttribute('data-behind',panel.dataset.live==='true'&&!follow);},{passive:true});
-  panel.view=view;return view;
- }
- /** Live panels follow new text until the reader scrolls up; finished panels open at the top. */
- restorePanel(body){
-  const panel=body.closest('.review-panel');if(!panel)return;
-  const record=this.panelScroll.get(body.dataset.panelKey),live=panel.dataset.live==='true',follow=record?record.follow:live;
-  if(follow)body.scrollTop=body.scrollHeight;else if(record)body.scrollTop=record.top;
-  panel.toggleAttribute('data-behind',live&&!follow&&body.scrollHeight>body.clientHeight+28);
- }
- statusPill(view,label,tone){view.status.textContent=label;view.status.title=label;view.status.dataset.tone=tone;}
- placeholder(text){return node('p','review-panel-empty',text);}
- activityLine(label,status){const line=node('span','review-panel-activity');line.append(node('i','review-activity-dot'),node('span','',label));line.title=label+(status?' · '+status:'');return line;}
+ // Panels are shared with the dual conversation; the review keeps its own scroll and focus memory.
+ panel(options){return this.panels.panel(options);}
+ restorePanel(body){this.panels.restore(body);}
+ statusPill(view,label,tone){this.panels.status(view,label,tone);}
+ placeholder(text){return this.panels.placeholder(text);}
+ activityLine(label,status){return this.panels.activity(label,status);}
  modelName(provider,id){return this.getState()?.providers?.[provider]?.models?.find(m=>m.id===id)?.name||id||'';}
  viewSwitch(){
   const group=node('div','review-view-switch');group.setAttribute('role','group');group.setAttribute('aria-label','Apresentação da revisão');
@@ -273,13 +294,8 @@ export class OpinionUI{
   for(const option of stage.querySelectorAll('.review-view-option'))option.setAttribute('aria-pressed',String(option.dataset.view===view));
   for(const panel of stage.grid.children)this.restorePanel(panel.view.body);
  }
- focusKey(stage){const id=stage.reviewGroup.id;return this.focusPanels.has(id)?this.focusPanels.get(id):stage.defaultFocus;}
- toggleFocus(panel){const stage=panel.closest('.review-stage');if(!stage)return;const key=panel.dataset.panelKey;this.focusPanels.set(stage.reviewGroup.id,this.focusKey(stage)===key?null:key);this.applyFocus(stage);panel.scrollIntoView({block:'nearest'});panel.view.expand.focus({preventScroll:true});}
- applyFocus(stage){
-  const key=this.focusKey(stage),panels=[...stage.grid.children],focused=panels.some(p=>p.dataset.panelKey===key);
-  stage.grid.dataset.focus=String(focused);stage.grid.style.setProperty('--rest-span',String(12/Math.max(1,Math.min(4,panels.length-1))));
-  for(const panel of panels){const on=focused&&panel.dataset.panelKey===key,button=panel.view.expand;panel.toggleAttribute('data-expanded',on);button.replaceChildren(glyph(on?'shrink':'expand','review-icon'));button.setAttribute('aria-expanded',String(on));button.setAttribute('aria-label',(on?'Repor tamanho · ':'Expandir · ')+panel.view.name.textContent);button.dataset.tip=on?'Repor o tamanho fixo':'Expandir este painel em largura total';this.restorePanel(panel.view.body);}
- }
+ toggleFocus(panel){this.panels.toggleFocus(panel);}
+ applyFocus(stage){this.panels.applyFocus(stage);}
  step(step,index){
   const item=node('li','review-step'),mark=node('span','review-step-mark'),text=node('span','review-step-text'),icon={done:'check',failed:'cross',warn:'alert',skipped:'dash',stopped:'stop'}[step.state];
   item.dataset.state=step.state;item.dataset.step=step.key;mark.setAttribute('aria-hidden','true');if(icon)mark.append(glyph(icon,'review-icon'));else if(step.state==='pending')mark.textContent=String(index+1);

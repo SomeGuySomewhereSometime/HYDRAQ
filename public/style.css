@@ -4202,3 +4202,51 @@ body[data-theme="atelier"] .review-step[data-state="active"] { background:color-
 @media (prefers-reduced-motion: reduce) {
   .review-panel-status::before, .review-step-mark::after, .review-activity-dot { animation:none; }
 }
+
+/* --- Dual: two independent answers side by side; the composer names who receives the next request --- */
+.dual-targets { display:inline-flex; align-items:stretch; gap:2px; height:30px; min-width:0; padding:2px; border:1px solid var(--border-subtle); border-radius:9px; background:var(--bg-input,var(--bg-app)); }
+.dual-targets[hidden] { display:none; }
+body .dual-target { display:inline-flex; align-items:center; gap:6px; min-width:0; max-width:230px; height:100%; padding:0 9px; border:0; border-radius:7px; background:transparent; box-shadow:none; color:var(--text-secondary); font-size:12px; white-space:nowrap; cursor:pointer; }
+body .dual-target:hover:not(:disabled) { background:var(--bg-hover); color:var(--text-primary); }
+body .dual-target[aria-pressed="true"] { background:var(--bg-raised); box-shadow:0 1px 2px #0006, inset 0 0 0 1px color-mix(in srgb,var(--accent) 45%,var(--border-subtle)); color:var(--text-primary); }
+body .dual-target:disabled { opacity:.5; cursor:default; }
+.dual-target strong { font-weight:600; }
+.dual-target[data-client] strong { color:var(--accent); }
+.dual-target small { min-width:0; overflow:hidden; color:var(--text-secondary); font-size:11px; text-overflow:ellipsis; }
+.dual-principal { color:var(--warning,#e8c27a); font-size:11px; line-height:1; }
+/* Asking both: each model keeps its own settings, shown on its button; the shared control is the read-only mode. */
+#composer[data-dual] #provider, #composer[data-dual="both"] :is(#model, #effort, #cursor-settings, .model-picker-trigger) { display:none; }
+#composer[data-dual] .dual-toggle { color:var(--accent); }
+
+.dual-stage .review-grid { --panel-h:clamp(300px,56vh,620px); }
+/* Both answers share the row: short ones grow with their text, long ones stop at the limit and scroll. */
+.dual-stage .review-panel-body { height:auto; min-height:120px; max-height:var(--panel-h); }
+.dual-stage .review-grid[data-focus="true"] > .review-panel[data-expanded] .review-panel-body { max-height:none; }
+.dual-stage .review-panel-empty { min-height:96px; }
+#composer[data-dual] .atelier-agent-dock { display:none; }
+.dual-stage .review-panel-title { color:var(--accent); }
+body[data-theme] .review-panel-body > details.handoff-context { margin:14px 0 0; padding-top:10px; border-top:1px dashed var(--border-subtle); font-size:11px; }
+body[data-theme] .review-panel-body > details.handoff-context pre { max-height:260px; overflow:auto; }
+.dual-error { margin:10px 0 0; color:var(--danger,#ef9a92); font-size:11.5px; }
+body .review-panel-stop { flex:none; min-height:24px; margin-inline-start:auto; padding:1px 9px; border:1px solid var(--border-subtle); border-radius:7px; background:transparent; box-shadow:none; color:var(--text-secondary); font-size:11px; }
+body .review-panel-stop:hover:not(:disabled) { border-color:color-mix(in srgb,var(--danger,#ef9a92) 50%,var(--border-subtle)); color:var(--danger,#ef9a92); }
+.dual-route { flex:none; padding:1px 8px; border:1px solid color-mix(in srgb,var(--accent) 35%,var(--border-subtle)); border-radius:20px; color:var(--accent); font-size:10.5px; font-weight:500; white-space:nowrap; }
+.dual-route[data-write] { border-color:color-mix(in srgb,var(--warning,#e8c27a) 45%,transparent); color:var(--warning,#e8c27a); }
+
+.dual-dialog { width:min(520px,calc(100vw - 32px)); }
+.dual-dialog .opinion-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:16px; }
+.dual-choice { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:0 10px; }
+.dual-choice > .dual-summary { grid-column:1 / -1; }
+.dual-summary { margin:12px 0 4px; color:var(--text-secondary); font-size:12.5px; }
+.dual-summary strong { color:var(--text-primary); }
+.dual-principal-choice { display:flex; flex-wrap:wrap; gap:6px 16px; margin:10px 0 0; padding:10px 12px; border:1px solid var(--border-subtle); border-radius:9px; }
+.dual-principal-choice legend { padding:0 4px; color:var(--text-secondary); font-size:12px; }
+.dual-principal-option { display:inline-flex; align-items:center; gap:6px; color:var(--text-primary); font-size:13px; cursor:pointer; }
+.dual-principal-option input { accent-color:var(--accent); }
+@container review-stage (max-width: 640px) {
+  .dual-stage .review-grid { --panel-h:clamp(240px,46vh,480px); }
+}
+@media (max-width: 640px) {
+  .dual-choice { grid-template-columns:1fr; }
+  body .dual-target small { display:none; }
+}

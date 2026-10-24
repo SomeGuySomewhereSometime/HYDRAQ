@@ -40,7 +40,7 @@ export class ProjectUI {
   }
   render(selection){
     this.selection=selection||{};const state=this.getState(),catalog=state.projectCatalog||{projects:[],groups:{},revision:0},groups=conversationGroups(state),query=this.search.value.trim().toLocaleLowerCase('pt');
-    const signature=JSON.stringify([catalog,groups.map(g=>[g.id,g.title,g.latest.updatedAt,g.members.map(c=>c.status)]),this.selection,query,this.archived]);
+    const signature=JSON.stringify([catalog,groups.map(g=>[g.id,g.title,g.latest.updatedAt,g.members.map(c=>c.status)]),(this.getState().dual?.records||[]).filter(r=>r.active).map(r=>[r.groupId,r.members.a.provider,r.members.b.provider]),this.selection,query,this.archived]);
     if(signature===this.signature)return;this.signature=signature;
     const list=document.querySelector('#conversation-list');list.replaceChildren();document.querySelector('#conversation-count').textContent=String(groups.length).padStart(2,'0');
     const matches=g=>g.title.toLocaleLowerCase('pt').includes(query);
@@ -75,7 +75,8 @@ export class ProjectUI {
     const row=el('div','conversation-row'),button=this.button('',()=>this.choose(group.latest.id),`conversation-link${this.selection.group===group.id?' active':''}`);
     button.title=group.title;button.append(el('strong','',group.title));
     const status=group.members.find(c=>['starting','running','waiting'].includes(c.status))?.status||group.latest.status;
-    button.append(el('small','',`${[...new Set([...group.members].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(c=>names[c.provider]))].join(' → ')} · ${{completed:'Concluída',running:'A trabalhar',waiting:'Decisão pendente',idle:'Pronta',failed:'Falhou',uncertain:'Por confirmar'}[status]||status}`));
+    const dual=this.getState().dual?.records?.find(r=>r.groupId===group.id&&r.active);
+    button.append(el('small','',`${dual?`Dual · ${names[dual.members.a.provider]} + ${names[dual.members.b.provider]}`:[...new Set([...group.members].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(c=>names[c.provider]))].join(' → ')} · ${{completed:'Concluída',running:'A trabalhar',waiting:'Decisão pendente',idle:'Pronta',failed:'Falhou',interrupted:'Interrompida',uncertain:'Por confirmar'}[status]||status}`));
     const menu=this.button('⋯',()=>this.editGroup(group),'conversation-menu');menu.setAttribute('aria-label',`Organizar ${group.title}`);menu.disabled=Boolean(this.getState().projectCatalog?.error);row.append(button,menu);return row;
   }
   renderOverview(){

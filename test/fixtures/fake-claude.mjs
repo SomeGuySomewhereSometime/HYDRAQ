@@ -14,7 +14,8 @@ const resume = option('--resume');
 const sessionId = resume || option('--session-id');
 const stateFile = `.fake-claude-${sessionId}`;
 if (resume && !existsSync(stateFile)) { process.stderr.write(`No conversation found with session ID: ${resume}`); process.exit(1); }
-const model = option('--model'), effort = option('--effort'), mode = option('--permission-mode');
+const model = option('--model'), effort = option('--effort');
+let mode = option('--permission-mode');
 const resolved = { haiku: 'claude-haiku-5-5', sonnet: 'claude-sonnet-5-5', opus: 'claude-opus-5-5' }[model] || model;
 let count = 0;
 try { count = JSON.parse(readFileSync(stateFile, 'utf8')).count; } catch {}
@@ -53,6 +54,9 @@ createInterface({ input: process.stdin }).on('line', line => {
       emit({ type: 'user', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: pending.tool, is_error: !allowed, content: text }] } });
       say(`msg-${count}-b`, text); result(text); pending = null; return;
     }
+    // Like Claude Code: an approved plan leaves plan mode for the rest of the session.
+    if (pending.plan && allowed) mode = 'default';
+    if (pending.plan) process.env.FAKE_CLAUDE_PLAN_LOG && writeFileSync(process.env.FAKE_CLAUDE_PLAN_LOG, JSON.stringify(input.response.response));
     emit({ type: 'user', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: pending.tool, is_error: !allowed, content: allowed ? 'File created' : 'Permission denied by host' }] } });
     say(`msg-${count}-b`, allowed ? 'Permitido.' : 'Recusado.');
     if(deferredSteer){const steer=deferredSteer;deferredSteer=null;emit({type:'user',uuid:steer.uuid,session_id:sessionId,message:steer.message});say('deferred-steer',steer.message.content);result(steer.message.content,{user_message_uuids:[currentUuid,steer.uuid]});}else result(allowed ? 'Permitido.' : 'Recusado.');
@@ -107,6 +111,13 @@ createInterface({ input: process.stdin }).on('line', line => {
     emit({ type: 'assistant', session_id: sessionId, parent_tool_use_id: null, message: { id: `msg-${count}`, model: resolved, content: [{ type: 'tool_use', id: tool, name: 'Write', input: { file_path: 'ok.txt', content: 'OK' } }] } });
     pending = { request: `perm-${count}`, tool };
     emit({ type: 'control_request', request_id: pending.request, request: { subtype: 'can_use_tool', tool_name: 'Write', display_name: 'Write', input: { file_path: 'ok.txt', content: 'OK' }, description: 'ok.txt', tool_use_id: tool } });
+    return;
+  }
+  if (text === 'plan-approval') {
+    const tool = `plan_${count}`, plan = '# Plano\n1. Ler o código.';
+    emit({ type: 'assistant', session_id: sessionId, parent_tool_use_id: null, message: { id: `msg-${count}`, model: resolved, content: [{ type: 'tool_use', id: tool, name: 'ExitPlanMode', input: { plan } }] } });
+    pending = { request: `plan-${count}`, tool, plan: true };
+    emit({ type: 'control_request', request_id: pending.request, request: { subtype: 'can_use_tool', tool_name: 'ExitPlanMode', display_name: 'ExitPlanMode', input: { plan }, tool_use_id: tool } });
     return;
   }
   if (text === 'bash') {

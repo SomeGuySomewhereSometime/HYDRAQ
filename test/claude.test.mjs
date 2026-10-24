@@ -92,6 +92,31 @@ test('autorizações nativas passam pela interface e recusas ficam registadas',a
   await assert.rejects(client.steer(),/fila/);
 });
 
+test('depois de aprovar um plano, o pedido seguinte volta a Planear; num pedido dual o plano não sai de Planear',async t=> {
+  const {client,directory}=await setup(t,{FAKE_CLAUDE_PLAN_LOG:path.join(os.tmpdir(),`hydraq-plan-${process.pid}-${Date.now()}.json`)});
+  const planLog=client.env.FAKE_CLAUDE_PLAN_LOG;t.after(()=>rm(planLog,{force:true}));
+  const hub=new Providers({clients:{claude:client}});
+  await hub.connect('claude');
+  const c=await hub.create({provider:'claude',cwd:directory,model:'haiku',effort:'low',sandbox:'plan'});
+  const chat=client.conversation(c.id),answer=id=>chat.messages.findLast(m=>m.role==='assistant'&&m.requestId===id)?.text||'';
+  const pidOf=id=>/processo (\d+)/.exec(answer(id))?.[1];
+  await hub.send(c.id,'olá','p0',{sandbox:'plan'});await waitFor(()=>chat.status==='completed'&&answer('p0'));
+  assert.match(answer('p0'),/modo plan/);
+  await hub.send(c.id,'plan-approval','p1',{sandbox:'plan'});await waitFor(()=>chat.status==='waiting');
+  const [approval]=hub.snapshot().approvals;assert.equal(approval.params.toolName,'ExitPlanMode');
+  hub.respond(approval.id,{decision:'accept'});await waitFor(()=>chat.status==='completed');
+  // Claude Code left plan mode; HYDRAQ starts a new process so the request labelled Planear really is.
+  await hub.send(c.id,'olá','p2',{sandbox:'plan'});await waitFor(()=>chat.status==='completed'&&answer('p2'));
+  assert.match(answer('p2'),/modo plan/);assert.notEqual(pidOf('p2'),pidOf('p0'));
+  await client.send(c.id,'plan-approval','p3',{model:'haiku',effort:'low',sandbox:'plan',planOnly:true});await waitFor(()=>chat.status==='completed'&&answer('p3'));
+  assert.equal(hub.snapshot().approvals.length,0);
+  const response=JSON.parse(await readFile(planLog,'utf8'));
+  assert.equal(response.behavior,'deny');assert.match(response.message,/continua em Planear/);
+  assert.equal(chat.items.findLast(i=>i.tool==='ExitPlanMode'||i.title==='ExitPlanMode'||i.id?.startsWith('plan_'))?.status,'completed');
+  await hub.send(c.id,'olá','p4',{sandbox:'plan'});await waitFor(()=>chat.status==='completed'&&answer('p4'));
+  assert.match(answer('p4'),/modo plan/);assert.equal(pidOf('p4'),pidOf('p2'));
+});
+
 test('interrupção termina o turno sem matar a sessão; queda fica incerta e não reenvia',async t=> {
   const {client,directory}=await setup(t);
   await client.connect();
