@@ -5,10 +5,11 @@ export const PANEL_LIMITS = {
   inspector: { min: 260, max: 600, initial: 340 },
 };
 export const MIN_CONVERSATION = 460;
-export const THEMES = ['classic', 'atelier'];
+export const THEMES = ['classic', 'atelier', 'linho'];
 export const APPEARANCES = [
   { theme: 'classic', swatch: 'grafite', name: 'Grafite', description: 'Escuro neutro e sóbrio, com a cor de cada cliente.', meta: '#0e0f12' },
   { theme: 'atelier', swatch: 'atelier', name: 'Atelier', description: 'Ilhas de vidro sobre obsidiana, com barra de clientes.', meta: '#08090d' },
+  { theme: 'linho', swatch: 'linho', name: 'Linho', description: 'Papel quente, verde profundo e espaço para pensar.', meta: '#f6f4ed' },
 ];
 export function appearanceOf(theme) {
   return APPEARANCES.find(entry => entry.theme === theme) || APPEARANCES[0];

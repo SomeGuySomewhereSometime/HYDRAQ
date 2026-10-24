@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 69
+Versão atual: 70
 
 ## Resumo atual
+
+- Linho (entrada 70): terceira aparência, clara e editorial, com papel quente, navegação verde profundo e detalhes cobre; Grafite/Atelier e preferência atual preservados. UI UX Pro Max aplicada; contraste dos nove tons, móvel/paisagem, leitura 22 px, menus, Dual e revisão verificados em browser isolado. Verificação final: 413/413 testes, 49 verificações visuais/interativas e 40 do Dual. Disponível na 4318 ao recarregar, sem reinício.
 
 - Correções do Dual após o primeiro ensaio real (entrada 69):
   - o Claude em Planear volta mesmo a Planear depois de um plano aprovado, e numa pergunta Dual o plano não o tira de Planear;
@@ -711,3 +713,12 @@ Versão atual: 69
 - **Por fazer/validar:**
   - ensaio das correções com os clientes reais;
   - continuam para depois os pontos menores da avaliação: cancelar durante a preparação, 400 rondas, nomes após reativar com outro cliente, conversa solta se a gravação falhar e peso das rondas no estado.
+
+
+### 70 — 2026-10-24 — Codex
+
+- Por pedido do utilizador, perfil **Linho** acrescentado ao menu Aparência, configurações e paleta. Direção própria: fundo de papel quente, navegação verde profundo, títulos serifados locais, detalhes cobre e nove cores de clientes com contraste de texto. Grafite/Atelier, aparência por omissão e preferências guardadas conservados; nenhuma mudança em clientes, modelos ou envio de pedidos.
+- UI UX Pro Max consultada a partir do repositório original (cópia temporária, sem instalação global). Pesquisa de produtividade SaaS/flat UI usada como orientação; adaptação editorial ao produto, sem fontes remotas ou novas dependências. CSS acrescentado apenas com seletores Linho e a sua nova amostra no menu; bytes anteriores do CSS preservados. Conversas/código/tabelas, caixa de escrita, Dual/revisão, atividade/configurações, diálogos e paleta recebem o perfil. Ajustes específicos para ecrãs pequenos/baixos, foco, movimento reduzido e cores forçadas.
+- Verificação final: **413/413** testes sequenciais, sintaxe e diff --check. Uma execução inicial teve 412/413; a causa dessa falha não foi isolada, e a repetição completa passou. Teste de preferências atualizado; `validation/linho-ui.mjs` reproduz **49 verificações** em servidor isolado com clientes simulados a 1440/1024/768/390/375 px e paisagem 844×390, incluindo persistência, contraste ≥4,5:1 dos textos/tons/paleta, foco, leitura 22 px e geometria/estilos de Grafite/Atelier iguais com/sem o novo CSS (excetuada a amostra Linho). Sem erros JavaScript/console.
+- Ensaio Dual existente: **40/40** com Linho a 1440 px; revisão com 1/2/4 revisores a 390/1440/1024 px, fases e vistas capturadas sem erros JavaScript e inspecionadas visualmente. Provas em `.hydraq/linho-2026-10-24/`. Nenhuma inferência nem alteração às conversas reais. Sem ensaio com leitor de ecrã/dispositivo físico.
+- 4318 serve `style.css`/`layout.js` iguais ao disco (hash), sem reiniciar o serviço ou mudar a preferência do browser do utilizador. Para usar: recarregar e escolher **Aparência → Linho**. Sem commit/push.
