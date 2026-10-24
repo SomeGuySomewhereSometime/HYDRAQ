@@ -10,7 +10,8 @@ Versão atual: 69
   - uma falha parcial é avisada e pode ser reenviada só a quem falhou, sem a resposta do outro dessa ronda;
   - modelo e imagens são verificados por destinatário antes de enviar (no OpenCode, na pasta da conversa);
   - desligar abre o principal.
-  - Verificado: 413/413 e 40 verificações em browser isolado. Falta reiniciar a 4318 para ativar o servidor.
+  - Verificado: 413/413 e 40 verificações em browser isolado.
+  - Commit 7a501db, ativado na 4318 (PID 1284193). Por validar com clientes reais.
 
 - Dual (entrada 68): dois modelos de clientes diferentes na mesma conversa, como conversas normais do grupo; perguntas aos dois em Planear/Só leitura, preparadas antes de qualquer envio, sem um ver a resposta do outro na mesma ronda; na seguinte, cada um recebe o que o outro disse (excerto/resumo assinalado). Seletor Codex · Os dois · Claude, escrita só pelo principal, painéis lado a lado da revisão, Parar por modelo. Snapshots ordenados por revisão. 408/408 testes e 30 verificações em browser isolado; ativado na 4318 (PID 1270676); por validar com clientes reais.
 
@@ -701,7 +702,12 @@ Versão atual: 69
   - 413/413 testes em execução sequencial, 5 novos. O teste do Planear falha sem a correção com «modo default», como no ensaio real.
   - Browser isolado com clientes simulados, sem inferência: 40 verificações em Grafite/Atelier a 1440/1024 px, 10 delas novas, sem erros JavaScript nem scroll horizontal.
   - Provas em `.hydraq/dual-fixes-2026-10-24/`.
+- **Ativação:** commit `7a501db` (entradas 68–69); 4318 reiniciada por pedido do utilizador.
+  - Antes: instância livre (40 conversas; sem pedidos, autorizações, reservas, ciclos, colaboração, terminais nem entregas Dual em curso).
+  - SIGTERM só ao processo confirmado, saída completa em 2 s; mesmo Node/ambiente/pasta no scope `hydraq-20261024T130504Z.scope`; PID 1270676 → 1284193.
+  - Cinco clientes ligados; hashes iguais antes/depois das conversas, pareceres, revisões automáticas, colaborações, projetos e registos Dual.
+  - Ficheiros da interface servidos iguais ao disco. A rota de reenvio responde com a validação nova, sem efeitos. Página real só em leitura, sem pedidos de escrita nem erros JavaScript.
+  - Provas em `.hydraq/dual-fixes-2026-10-24/restart/`.
 - **Por fazer/validar:**
-  - reiniciar a 4318: até lá, o servidor ativo mantém o problema do Planear e não tem a rota de reenvio;
   - ensaio das correções com os clientes reais;
   - continuam para depois os pontos menores da avaliação: cancelar durante a preparação, 400 rondas, nomes após reativar com outro cliente, conversa solta se a gravação falhar e peso das rondas no estado.
