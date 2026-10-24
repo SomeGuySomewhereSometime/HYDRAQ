@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {dualSendLabel,dualRounds,dualPanelState,activeDual,isReadMode,DualUI} from '../public/dual.js';
+import {dualSendLabel,dualRounds,roundMembers,dualPanelState,activeDual,isReadMode,DualUI} from '../public/dual.js';
 
 const record={id:'d',groupId:'g',active:true,principal:'a',target:'both',members:{a:{provider:'codex',conversationId:'A'},b:{provider:'claude',conversationId:'B'}},rounds:[]};
 
@@ -61,3 +61,23 @@ test('ronda reenviada junta as tentativas; só o principal escreve; imagens para
  ui.memberSettings=()=>({model:'com'});ui.getModels=()=>[{id:'com',images:true}];assert.equal(DualUI.prototype.imagesBlocked.call(ui,{}),false);
 });
 
+
+test('a troca de cliente não muda os nomes das rondas anteriores; o campo de cliente substitui quem está a falar',()=>{
+ const record={active:true,principal:'a',target:'b',members:{a:{provider:'codex',conversationId:'A'},b:{provider:'opencode',conversationId:'O'}},
+  rounds:[{id:'r',requestId:'q',targets:['a'],members:{a:{provider:'codex',conversationId:'A'},b:{provider:'claude',conversationId:'C'}},deliveries:{a:{provider:'codex',conversationId:'A',requestId:'q:a',status:'sent'}}},{id:'old',requestId:'p',targets:['a'],deliveries:{}}]};
+ assert.equal(roundMembers(record,record.rounds[0]).b.provider,'claude');
+ // Rounds saved before this record existed fall back on the current pair, as before.
+ assert.equal(roundMembers(record,record.rounds[1]).b.provider,'opencode');
+ const calls=[],toasts=[],ui={record:()=>record,getCurrent:()=>({id:'A'}),pendingFor:()=>null,toast:m=>toasts.push(m),offered:id=>id!=='opencode-off',editMember:(key,provider)=>calls.push([key,provider]),configure:()=>calls.push(['configure'])};
+ DualUI.prototype.chooseClient.call(ui,'opencode');assert.deepEqual(calls,[]);
+ DualUI.prototype.chooseClient.call(ui,'codex');assert.match(toasts[0],/Codex já participa/);
+ DualUI.prototype.chooseClient.call(ui,'antigravity');assert.deepEqual(calls,[['b','antigravity']]);
+ record.target='both';DualUI.prototype.chooseClient.call(ui,'cursor');assert.deepEqual(calls.at(-1),['a','cursor']);
+ ui.offered=()=>false;DualUI.prototype.chooseClient.call(ui,'antigravity');assert.match(toasts.at(-1),/Liga primeiro o Antigravity/);assert.equal(calls.length,2);ui.offered=()=>true;
+ // In the Atelier bar a participant opens its own settings; other clients are not on show.
+ assert.equal(DualUI.prototype.dockClick.call(ui,'opencode'),true);assert.deepEqual(calls.at(-1),['b',undefined]);
+ assert.equal(DualUI.prototype.dockClick.call(ui,'claude'),true);assert.equal(calls.length,3);
+ ui.record=()=>null;ui.getCurrent=()=>null;ui.pendingFor=()=>({provider:'claude'});
+ assert.equal(DualUI.prototype.dockClick.call(ui,'claude'),true);assert.deepEqual(calls.at(-1),['configure']);
+ ui.pendingFor=()=>null;assert.equal(DualUI.prototype.dockClick.call(ui,'codex'),false);
+});

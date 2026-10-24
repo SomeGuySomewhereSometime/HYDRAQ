@@ -1,4 +1,4 @@
-import { NativeSessionsUI, OpenCodeSessionsUI } from './native-sessions.js';
+import { NativeSessionsUI, OpenCodeSessionsUI, TerminalSwitch } from './native-sessions.js';
 import { ClaudeSessionsUI } from './claude-sessions.js';
 import { workConflict, workReason } from './work-locks.js';
 import { captureDraftIntent, draftMode, followupOptions, followupDescriptions } from './composer.js';
@@ -107,6 +107,9 @@ let settingsBaseline;
 const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{accept(await api('/api/state'));render();}});
 const claudeUI = new ClaudeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{accept(await api('/api/state'));render();}});
 const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,refresh:async()=>{accept(await api('/api/state'));render();}});
+// Opens the settings at a section that needs the person: a failed launch's command or a confirmation.
+function revealSettings(target){layout.toggle('inspector',true);$('#inspector-tabs [data-inspector-view=system]')?.click();$('#settings-details').open=true;(target||$('#settings-details')).scrollIntoView({block:'nearest'});}
+const terminalSwitch = new TerminalSwitch({host:$('#terminal-switch'),state:()=>state,current,dual:()=>dualUI,choose,reveal:revealSettings,sections:{codex:nativeUI,claude:claudeUI,opencode:openCodeUI}});
 const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
@@ -248,7 +251,9 @@ const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:curre
 const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 
-dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id)}):null;
+dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
+  loadModels:id=>id==='opencode'?checkOpenCodeModels(false):null,
+  applySettings:(provider,settings)=>{const key=`${draftKey(current(),selectedProject)}:${provider}`;settingDrafts.set(key,{...(settingDrafts.get(key)||{}),...settings});}}):null;
 $('#dual-toggle').classList.toggle('hidden',!dualUI);
 
 function populateEfforts(value) {
@@ -325,7 +330,8 @@ function renderSettings(conversation) {
   const defaults=!conversation?project()?.defaults?.clients?.[provider]||{}:{};
   const baseline = JSON.stringify([!conversation?project()?.defaults:null,basis?.id,basis?.model,basis?.effort,basis?.sandbox,basis?.context,basis?.fast,pendingSettings]);
   $('#provider').value = provider;
-  $('#provider').disabled = sending || Boolean(conversation && (anyBusy() || group.some(needsUncertaintyReview))) || Boolean(dualUI?.record(conversation) || dualUI?.pendingFor());
+  // In a dual, talking to one model, the client field replaces that participant (asked first in a dialog).
+  $('#provider').disabled = sending || Boolean(conversation && (anyBusy() || group.some(needsUncertaintyReview))) || Boolean(dualUI?.pendingFor() || (dualUI?.record(conversation) && dualUI.both(conversation)));
   $('#provider-hint').textContent = { opencode: 'OpenCode original · apenas gratuitos do fornecedor OpenCode', cursor: 'Cursor original · Grok da tua conta', antigravity: 'agy original · Gemini e Claude da tua conta', claude: 'Claude Code original · sessão claude.ai existente', codex: 'Codex original · sessão ChatGPT existente' }[provider] + (conversation ? ' · podes mudar de cliente entre pedidos' : '');
   $('#provider').dataset.tip = `Cliente: ${$('#provider-hint').textContent}.${conversation ? ' Escolher outro cliente nesta conversa faz uma passagem de contexto no próximo pedido.' : ''}`;
   $('#permissions-hint').textContent = { opencode: 'Autorizações e perguntas na conversa. Planear usa o agente nativo; sem sandbox do sistema operativo comprovada. Sem aprovação automática. Só o fornecedor OpenCode gratuito, sem subagentes nesta versão.', cursor: 'Autorizações, perguntas e planos aparecem na conversa. Planear/Perguntar são modos nativos; isolamento do sistema operativo não comprovado. Sem orientação do turno ativo.', antigravity: 'Políticas nativas do agy. Durante a execução: redirecionar com interrupção confirmada e retoma, ou enviar depois. Não há injeção no mesmo turno nativo.', claude: 'Autorizações na conversa. Durante a execução: orientar na próxima oportunidade, redirecionar agora ou enviar depois. Orientar não aprova ações pendentes.' }[provider] || 'As autorizações adicionais aparecem na conversa.';
@@ -516,13 +522,15 @@ function syncWelcomeFleet() {
 function renderAgentDock() {
   const active = providerId();
   const locked = Boolean($('#provider')?.disabled);
+  // In a dual the bar shows the two participants, fixed: clicking one opens its settings instead of switching.
+  const dual = Boolean(dualUI?.renderDock(current()));
   for (const pill of document.querySelectorAll('#agent-dock [data-agent]')) {
     const id = pill.dataset.agent;
     const pState = state?.providers?.[id];
     const connected = pState?.connection === 'connected';
-    pill.setAttribute('aria-pressed', String(id === active));
+    if (dual) pill.removeAttribute('aria-pressed'); else pill.setAttribute('aria-pressed', String(id === active));
     pill.dataset.connected = String(Boolean(connected));
-    pill.disabled = locked;
+    pill.disabled = dual ? sending : locked;
   }
   // The brand's client lights: lit when that client is connected, in its own colour.
   const lit = [];
@@ -1089,7 +1097,7 @@ function renderSend() {
   $('#use-as-request').disabled = sending;
   $('#composer').classList.toggle('steering', steering || expired);
   $('#prompt').placeholder = steering ? 'Acrescenta uma orientação para a tarefa em curso…' : 'Descreve o que queres fazer…';
-  $('#composer-hint').textContent = openCodeUI.session() ? 'Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ nas configurações.' : nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ nas configurações.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ nas configurações.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
+  $('#composer-hint').textContent = openCodeUI.session() ? 'Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ, aqui ao lado.' : nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ, aqui ao lado.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ, aqui ao lado.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
   if ((dual || pendingDual) && !nativeUI.session() && !claudeUI.session() && !openCodeUI.session()) {
     const name = key => providerName(dual.members[key].provider);
     $('#composer-hint').textContent = dual && busy ? (dualUI.running(conversation) ? 'Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.' : workReason(workBlock()) + ' · Este projeto/pasta ou cliente está reservado.')
@@ -1155,6 +1163,7 @@ function render() {
   nativeUI.render();
   claudeUI.render();
   openCodeUI.render();
+  terminalSwitch.render();
   opinionUI.renderAutomatic();
   const connection = providerState().connection;
   const account = providerState().account;
@@ -1223,6 +1232,7 @@ function renderProjectSuggestion(){
 }
 
 $('#provider').addEventListener('change',()=> {
+  if (dualUI?.record(current())) { const wanted = $('#provider').value; $('#provider').value = providerId(); dualUI.chooseClient(wanted); return; }
   saveSettingsDraft();
   const conversation = current();
   if (conversation) {
@@ -1386,6 +1396,7 @@ $('#composer').addEventListener('change', () => syncNextRequest());
 $('#plan-toggle').addEventListener('click', () => syncNextRequest());
 for (const pill of document.querySelectorAll('#agent-dock [data-agent]')) {
   pill.addEventListener('click', () => {
+    if (dualUI?.dockClick(pill.dataset.agent)) return;
     if ($('#provider').disabled) return;
     $('#provider').value = pill.dataset.agent;
     $('#provider').dispatchEvent(new Event('change'));

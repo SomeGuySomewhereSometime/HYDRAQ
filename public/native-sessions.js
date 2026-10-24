@@ -14,17 +14,19 @@ export class NativeSessionsUI {
       </details>`;
     const query = selector => this.host.querySelector(selector);
     this.query = query;
-    query('[data-native-open]').onclick = () => this.run(async () => {
+    this.open = () => this.run(async () => {
       const result = await this.api(`/api/conversations/${this.current().id}/native-open`, {});
       this.commandId = result.conversationId;
       query('textarea').value = result.command || '';
       query('[data-native-command]').hidden = false;
       if (result.warning) { query('[data-native-command]').open = true; this.toast(result.warning); }
     });
-    query('[data-native-release]').onclick = () => this.run(async () => {
+    this.release = () => this.run(async () => {
       await this.api(`/api/conversations/${this.session().conversationId}/native-release`, {});
       query('[data-native-command]').hidden = true;
     });
+    query('[data-native-open]').onclick = () => this.open();
+    query('[data-native-release]').onclick = () => this.release();
     query('[data-native-list]').onclick = () => this.list(false);
     query('[data-native-more]').onclick = () => this.list(true);
   }
@@ -32,6 +34,9 @@ export class NativeSessionsUI {
     const c = this.current();
     return this.state()?.nativeSessions?.sessions.find(s => s.group === (c?.group || c?.id));
   }
+  releasable() { return !this.query('[data-native-release]').disabled; }
+  /** A launch that failed leaves the command open here: the person has to copy it. */
+  attention() { const command = this.query('[data-native-command]'); return !command.hidden && command.open; }
   async run(action) {
     if (this.pending) return;
     this.pending = true; this.render();
@@ -89,11 +94,15 @@ export class OpenCodeSessionsUI {
     Object.assign(this,{api,state,current,refresh,toast});this.host=document.querySelector('#opencode-sessions');
     this.host.innerHTML='<p class="settings-title">OpenCode original</p><p data-status class="reading-hint"></p><div class="native-actions"><button data-open type="button">Abrir no terminal</button><button data-release type="button">Continuar na HYDRAQ</button><button data-sync type="button">Recuperar histórico</button></div><details data-command hidden><summary>Comando para abrir noutro terminal</summary><textarea readonly rows="4" aria-label="Comando do terminal OpenCode"></textarea></details>';
     this.query=s=>this.host.querySelector(s);
-    this.query('[data-open]').onclick=()=>this.run(async()=>{const result=await api('/api/conversations/'+current().id+'/opencode-open',{});if(result.command){this.query('textarea').value=result.command;this.query('[data-command]').hidden=false;}if(result.warning)toast(result.warning);});
-    this.query('[data-release]').onclick=()=>this.run(async()=>{await api('/api/conversations/'+this.session().id+'/opencode-release',{});this.query('[data-command]').hidden=true;});
+    this.open=()=>this.run(async()=>{const result=await api('/api/conversations/'+current().id+'/opencode-open',{});if(result.command){this.query('textarea').value=result.command;this.query('[data-command]').hidden=false;}if(result.warning){this.query('[data-command]').open=true;toast(result.warning);}});
+    this.release=()=>this.run(async()=>{await api('/api/conversations/'+this.session().id+'/opencode-release',{});this.query('[data-command]').hidden=true;});
+    this.query('[data-open]').onclick=()=>this.open();
+    this.query('[data-release]').onclick=()=>this.release();
     this.query('[data-sync]').onclick=()=>this.run(()=>api('/api/conversations/'+(this.session()||current()).id+'/opencode-sync',{}));
   }
   session(){const c=this.current();return this.state()?.conversations.find(item=>item.provider==='opencode'&&item.terminal&&(item.group||item.id)===(c?.group||c?.id));}
+  releasable(){return !this.query('[data-release]').disabled;}
+  attention(){const command=this.query('[data-command]');return !command.hidden&&command.open;}
   async run(action){if(this.pending)return;this.pending=true;this.render();try{await action();await this.refresh();}catch(error){this.toast(error.message);}finally{this.pending=false;this.render();}}
   render(){
     const session=this.session(),c=session||this.current();this.host.classList.toggle('hidden',!c||c.provider!=='opencode'||this.state()?.providers.opencode?.transport!=='http');if(!c)return;
@@ -101,5 +110,80 @@ export class OpenCodeSessionsUI {
     this.query('[data-open]').disabled=Boolean(this.pending||session||!c.threadId||['starting','running','waiting','uncertain'].includes(c.status));
     this.query('[data-release]').hidden=!session;this.query('[data-release]').disabled=Boolean(this.pending);
     this.query('[data-sync]').disabled=Boolean(this.pending||!c.threadId);
+  }
+}
+
+const terminalNames = {codex: 'Codex', claude: 'Claude', opencode: 'OpenCode'};
+const working = new Set(['starting', 'running', 'waiting']);
+/**
+ * The terminal handover next to the composer: who holds the conversation, and the way back. It drives the
+ * sections in the settings, so their checks and confirmations still apply; those open only when needed.
+ */
+export class TerminalSwitch {
+  constructor({host, state, current, dual, choose, reveal, sections}) {
+    Object.assign(this, {host, state, current, dual, choose, reveal, sections});
+    this.host.addEventListener('click', event => {
+      const button = event.target.closest('button[data-terminal]');
+      if (button && !button.disabled) this.act(button.dataset.terminal);
+    });
+  }
+  held() { for (const [provider, ui] of Object.entries(this.sections)) if (ui.session()) return {provider, ui}; return null; }
+  /** A normal conversation goes itself; a dual sends its principal, the only member that may write. */
+  target() {
+    const c = this.current(), record = c && this.dual()?.record(c);
+    const id = record ? record.members[record.principal].conversationId : c?.id;
+    return id ? this.state()?.conversations.find(item => item.id === id) || null : null;
+  }
+  reason(target) {
+    const state = this.state(), provider = target.provider;
+    if (!this.sections[provider]) return 'unavailable';
+    if (provider === 'codex' && !state?.nativeSessions?.available) return 'unavailable';
+    if (provider === 'claude' && !state?.claudeTerminal?.available) return 'unavailable';
+    if (provider === 'opencode' && state?.providers?.opencode?.transport !== 'http') return 'unavailable';
+    if (this.dual()?.running(this.current())) return 'Aguarda o fim da ronda dual.';
+    if (working.has(target.status) || target.status === 'uncertain') return 'Aguarda que o pedido termine.';
+    if (state?.providers?.[provider]?.connection !== 'connected') return `Liga primeiro o ${terminalNames[provider]}.`;
+    if (!target.threadId || !target.turns?.length || (provider === 'claude' && !target.sessionStarted)) return 'Envia primeiro um pedido para guardar a sessão.';
+    return '';
+  }
+  async act(action) {
+    const held = this.held();
+    // The section re-renders itself once its request settles; this control follows it.
+    if (action === 'release') { if (!held) return; await held.ui.release(); this.render(); if (held.ui.attention()) this.reveal(held.ui.host); return; }
+    const target = this.target(), ui = target && this.sections[target.provider];
+    if (!ui) return;
+    if (target.id !== this.current()?.id) this.choose(target.id);
+    await ui.open();
+    this.render();
+    if (ui.attention()) this.reveal(ui.host);
+  }
+  render() {
+    const held = this.held(), target = held ? null : this.target(), reason = target ? this.reason(target) : 'unavailable';
+    const record = this.current() && this.dual()?.record(this.current());
+    const view = held ? ['held', held.provider, held.ui.pending, held.ui.releasable()] : reason === 'unavailable' ? null : ['open', target.provider, target.id, reason, Boolean(record), this.sections[target.provider].pending];
+    const signature = JSON.stringify(view);
+    this.host.hidden = !view;
+    if (this.host.dataset.signature === signature) return;
+    this.host.dataset.signature = signature;
+    this.host.replaceChildren();
+    if (!view) return;
+    const button = (action, label, tip, disabled) => {
+      const element = document.createElement('button');
+      element.type = 'button'; element.className = 'terminal-switch-button'; element.dataset.terminal = action;
+      element.textContent = label; element.dataset.tip = tip; element.disabled = disabled;
+      return element;
+    };
+    if (held) {
+      const name = terminalNames[held.provider];
+      this.host.dataset.state = 'held'; this.host.dataset.client = held.provider;
+      const status = document.createElement('strong');
+      status.className = 'terminal-switch-status'; status.textContent = `${name} no terminal`;
+      this.host.append(status, button('release', 'Continuar na HYDRAQ', `Traz a conversa de volta do ${name} original, com o que fizeste no terminal. Fecha primeiro o cliente no terminal.`, Boolean(held.ui.pending) || !held.ui.releasable()));
+      return;
+    }
+    const name = terminalNames[target.provider];
+    this.host.dataset.state = 'open'; this.host.dataset.client = target.provider;
+    const tip = reason || `Continua a mesma sessão no ${name} original, num terminal. Voltas com «Continuar na HYDRAQ», aqui.${record ? ' No Dual, só o principal abre no terminal e o Dual fica em pausa até voltares.' : ''}`;
+    this.host.append(button('open', `Abrir no terminal · ${name}${record ? ' (principal)' : ''}`, tip, Boolean(reason) || Boolean(this.sections[target.provider].pending)));
   }
 }

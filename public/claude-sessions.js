@@ -16,7 +16,7 @@ export class ClaudeSessionsUI {
       </details>`;
     const query = selector => this.host.querySelector(selector);
     this.query = query;
-    query('[data-claude-open]').onclick = () => this.run(async () => {
+    this.open = () => this.run(async () => {
       const target = this.session() || this.current();
       const result = await this.api(`/api/conversations/${target.id}/claude-open`, {});
       this.commandId = result.conversationId;
@@ -32,7 +32,9 @@ export class ClaudeSessionsUI {
         this.toast([result.imported ? `${result.imported} pedido(s) do Claude original adicionados à conversa.` : 'Nenhum pedido novo no Claude original.', result.warning].filter(Boolean).join(' '));
       } catch (error) { if (!this.decide(error, kind => release(id, [...confirm, kind], context), context)) throw error; }
     });
-    query('[data-claude-release]').onclick = () => release(this.session()?.id);
+    this.release = () => release(this.session()?.id);
+    query('[data-claude-open]').onclick = () => this.open();
+    query('[data-claude-release]').onclick = () => this.release();
     query('[data-claude-proceed]').onclick = () => { const proceed = this.confirmation?.proceed; this.confirmation = null; this.render(); proceed?.(); };
     query('[data-claude-cancel]').onclick = () => { this.confirmation = null; this.render(); };
     query('[data-claude-list]').onclick = () => this.list(false);
@@ -52,6 +54,9 @@ export class ClaudeSessionsUI {
     const group = c.group || c.id;
     return this.state()?.conversations.find(item => item.provider === 'claude' && item.terminal && (item.group || item.id) === group) || null;
   }
+  releasable() { return !this.query('[data-claude-release]').disabled; }
+  /** A confirmation, or a launch that failed, waits in this section. */
+  attention() { const command = this.query('[data-claude-command]'); return Boolean(this.confirmation) || (!command.hidden && command.open); }
   async run(action) {
     if (this.pending) return;
     this.pending = true; this.render();

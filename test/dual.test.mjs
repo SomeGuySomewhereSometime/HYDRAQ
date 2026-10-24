@@ -233,6 +233,78 @@ test('rotas HTTP do Dual exigem a sessão local e encaminham para o coordenador'
  const id=started.dual.id;
  assert.equal((await(await post(`/api/dual/${id}`,{target:'b'})).json()).dual.target,'b');
  const sent=await(await post(`/api/dual/${id}/send`,{text:'Pergunta',requestId:'http-1'})).json();
- assert.deepEqual(sent.deliveries,{b:'sent'});await wait(()=>claude.logs.length===1);
+ assert.deepEqual(sent.deliveries,{b:'sent'});await wait(()=>claude.logs.length===1&&idle(claude.conversations[0]));
+ const replaced=await(await post(`/api/dual/${id}/replace`,{key:'b',provider:'opencode',model:'test',effort:'low'})).json();
+ assert.equal(replaced.dual.members.b.provider,'opencode');assert.equal(replaced.dual.principal,'b');
  assert.equal((await(await post(`/api/dual/${id}/end`,{})).json()).dual.active,false);
+});
+
+test('trocar o cliente de um participante não desliga o Dual: cada ronda mantém quem respondeu e o novo recebe o histórico',async t=>{
+ const{hub,c,codex,claude}=await setup(t);
+ const oc=hub.clients.opencode;
+ const {dual}=await start(hub,c);
+ codex.answer='RESPOSTA-CODEX-1';claude.answer='RESPOSTA-CLAUDE-1';
+ await send(hub,dual,'antes','Primeira pergunta');
+ const second=claude.conversations[0];await wait(()=>idle(c)&&idle(second)&&claude.logs.length===1);
+ await assert.rejects(hub.replaceDualMember(dual.id,{key:'b',provider:'codex',model:'test',effort:'low'}),/já participa/);
+ await assert.rejects(hub.replaceDualMember(dual.id,{key:'b',provider:'opencode',model:'outro',effort:'low'}),/catálogo/);
+ const result=await hub.replaceDualMember(dual.id,{key:'b',provider:'opencode',model:'test',effort:'high'});
+ const record=hub.dual.record(dual.id),joined=oc.conversations[0];
+ assert.equal(record.active,true);assert.equal(record.principal,'a');assert.equal(result.conversationId,joined.id);
+ assert.deepEqual(record.members.b,{provider:'opencode',conversationId:joined.id,model:'test',effort:'high'});
+ assert.equal(joined.group,c.group);assert.equal(joined.sandbox,'plan');assert.equal(second.group,c.group);
+ // The earlier round keeps the pair that received it; the change itself is recorded where it happened.
+ assert.equal(record.rounds[0].members.b.provider,'claude');assert.equal(record.rounds[0].deliveries.b.provider,'claude');
+ assert.equal(record.changes.length,1);assert.equal(record.changes[0].from.provider,'claude');assert.equal(record.changes[0].to.provider,'opencode');
+ // Changing a participant sends nothing.
+ assert.equal(codex.logs.length+claude.logs.length+oc.logs.length,2);
+ codex.answer='RESPOSTA-CODEX-2';oc.answer='RESPOSTA-OPENCODE-2';
+ await send(hub,dual,'depois','Segunda pergunta');
+ await wait(()=>idle(c)&&idle(joined)&&oc.logs.length===1);
+ const text=oc.logs[0].text;
+ assert.match(text,/entras agora nesta conversa/);assert.match(text,/Primeira pergunta/);
+ assert.match(text,/RESPOSTA-CODEX-1/);assert.match(text,/RESPOSTA-CLAUDE-1/);
+ assert.equal(oc.logs[0].settings.model,'test');assert.equal(oc.logs[0].settings.effort,'high');assert.equal(oc.logs[0].settings.sandbox,'plan');
+ assert.match(codex.logs[1].text,/RESPOSTA-CLAUDE-1/);assert.equal(claude.logs.length,1);
+ assert.equal(hub.dual.record(dual.id).rounds[1].members.b.provider,'opencode');
+ // Going back to a client of the group reuses its conversation and session.
+ await hub.replaceDualMember(dual.id,{key:'b',provider:'claude',model:'test',effort:'low'});
+ assert.equal(hub.dual.record(dual.id).members.b.conversationId,second.id);assert.equal(claude.conversations.length,1);
+});
+
+test('trocar participante espera pelo fim da ronda e pelo terminal; o principal só muda quando escolhido',async t=>{
+ const{hub,c,codex,claude}=await setup(t,{a:'hold',b:'hold'});
+ const {dual}=await start(hub,c);
+ await send(hub,dual,'longa','Pergunta longa');
+ await assert.rejects(hub.replaceDualMember(dual.id,{key:'b',provider:'opencode',model:'test',effort:'low'}),/respostas terminem/);
+ await hub.interruptDual(dual.id);
+ hub.nativeSessions.sessions.set('terminal',{id:c.id,group:c.group});
+ await assert.rejects(hub.replaceDualMember(dual.id,{key:'b',provider:'opencode',model:'test',effort:'low'}),/terminal/);
+ await assert.rejects(hub.updateDual(dual.id,{principal:'b'}),/terminal/);
+ hub.nativeSessions.sessions.delete('terminal');
+ assert.equal(hub.clients.opencode.conversations.length,0);
+ // Replacing the principal's client keeps the role in that slot unless the person chooses again.
+ await hub.replaceDualMember(dual.id,{key:'a',provider:'antigravity',model:'test',effort:'low'});
+ assert.equal(hub.dual.record(dual.id).principal,'a');assert.equal(hub.dual.record(dual.id).members.a.provider,'antigravity');
+ await hub.replaceDualMember(dual.id,{key:'a',provider:'cursor',model:'test',effort:'low',principal:'b'});
+ assert.equal(hub.dual.record(dual.id).principal,'b');
+ // The same client only changes model and reasoning.
+ await hub.replaceDualMember(dual.id,{key:'b',provider:'claude',model:'test',effort:'high'});
+ assert.equal(hub.dual.record(dual.id).members.b.effort,'high');assert.equal(hub.dual.record(dual.id).changes.length,2);
+ assert.equal(codex.logs.length+claude.logs.length,2);
+});
+
+test('no Dual só o principal abre no terminal; um reenvio não atravessa a troca de participante',async t=>{
+ const{hub,c,claude}=await setup(t,{b:'pre-fail'});
+ const {dual}=await start(hub,c);
+ const result=await send(hub,dual,'falha','Pergunta aos dois');
+ assert.deepEqual(result.deliveries,{a:'sent',b:'failed'});await wait(()=>idle(c));
+ const second=claude.conversations[0];
+ assert.doesNotThrow(()=>hub.assertTerminal(c.id));
+ assert.throws(()=>hub.assertTerminal(second.id),/só o principal \(Codex\) abre no terminal/);
+ await hub.replaceDualMember(dual.id,{key:'b',provider:'opencode',model:'test',effort:'low'});
+ const round=hub.dual.record(dual.id).rounds[0];
+ await assert.rejects(hub.retryDual(dual.id,{roundId:round.id,key:'b'}),/participante mudou/);
+ await hub.endDual(dual.id);
+ assert.doesNotThrow(()=>hub.assertTerminal(second.id));
 });

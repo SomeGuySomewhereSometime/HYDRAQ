@@ -12,6 +12,9 @@ export const dualRecord=(state,group)=>state?.dual?.records?.find(record=>record
 export const activeDual=(state,group)=>{const record=dualRecord(state,group);return record?.active?record:null;};
 const other=key=>key==='a'?'b':'a';
 const shortName=provider=>shortNames[provider]||provider;
+/** Who took part in a round: saved with it, so a later change of client never relabels it. */
+export const roundMembers=(record,round)=>round.members||record.members;
+const lockIcon=()=>{const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 24 24');svg.setAttribute('class','agent-pill-lock');svg.setAttribute('aria-hidden','true');svg.innerHTML='<rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>';return svg;};
 
 /** Who receives the next request, named on the send button before anything is sent. */
 export function dualSendLabel(record,{target=record.target,writing=false}={}){
@@ -41,8 +44,8 @@ export function dualPanelState(delivery,turn){
 }
 
 export class DualUI{
- constructor({api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open}){
-  Object.assign(this,{api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open});
+ constructor({api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels}){
+  Object.assign(this,{api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels});
   this.panels=new PanelKit({toast});this.pending=new Map();this.sequence=0;
   this.dialog=node('dialog','opinion-dialog dual-dialog');this.dialog.setAttribute('aria-labelledby','dual-dialog-title');document.body.append(this.dialog);
   document.getElementById('dual-toggle')?.addEventListener('click',()=>this.configure());
@@ -70,7 +73,7 @@ export class DualUI{
   const recipients=record?(record.target==='both'?DUAL_KEYS:[record.target]).map(key=>[record.members[key].provider,this.memberSettings(record,key)?.model]):pending?[[pending.provider,pending.model]]:[];
   return recipients.some(([provider,model])=>this.getState()?.providers?.[provider]?.capabilities?.images===false||this.getModels(provider).find(m=>m.id===model)?.images===false);
  }
- signature(conversation){const record=this.anyRecord(conversation);return record?[record.id,record.active,record.target,record.principal,this.running(conversation),record.rounds.map(r=>[r.id,r.targets,r.write,Object.values(r.deliveries).map(d=>[d.requestId,d.status,d.coverage,d.error])])]:null;}
+ signature(conversation){const record=this.anyRecord(conversation);return record?[record.id,record.active,record.target,record.principal,DUAL_KEYS.map(key=>record.members[key].conversationId),record.changes?.length||0,this.running(conversation),record.rounds.map(r=>[r.id,r.targets,r.write,Object.values(r.deliveries).map(d=>[d.requestId,d.status,d.coverage,d.error])])]:null;}
  async setTarget(target){
   const record=this.record();if(!record||record.target===target)return;
   this.beforeChange();const previous=record.target;record.target=target;this.changed();
@@ -117,6 +120,115 @@ export class DualUI{
   bar.append(option('a',shortName(pair[0]),this.modelLabel(pair[0],settings('a')),tip('a'),principal==='a'),option('both','Os dois','',pending?'O primeiro pedido vai para os dois. Depois podes falar com um de cada vez.':'Perguntar aos dois. Respondem sem ver a resposta um do outro, em Planear ou Só leitura.'),option('b',shortName(pair[1]),this.modelLabel(pair[1],settings('b')),tip('b'),principal==='b'));
  }
 
+ /** A connected client with models; OpenCode's list depends on the folder and may still have to be loaded. */
+ offered(id){return this.getState()?.providers?.[id]?.connection==='connected'&&(this.getModels(id).length>0||id==='opencode');}
+ whenLoaded(select,list,again){
+  if(list.length||!this.loadModels)return;
+  const provider=select.value;
+  Promise.resolve(this.loadModels(provider)).then(()=>{if(select.isConnected&&select.value===provider&&this.getModels(provider).length)again();}).catch(error=>this.toast(error.message));
+ }
+ /** Principal choice shared by the dialogs; the label of a member follows its client field. */
+ principalChoice(a,b,value){
+  const group=node('fieldset','dual-principal-choice'),legend=node('legend','','Principal · implementa e decide');group.append(legend);
+  const radios=['a','b'].map(key=>{const label=node('label','dual-principal-option'),input=node('input');input.type='radio';input.name='dual-principal-'+this.sequence;input.value=key;input.checked=value===key;label.append(input,document.createTextNode(shortName(key==='a'?a:b)));group.append(label);return input;});
+  this.dialog.append(group);
+  return {value:()=>radios.find(r=>r.checked)?.value||'a',rename:(key,provider)=>{radios[key==='a'?0:1].parentElement.lastChild.textContent=shortName(provider);},radios};
+ }
+
+ /** Atelier: in a dual the client bar shows the two participants, fixed; clicking one opens its settings. */
+ renderDock(conversation){
+  const dock=document.getElementById('agent-dock');if(!dock)return false;
+  const record=this.record(conversation),pending=this.pendingFor();
+  const pair=record?{a:record.members.a.provider,b:record.members.b.provider}:pending?{a:conversation?.provider||this.getProvider(),b:pending.provider}:null;
+  const principal=record?.principal||pending?.principal||'a';
+  dock.toggleAttribute('data-dual',Boolean(pair));
+  dock.setAttribute('aria-label',pair?'Participantes do Dual':'Escolher agente ativo');
+  for(const pill of dock.querySelectorAll('[data-agent]')){
+   const provider=pill.dataset.agent,key=pair?DUAL_KEYS.find(k=>pair[k]===provider):null,tag=pill.querySelector('.agent-pill-tag');
+   pill.dataset.tagText??=tag?.textContent||'';pill.dataset.tipText??=pill.dataset.tip||'';
+   pill.hidden=Boolean(pair&&!key);
+   pill.querySelector('.agent-pill-principal')?.remove();pill.querySelector('.agent-pill-lock')?.remove();
+   if(!key){delete pill.dataset.dualKey;if(tag)tag.textContent=pill.dataset.tagText;pill.dataset.tip=pill.dataset.tipText;pill.removeAttribute('aria-haspopup');continue;}
+   pill.dataset.dualKey=key;
+   const label=this.modelLabel(provider,record?this.memberSettings(record,key):key==='a'?this.memberSettings(null,'a'):pending);
+   if(tag)tag.textContent=label||pill.dataset.tagText;
+   if(key===principal){const star=node('span','agent-pill-principal','★');star.setAttribute('aria-label','principal');pill.querySelector('.agent-pill-name')?.before(star);}
+   pill.append(lockIcon());pill.setAttribute('aria-haspopup','dialog');
+   pill.dataset.tip=`${names[provider]||provider}${key===principal?' · principal':''}${label?' · '+label:''}. Fixo no Dual: carrega para mudar modelo, raciocínio ou cliente. Quem recebe a mensagem escolhe-se no seletor da caixa.`;
+  }
+  return Boolean(pair);
+ }
+ dockClick(provider){
+  const conversation=this.getCurrent(),record=this.record(conversation);
+  if(record){const key=DUAL_KEYS.find(k=>record.members[k].provider===provider);if(key)this.editMember(key);return true;}
+  if(!conversation&&this.pendingFor()){this.configure();return true;}
+  return false;
+ }
+ /** The composer's client field, while talking to one model: replaces that participant, asked first. */
+ chooseClient(provider){
+  const record=this.record();if(!record)return;
+  const key=record.target==='both'?record.principal:record.target;
+  if(record.members[key].provider===provider)return;
+  if(record.members[other(key)].provider===provider){this.toast(`O ${shortName(provider)} já participa neste Dual. Para falar só com ele, escolhe-o no seletor.`);return;}
+  if(!this.offered(provider)){this.toast(`Liga primeiro o ${shortName(provider)} para o pôr no Dual.`);return;}
+  this.editMember(key,provider);
+ }
+ /** One participant: model and reasoning, or another client in its place. The dual stays on and nothing is sent. */
+ editMember(key,wanted){
+  const conversation=this.getCurrent(),record=this.record(conversation);if(!record)return;
+  const member=record.members[key],kept=record.members[other(key)],settings=this.memberSettings(record,key),state=this.getState();
+  this.header(`Dual · ${names[member.provider]||member.provider}`);
+  this.dialog.append(node('p','opinion-caption','Muda o modelo e o raciocínio deste participante, ou põe outro cliente no seu lugar. O Dual continua ligado e nada é enviado. As respostas anteriores mantêm quem as deu; um cliente novo recebe o histórico da conversa no primeiro pedido.'));
+  const error=node('p','opinion-error');error.hidden=true;error.setAttribute('role','alert');
+  const fail=message=>{error.textContent=message;error.hidden=false;};
+  // The server repeats these checks; here they explain why the client cannot change right now.
+  const terminal=state?.nativeSessions?.sessions?.some(s=>s.group===record.groupId)||state?.conversations?.some(c=>c.group===record.groupId&&c.terminal);
+  const blocked=this.running(conversation)||record.rounds.some(r=>r.targets.some(k=>['preparing','sending'].includes(r.deliveries[k].status)))?'Aguarda que as respostas terminem para mudar de cliente.':terminal?'A conversa está no terminal. Usa «Continuar na HYDRAQ» antes de mudar de cliente ou de principal.':'';
+  const grid=node('div','dual-choice');this.dialog.append(grid);
+  const providerSelect=this.field(grid,'Cliente'),modelSelect=this.field(grid,'Modelo'),effortSelect=this.field(grid,'Raciocínio');
+  const available=Object.keys(names).filter(id=>id!==kept.provider&&(id===member.provider||this.offered(id)));
+  this.fill(providerSelect,available.map(id=>({value:id,label:names[id]})),!blocked&&available.includes(wanted)?wanted:member.provider);
+  providerSelect.disabled=Boolean(blocked);
+  const same=()=>providerSelect.value===member.provider,models=()=>this.getModels(providerSelect.value);
+  const efforts=()=>{const model=models().find(m=>m.id===modelSelect.value);this.fill(effortSelect,(model?.efforts||[]).map(e=>({value:e,label:effortLabels[e]||e})),same()&&settings?.model===modelSelect.value?settings.effort:model?.defaultEffort);};
+  const modelsChanged=()=>{const list=models();this.fill(modelSelect,list.map(m=>({value:m.id,label:m.name||m.id})),same()?settings?.model:(list.find(m=>m.isDefault)||list[0])?.id);efforts();this.whenLoaded(providerSelect,list,modelsChanged);};
+  modelSelect.addEventListener('change',efforts);modelsChanged();
+  const note=node('p','dual-summary dual-replace-note');note.setAttribute('role','status');
+  const principal=this.principalChoice(key==='a'?member.provider:kept.provider,key==='a'?kept.provider:member.provider,record.principal);
+  if(terminal)for(const radio of principal.radios)radio.disabled=true;
+  const describe=()=>{
+   principal.rename(key,providerSelect.value);
+   const incoming=shortName(providerSelect.value),leaving=shortName(member.provider);
+   note.hidden=same()&&!blocked;
+   note.textContent=blocked||(same()?'':`O ${incoming} entra no lugar do ${leaving}${principal.value()===key?' e fica como principal: implementa quando escolheres escrita':''}. O ${leaving} fica guardado como conversa do grupo.`);
+  };
+  providerSelect.addEventListener('change',()=>{modelsChanged();describe();});
+  for(const radio of principal.radios)radio.addEventListener('change',describe);
+  describe();grid.after(note);
+  const actions=node('div','opinion-actions'),save=node('button','primary-button','Guardar'),cancel=node('button','secondary-button','Cancelar');
+  save.type=cancel.type='button';cancel.addEventListener('click',()=>this.dialog.close());
+  save.addEventListener('click',async()=>{
+   save.disabled=true;
+   const choice={model:modelSelect.value,effort:effortSelect.value},chosen=principal.value();
+   try{
+    if(same()){
+     this.applySettings?.(member.provider,choice);
+     await this.api('/api/dual/'+record.id,{members:{[key]:{...settings,...choice}},...(chosen!==record.principal?{principal:chosen}:{})});
+     await this.refresh();
+    }else{
+     const result=await this.api('/api/dual/'+record.id+'/replace',{key,provider:providerSelect.value,...choice,principal:chosen});
+     this.applySettings?.(providerSelect.value,choice);
+     await this.refresh();
+     // The conversation on show follows the participant: the same group and history, now with the new client.
+     if(this.getCurrent()?.id===member.conversationId&&this.conversation(result.conversationId))this.open?.(result.conversationId);
+     this.toast(`${shortName(providerSelect.value)} entrou no lugar do ${shortName(member.provider)}. Recebe o histórico da conversa no primeiro pedido.`);
+    }
+    this.changed();this.dialog.close();
+   }catch(e){fail(e.message);save.disabled=false;}
+  });
+  actions.append(save,cancel);this.dialog.append(error,actions);this.dialog.showModal();
+ }
+
  field(parent,label,tag='select'){const wrap=node('label','opinion-field',label),control=node(tag);control.id='dual-control-'+(++this.sequence);wrap.htmlFor=control.id;wrap.append(control);parent.append(wrap);return control;}
  fill(select,values,value){select.replaceChildren(...values.map(v=>{const option=node('option','',v.label);option.value=v.value;return option;}));select.value=values.some(v=>v.value===value)?value:values[0]?.value||'';}
  header(title){
@@ -130,13 +242,12 @@ export class DualUI{
   const error=node('p','opinion-error');error.hidden=true;error.setAttribute('role','alert');
   const fail=message=>{error.textContent=message;error.hidden=false;};
   const actions=node('div','opinion-actions');
-  const principalField=(a,b,value)=>{
-   const group=node('fieldset','dual-principal-choice'),legend=node('legend','','Principal · implementa e decide');group.append(legend);
-   const radios=['a','b'].map(key=>{const label=node('label','dual-principal-option'),input=node('input');input.type='radio';input.name='dual-principal-'+this.sequence;input.value=key;input.checked=value===key;label.append(input,document.createTextNode(shortName(key==='a'?a:b)));group.append(label);return input;});
-   this.dialog.append(group);return ()=>radios.find(r=>r.checked)?.value||'a';
-  };
+  const principalField=(a,b,value)=>this.principalChoice(a,b,value).value;
   if(record){
-   const summary=node('p','dual-summary');summary.append(node('strong','',`${names[record.members.a.provider]} + ${names[record.members.b.provider]}`),document.createTextNode(' · modelo e raciocínio de cada um escolhem-se na caixa de mensagens, ao falar só com ele.'));this.dialog.append(summary);
+   const summary=node('p','dual-summary');summary.append(node('strong','',`${names[record.members.a.provider]} + ${names[record.members.b.provider]}`),document.createTextNode(' · podes mudar o modelo, o raciocínio ou o cliente de cada um sem desligar o Dual.'));this.dialog.append(summary);
+   const edit=node('div','dual-member-actions');
+   for(const key of DUAL_KEYS){const button=node('button','secondary-button',`Mudar ${shortName(record.members[key].provider)}…`);button.type='button';button.dataset.client=record.members[key].provider;button.addEventListener('click',()=>this.editMember(key));edit.append(button);}
+   this.dialog.append(edit);
    const principal=principalField(record.members.a.provider,record.members.b.provider,record.principal);
    const save=node('button','primary-button','Guardar');save.type='button';
    save.addEventListener('click',async()=>{save.disabled=true;try{await this.api('/api/dual/'+record.id,{principal:principal()});await this.refresh();this.dialog.close();}catch(e){fail(e.message);save.disabled=false;}});
@@ -150,7 +261,7 @@ export class DualUI{
    }catch(e){fail(e.message);end.disabled=false;}});
    actions.append(save,end);this.dialog.append(error,actions);this.dialog.showModal();return;
   }
-  const available=Object.keys(names).filter(id=>id!==source&&this.getState()?.providers?.[id]?.connection==='connected'&&this.getModels(id).length);
+  const available=Object.keys(names).filter(id=>id!==source&&this.offered(id));
   if(!available.length){this.dialog.append(node('p','opinion-caption','Liga primeiro outro cliente para escolher o segundo modelo.'));this.dialog.showModal();return;}
   const grid=node('div','dual-choice');this.dialog.append(grid);
   const fixed=node('p','dual-summary');fixed.append(node('strong','',names[source]),document.createTextNode(conversation?' · mantém a sessão desta conversa.':' · escolhido na caixa de mensagens.'));grid.append(fixed);
@@ -158,7 +269,7 @@ export class DualUI{
   this.fill(providerSelect,available.map(id=>({value:id,label:names[id]})),pending?.provider||available[0]);
   const models=()=>this.getModels(providerSelect.value);
   const efforts=()=>{const model=models().find(m=>m.id===modelSelect.value);this.fill(effortSelect,(model?.efforts||[]).map(e=>({value:e,label:effortLabels[e]||e})),pending?.provider===providerSelect.value&&pending?.model===modelSelect.value?pending.effort:model?.defaultEffort);};
-  const modelsChanged=()=>{const list=models();this.fill(modelSelect,list.map(m=>({value:m.id,label:m.name||m.id})),pending?.provider===providerSelect.value?pending.model:(list.find(m=>m.isDefault)||list[0])?.id);efforts();};
+  const modelsChanged=()=>{const list=models();this.fill(modelSelect,list.map(m=>({value:m.id,label:m.name||m.id})),pending?.provider===providerSelect.value?pending.model:(list.find(m=>m.isDefault)||list[0])?.id);efforts();this.whenLoaded(providerSelect,list,modelsChanged);};
   providerSelect.addEventListener('change',modelsChanged);modelSelect.addEventListener('change',efforts);modelsChanged();
   const principal=principalField(source,providerSelect.value,pending?.principal||'a');
   providerSelect.addEventListener('change',()=>{const labels=this.dialog.querySelectorAll('.dual-principal-option');labels[1].lastChild.textContent=shortName(providerSelect.value);});
@@ -185,7 +296,7 @@ export class DualUI{
     const provider=round.deliveries[round.targets[0]].provider,route=node('span','dual-route',round.write?`${shortName(provider)} · principal · implementação`:`Só para o ${shortName(provider)}`);
     if(round.write)route.dataset.write='true';route.dataset.client=provider;header.children[1]?.after(route);
     const context=[...article.querySelectorAll('details.handoff-context')].find(d=>d.querySelector('summary')?.textContent.startsWith('Contexto da passagem'));
-    if(context)context.querySelector('summary').textContent=`Contexto do ${shortName(record.members[other(round.targets[0])].provider)} enviado com este pedido · ${coverageLabels[round.deliveries[round.targets[0]].coverage]||'sem registo'}`;
+    if(context)context.querySelector('summary').textContent=`Contexto do ${shortName(roundMembers(record,round)[other(round.targets[0])].provider)} enviado com este pedido · ${coverageLabels[round.deliveries[round.targets[0]].coverage]||'sem registo'}`;
     continue;
    }
    const shared=articles.get(present[0].user);if(!shared)continue;
@@ -217,12 +328,12 @@ export class DualUI{
     if(!answers.length)panel.body.append(this.panels.placeholder(delivery.error||turn?.error||owner?.error||(status.live?'A preparar a resposta…':'Sem resposta visível.')));
     else if(turn?.error&&!status.live)panel.body.append(node('p','dual-error',turn.error));
     const context=contexts.get(part.key);
-    if(context){const summary=context.querySelector('summary');summary.textContent=`Contexto do ${shortName(round.deliveries[other(part.key)]?.provider||record.members[other(part.key)].provider)} enviado com este pedido · ${coverageLabels[delivery.coverage]||'sem registo'}`;panel.body.append(context);}
+    if(context){const summary=context.querySelector('summary');summary.textContent=`Contexto do ${shortName(round.deliveries[other(part.key)]?.provider||roundMembers(record,round)[other(part.key)].provider)} enviado com este pedido · ${coverageLabels[delivery.coverage]||'sem registo'}`;panel.body.append(context);}
     const last=[...(owner?.messages||[])].reverse().find(m=>m.role==='assistant'&&m.requestId===delivery.requestId);panel.text=last?.text||'';panel.copy.hidden=!panel.text;
     panel.body.setAttribute('aria-label','Resposta de '+(names[delivery.provider]||delivery.provider));
     const items=owner?.items?.filter(i=>turn?.id&&i.turnId===turn.id)||[],latest=items.at(-1);
     if(status.live&&latest)panel.foot.append(this.panels.activity(latest.type==='reasoning'?'A analisar o pedido':latest.command||latest.title||latest.tool||latest.type,latest.status));
-    if(!status.live&&delivery.status==='failed'&&record.active&&round===record.rounds.at(-1)&&round.targets.length>1&&!this.running(conversation)){
+    if(!status.live&&delivery.status==='failed'&&record.active&&round===record.rounds.at(-1)&&round.targets.length>1&&round.targets.every(k=>round.deliveries[k].conversationId===record.members[k].conversationId)&&!this.running(conversation)){
      const retry=node('button','review-panel-stop dual-retry',`Reenviar ao ${shortName(delivery.provider)}`);retry.type='button';
      retry.dataset.tip=`Envia a mesma pergunta só ao ${shortName(delivery.provider)}, sem a resposta do outro a esta ronda. O que já foi entregue não se repete.`;
      retry.addEventListener('click',async()=>{retry.disabled=true;try{await this.api('/api/dual/'+record.id+'/retry',{roundId:round.id,key:part.key});await this.refresh();}catch(e){this.toast(e.message);retry.disabled=false;}});
@@ -235,6 +346,13 @@ export class DualUI{
    state.textContent=labels.join(' · ');
    if(running&&record.active){const stop=node('button','review-stage-stop');stop.type='button';stop.append(glyph('stop','review-icon'),node('span','','Parar os dois'));stop.dataset.tip='Parar os dois modelos. O que já responderam fica guardado.';stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api('/api/dual/'+record.id+'/interrupt',{});}catch(e){this.toast(e.message);stop.disabled=false;}});tools.append(stop);}
    shared.after(stage);this.panels.applyFocus(stage);
+  }
+  // A change of client is marked where it happened; the answers before it keep their own names.
+  for(const change of record.changes||[]){
+   const marker=node('div','provider-divider dual-change',`${names[change.to.provider]||change.to.provider} entrou no lugar do ${names[change.from.provider]||change.from.provider}`);
+   marker.dataset.client=change.to.provider;
+   const next=[...view.querySelectorAll(':scope > [data-timeline-index]')].find(article=>timeline[Number(article.dataset.timelineIndex)]?.message.at>change.at);
+   if(next)next.before(marker);else view.append(marker);
   }
   for(const body of live)this.panels.restore(body);
  }

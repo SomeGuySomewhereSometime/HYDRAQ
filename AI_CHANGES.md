@@ -1,8 +1,30 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 70
+Versão atual: 81
 
 ## Resumo atual
+
+- Participantes do Dual e terminal visível (entrada 81): trocar o cliente de um participante (por exemplo, Claude → OpenCode) sem desligar o Dual, com as rondas anteriores a manterem quem respondeu e o novo a receber o histórico; no Atelier, a barra de clientes fica no Dual com os dois participantes fixos, que abrem as suas definições; «Abrir no terminal · …» e «Continuar na HYDRAQ» junto à caixa, em todas as aparências, e no Dual só o principal vai ao terminal. 417/417 testes e 363 verificações em browser isolado, com clientes simulados. Interface servida ao recarregar; o servidor exige reinício da 4318 para mudar de cliente. Por validar com clientes reais.
+
+- Logótipo pelo briefing do utilizador (entrada 80): proposta monocromática com formas orgânicas e lettering HYDRAQ, PNG transparente/prompt em `output/imagegen/hydraq-logo-brief-v1.*`; sem integração na interface.
+
+- Logótipo Ink Cut (entrada 79): nova direção criada de raiz, glifo h com corte diagonal em roxo profundo e apontamento lima; PNG transparente/prompt em `output/imagegen/hydraq-logo-inkcut-v1.*`, sem integração na interface.
+
+- Logótipo Thread Through Type (entrada 78): proposta tipográfica, com três fitas verde/laranja/azul atravessando HYDRAQ e dobrando no Q; PNG transparente/prompt em `output/imagegen/hydraq-logo-threadtype-v1.*`, sem integração na interface.
+
+- Logótipo HQ Signature (entrada 77): monograma HQ no entrelaçado, cauda azul e pequeno nó laranja destacado; PNG transparente e prompt em `output/imagegen/hydraq-logo-hq-signature-v1.*`, sem integração na interface.
+
+- Logótipo Möbius v2 (entrada 76): evolução mais complexa do entrelaçado, com fita azul a atravessar o núcleo; PNG transparente e prompt em `output/imagegen/hydraq-logo-mobius-v2.*`, sem integração na interface.
+
+- Logótipo Möbius (entrada 75): evolução da referência anexada, com três fitas verde/laranja/azul dobradas e entrelaçadas; PNG transparente e prompt em `output/imagegen/hydraq-logo-mobius-v1.*`, sem integração na interface.
+
+- Logótipo Signal Bloom (entrada 74): composição vertical, símbolo rotativo de três formas verde/laranja/azul sobre lettering HYDRAQ; proposta transparente em `output/imagegen/hydraq-logo-signal-bloom-v1.png`, sem integração na interface.
+
+- Nova direção do logótipo (entrada 73): símbolo abstrato de três percursos entrelaçados, verde/laranja/azul e lettering próprio, sem cabeças de dragão. Proposta PNG transparente em `output/imagegen/hydraq-logo-nova-direcao-v1.png`, ainda sem integração na interface.
+
+- Variações do logótipo (entrada 72): original atualizado com cabeça direita azul e duas alternativas (geométrica/entrelaçada), mantendo verde/cobre/azul. PNG transparentes e prompts em `output/imagegen/`; sem substituir o logótipo da interface.
+
+- Logótipo proposto (entrada 71): hidra de três cabeças e nome HYDRAQ, verde profundo/cobre, PNG transparente em `output/imagegen/hydraq-logo-v1.png`; gerado com ImageGen e ainda sem substituir os símbolos da interface.
 
 - Linho (entrada 70): terceira aparência, clara e editorial, com papel quente, navegação verde profundo e detalhes cobre; Grafite/Atelier e preferência atual preservados. UI UX Pro Max aplicada; contraste dos nove tons, móvel/paisagem, leitura 22 px, menus, Dual e revisão verificados em browser isolado. Verificação final: 413/413 testes, 49 verificações visuais/interativas e 40 do Dual. Disponível na 4318 ao recarregar, sem reinício.
 
@@ -722,3 +744,103 @@ Versão atual: 70
 - Verificação final: **413/413** testes sequenciais, sintaxe e diff --check. Uma execução inicial teve 412/413; a causa dessa falha não foi isolada, e a repetição completa passou. Teste de preferências atualizado; `validation/linho-ui.mjs` reproduz **49 verificações** em servidor isolado com clientes simulados a 1440/1024/768/390/375 px e paisagem 844×390, incluindo persistência, contraste ≥4,5:1 dos textos/tons/paleta, foco, leitura 22 px e geometria/estilos de Grafite/Atelier iguais com/sem o novo CSS (excetuada a amostra Linho). Sem erros JavaScript/console.
 - Ensaio Dual existente: **40/40** com Linho a 1440 px; revisão com 1/2/4 revisores a 390/1440/1024 px, fases e vistas capturadas sem erros JavaScript e inspecionadas visualmente. Provas em `.hydraq/linho-2026-10-24/`. Nenhuma inferência nem alteração às conversas reais. Sem ensaio com leitor de ecrã/dispositivo físico.
 - 4318 serve `style.css`/`layout.js` iguais ao disco (hash), sem reiniciar o serviço ou mudar a preferência do browser do utilizador. Para usar: recarregar e escolher **Aparência → Linho**. Sem commit/push.
+
+
+### 71 — 2026-10-24 — Codex
+
+- Por pedido do utilizador, criado um novo logótipo HYDRAQ com ImageGen: hidra de três cabeças, nome em maiúsculas e verde profundo/cobre inspirado no Linho. Guardado em `output/imagegen/hydraq-logo-v1.png`, com o prompt em `output/imagegen/hydraq-logo-v1.prompt.txt`.
+- Verificado: PNG RGBA 2172×724 com transparência real (alfa 0–255), nome e composição inspecionados visualmente. Não é um ficheiro vetorial. Sem substituição de `icon.svg`/símbolos existentes, sem alterações ao funcionamento nem reinício do serviço. Trabalho concorrente nos módulos Dual/terminal preservado.
+
+
+### 72 — 2026-10-24 — Codex
+
+- Por pedido do utilizador, ImageGen alterou a cabeça direita do logótipo original para azul e criou duas variações distintas, geométrica e entrelaçada. Em todas: cabeça esquerda verde, central cobre, direita azul; nome HYDRAQ e fundo transparente. Ficheiros `hydraq-logo-v2-azul.png`, `hydraq-logo-variacao-geometrica.png`, `hydraq-logo-variacao-entrelacada.png` e respetivos prompts em `output/imagegen/`. Original v1 preservado.
+- Verificado: três imagens inspecionadas visualmente, cores e nome presentes; todos os PNG em RGBA com alfa 0–255. Gerados pela ferramenta integrada, sem alterações programáticas às imagens. Apenas propostas de identidade: sem integração na interface, sem reinício ou alterações ao trabalho concorrente do Dual/terminal.
+
+
+### 73 — 2026-10-24 — Codex
+
+- Por pedido do utilizador para uma identidade muito diferente das propostas anteriores, criada com ImageGen uma nova direção: símbolo geométrico abstrato de três percursos verde/laranja/azul, sem dragões, e lettering HYDRAQ redesenhado. Imagem e prompt em `output/imagegen/hydraq-logo-nova-direcao-v1.*`.
+- Verificado visualmente o desenho/nome; PNG RGBA 2172×724, alfa 0–255. Propostas anteriores preservadas. Sem substituir os símbolos da aplicação, sem alterações ao funcionamento nem reinício.
+
+
+### 74 — 2026-10-24 — Codex
+
+- A pedido do utilizador para uma nova surpresa visual, ImageGen criou **Signal Bloom**: três formas curvas em rotação, verde/laranja/azul, com composição vertical e nome HYDRAQ por baixo. PNG e prompt em `output/imagegen/hydraq-logo-signal-bloom-v1.*`; anteriores preservados.
+- Nome, cores e composição inspecionados visualmente. PNG RGBA 1374×1145, alfa 0–255; sem edições programáticas à imagem, integração na aplicação ou reinício.
+
+
+### 75 — 2026-10-24 — Codex
+
+- A pedido do utilizador, ImageGen editou a referência anexada para dar uma torção às três faixas, com dobras e cruzamentos inspirados em Möbius. Mantidos a composição horizontal, o nome HYDRAQ e a identidade verde/laranja/azul. Imagem/prompt em `output/imagegen/hydraq-logo-mobius-v1.*`; anteriores preservados.
+- Resultado inspecionado visualmente; PNG RGBA 2172×724, alfa 0–255. Sem edição programática da imagem, substituição do logótipo ativo ou reinício.
+
+
+### 76 — 2026-10-24 — Codex
+
+- A pedido do utilizador, ImageGen acrescentou uma torção mais complexa ao Möbius: fita azul atravessa o núcleo e cruza as restantes, conservando verde/laranja/azul, nome HYDRAQ e composição horizontal. Ficheiros `output/imagegen/hydraq-logo-mobius-v2.png` e respetivo prompt; anteriores preservados.
+- Resultado inspecionado visualmente; PNG RGBA 2172×724, alfa 0–255. Sem edições programáticas à imagem ou alterações à interface/serviço.
+
+
+### 77 — 2026-10-24 — Codex
+
+- Por pedido do utilizador para acrescentar uma ideia original, ImageGen evoluiu o entrelaçado para monograma HQ, com prolongamento azul em cauda e pequeno nó laranja destacado, representando um agente independente. Mantidos três tons, nome HYDRAQ e composição horizontal. Ficheiros `output/imagegen/hydraq-logo-hq-signature-v1.*`; anteriores preservados.
+- Inspeção visual e PNG RGBA 2172×724, alfa 0–255 confirmados. Sem edição programática da imagem, integração na interface ou reinício.
+
+
+### 78 — 2026-10-24 — Codex
+
+- Após rejeição da proposta anterior, ImageGen criou uma direção tipográfica: três fitas atravessam as letras HYDRAQ e fecham numa dobra no Q, sem símbolo separado. PNG e prompt em `output/imagegen/hydraq-logo-threadtype-v1.*`; anteriores preservados.
+- Resultado inspecionado visualmente; PNG RGBA 2138×735, alfa 0–255. Sem alterações programáticas à imagem ou integração na aplicação.
+
+
+### 79 — 2026-10-24 — Codex
+
+- Por pedido do utilizador para recomeçar sem referências anteriores, ImageGen criou Ink Cut: glifo h com corte oblíquo e acento lima, nome HYDRAQ em roxo profundo. Nenhuma imagem anterior fornecida ao gerador. PNG e prompt em `output/imagegen/hydraq-logo-inkcut-v1.*`.
+- Nome/composição inspecionados visualmente; PNG RGBA 2172×724, alfa 0–255. Sem alterações programáticas à imagem, substituição do logótipo ativo ou reinício.
+
+
+### 80 — 2026-10-24 — Codex
+
+- ImageGen executado com o briefing integral fornecido pelo utilizador, sem imagens de referência nem requisitos criativos adicionais. Proposta única com formas orgânicas e nome HYDRAQ em composição horizontal, guardada em `output/imagegen/hydraq-logo-brief-v1.png` e respetivo prompt.
+- Resultado inspecionado visualmente; PNG RGBA 2006×784, alfa 0–255. Anteriores preservados; sem edição programática da imagem ou integração na aplicação.
+
+### 81 — 2026-10-24 — Claude
+
+- Por pedido do utilizador, seguindo a análise anterior (commit prévio do Linho, `4b19823`):
+  - **Trocar o cliente de um participante sem desligar o Dual.**
+    - `replaceDualMember` faz a troca numa só operação, com a reserva da ronda.
+    - O novo participante reutiliza a sua conversa do grupo ou começa uma em Planear/Só leitura.
+    - O lugar mantém o papel de principal, salvo escolha explícita.
+    - Recusada durante uma ronda, com o terminal aberto, com estado incerto ou se o novo cliente for o mesmo do outro participante.
+    - Cada ronda guarda o par que a recebeu (`round.members`, também ao reativar com outro cliente), e o registo guarda as trocas.
+    - As legendas usam esse par, e a conversa marca «X entrou no lugar do Y».
+    - Um reenvio não atravessa uma troca.
+    - Quem entra recebe um cabeçalho próprio («entras agora nesta conversa…»).
+    - Com o terminal aberto, também não se troca o principal.
+  - **Atelier.** No Dual, a barra de clientes mostra só os dois participantes, com ★ no principal, cadeado e modelo. Carregar num deles abre o diálogo de modelo, raciocínio, cliente e principal.
+  - **Noutras aparências e no sítio habitual.**
+    - O mesmo diálogo abre em «Dual → Mudar …».
+    - Ao falar só com um, o campo de cliente da caixa aparece e abre o diálogo com o cliente escolhido.
+    - Escolher o cliente do outro participante, ou um desligado, é explicado sem abrir o diálogo.
+    - O OpenCode carrega a lista de modelos da pasta quando é escolhido.
+  - **Terminal.**
+    - «Abrir no terminal · Codex/Claude/OpenCode» fica por baixo da caixa; quando a conversa lá está, aparece «X no terminal» + «Continuar na HYDRAQ».
+    - Usa as secções existentes das configurações, que só se abrem quando há uma confirmação ou um comando para copiar.
+    - No Dual vai sempre o principal. O servidor (`assertTerminal`) recusa o outro participante, e também qualquer abertura durante a ronda.
+- Ficheiros:
+  - `lib/dual.mjs`, `lib/providers.mjs`, `lib/http.mjs`, `lib/handoff.mjs`;
+  - `lib/native-sessions.mjs`, `lib/claude-terminal.mjs`, `lib/opencode-terminal.mjs`;
+  - `public/dual.js`, `public/app.js`, `public/native-sessions.js`, `public/claude-sessions.js`, `public/index.html`, `public/style.css`;
+  - testes, README.
+- Verificado:
+  - 4 testes novos (troca, bloqueios, terminal/reenvio, interface).
+  - Suíte sequencial: na primeira execução, 416/417. A falha foi um `wait` esgotado no teste de colaboração «entrega falhada ao principal…», num módulo não alterado; isolado passou 3/3, e o ficheiro inteiro 33/33. A execução final passou 417/417.
+  - `dual-harness.mjs` (Dual anterior mais 21 verificações novas): Atelier 61/61 a 1440, 1024 e 390 px; Grafite 60/60 a 1440 e 1024 px; Linho 60/60 a 1440 px. Sem erros JavaScript nem scroll horizontal, com capturas inspecionadas.
+  - Corrigido no ensaio: o botão «Continuar na HYDRAQ» ficava ilegível com o rato por cima.
+  - Provas em `.hydraq/dual-participants-2026-10-24/`.
+- Simulado: o terminal (funções de abrir e voltar do Codex substituídas no ensaio) e a lista de modelos do OpenCode por pasta.
+- Por validar:
+  - reinício da 4318, para a rota `replace` e as regras do servidor (sem reinício, a interface carrega, mas trocar de cliente dá erro);
+  - ensaio com os clientes reais.
+- Sem commit nem push.
