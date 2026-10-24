@@ -4054,17 +4054,17 @@ body .opinion-thread .automatic-review-note { margin:0 0 6px; padding:4px 0; bor
 .opinion-summary-context[data-delivery="uncertain"] { color:var(--warning,#e9bd70); }
 
 /* Optional original Codex/Claude terminal and explicit native-session association. */
-:is(#native-sessions, #claude-sessions) { min-width: 0; }
-:is(#native-sessions, #claude-sessions) .native-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-:is(#native-sessions, #claude-sessions) input, :is(#native-sessions, #claude-sessions) textarea { box-sizing: border-box; width: 100%; max-width: 100%; }
-:is(#native-sessions, #claude-sessions) textarea { font: 11px/1.5 monospace; resize: vertical; overflow-wrap: anywhere; }
-:is(#native-sessions, #claude-sessions) details { margin-top: 12px; }
-:is(#native-sessions, #claude-sessions) summary { cursor: pointer; }
-:is(#native-sessions, #claude-sessions) .native-import-row { display: block; width: 100%; margin: 6px 0; text-align: left; overflow-wrap: anywhere; }
-:is(#native-sessions, #claude-sessions) button { min-height: 36px; padding: 8px 11px; border: 1px solid var(--line); background: var(--soft); font-size: 12px; }
-:is(#native-sessions, #claude-sessions) button:hover:not(:disabled) { border-color: var(--accent); }
-:is(#native-sessions, #claude-sessions) label { display: grid; gap: 6px; margin: 12px 0; font-size: 12px; }
-:is(#native-sessions, #claude-sessions) input, :is(#native-sessions, #claude-sessions) textarea { padding: 9px; border: 1px solid var(--line); background: var(--panel); }
-:is(#native-sessions, #claude-sessions) textarea { margin-top: 8px; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) { min-width: 0; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) .native-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) input, :is(#native-sessions, #claude-sessions, #opencode-sessions) textarea { box-sizing: border-box; width: 100%; max-width: 100%; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) textarea { font: 11px/1.5 monospace; resize: vertical; overflow-wrap: anywhere; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) details { margin-top: 12px; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) summary { cursor: pointer; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) .native-import-row { display: block; width: 100%; margin: 6px 0; text-align: left; overflow-wrap: anywhere; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) button { min-height: 36px; padding: 8px 11px; border: 1px solid var(--line); background: var(--soft); font-size: 12px; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) button:hover:not(:disabled) { border-color: var(--accent); }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) label { display: grid; gap: 6px; margin: 12px 0; font-size: 12px; }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) input, :is(#native-sessions, #claude-sessions, #opencode-sessions) textarea { padding: 9px; border: 1px solid var(--line); background: var(--panel); }
+:is(#native-sessions, #claude-sessions, #opencode-sessions) textarea { margin-top: 8px; }
 #claude-sessions .claude-confirm { margin: 10px 0; padding: 10px 12px; border: 1px solid var(--accent); border-radius: 8px; background: var(--soft); font-size: 12px; }
 #claude-sessions .claude-confirm p { margin: 0; }

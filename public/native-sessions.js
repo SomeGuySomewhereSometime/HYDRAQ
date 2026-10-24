@@ -83,3 +83,23 @@ export class NativeSessionsUI {
     for (const button of this.host.querySelectorAll('[data-native-list], [data-native-more], .native-import-row')) button.disabled = Boolean(this.pending);
   }
 }
+
+export class OpenCodeSessionsUI {
+  constructor({api,state,current,refresh,toast}){
+    Object.assign(this,{api,state,current,refresh,toast});this.host=document.querySelector('#opencode-sessions');
+    this.host.innerHTML='<p class="settings-title">OpenCode original</p><p data-status class="reading-hint"></p><div class="native-actions"><button data-open type="button">Abrir no terminal</button><button data-release type="button">Continuar na HYDRAQ</button><button data-sync type="button">Recuperar histórico</button></div><details data-command hidden><summary>Comando para abrir noutro terminal</summary><textarea readonly rows="4" aria-label="Comando do terminal OpenCode"></textarea></details>';
+    this.query=s=>this.host.querySelector(s);
+    this.query('[data-open]').onclick=()=>this.run(async()=>{const result=await api('/api/conversations/'+current().id+'/opencode-open',{});if(result.command){this.query('textarea').value=result.command;this.query('[data-command]').hidden=false;}if(result.warning)toast(result.warning);});
+    this.query('[data-release]').onclick=()=>this.run(async()=>{await api('/api/conversations/'+this.session().id+'/opencode-release',{});this.query('[data-command]').hidden=true;});
+    this.query('[data-sync]').onclick=()=>this.run(()=>api('/api/conversations/'+(this.session()||current()).id+'/opencode-sync',{}));
+  }
+  session(){const c=this.current();return this.state()?.conversations.find(item=>item.provider==='opencode'&&item.terminal&&(item.group||item.id)===(c?.group||c?.id));}
+  async run(action){if(this.pending)return;this.pending=true;this.render();try{await action();await this.refresh();}catch(error){this.toast(error.message);}finally{this.pending=false;this.render();}}
+  render(){
+    const session=this.session(),c=session||this.current();this.host.classList.toggle('hidden',!c||c.provider!=='opencode'||this.state()?.providers.opencode?.transport!=='http');if(!c)return;
+    this.query('[data-status]').textContent=c.nativeHistory?.status==='unavailable'?'Histórico indisponível: '+c.nativeHistory.error:session?'A conversa está no terminal. O histórico aparece aqui em direto. Fecha o OpenCode antes de continuar na HYDRAQ.':c.threadId?'A mesma sessão privada pode continuar no terminal OpenCode.':'Envia primeiro um pedido para criar a sessão OpenCode.';
+    this.query('[data-open]').disabled=Boolean(this.pending||session||!c.threadId||['starting','running','waiting','uncertain'].includes(c.status));
+    this.query('[data-release]').hidden=!session;this.query('[data-release]').disabled=Boolean(this.pending);
+    this.query('[data-sync]').disabled=Boolean(this.pending||!c.threadId);
+  }
+}

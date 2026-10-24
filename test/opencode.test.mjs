@@ -1,5 +1,5 @@
 import test from'node:test';import assert from'node:assert/strict';import{mkdtemp,mkdir,readFile,writeFile,rm}from'node:fs/promises';import path from'node:path';import{fileURLToPath}from'node:url';
-import{OpenCode}from'../lib/opencode.mjs';import{OpenCodeRuntime,parseOpenCodeModels}from'../lib/opencode-runtime.mjs';import{filterModels}from'../public/model-picker.js';
+import{OpenCodeAcp as OpenCode}from'../lib/opencode-acp.mjs';import{OpenCodeRuntime,parseOpenCodeModels}from'../lib/opencode-runtime.mjs';import{filterModels}from'../public/model-picker.js';
 import{turnFacts}from'../lib/handoff.mjs';
 const fixture=fileURLToPath(new URL('./fixtures/fake-opencode.mjs',import.meta.url));
 const wait=async fn=>{const end=Date.now()+8000;while(!fn()){if(Date.now()>end)throw Error('Timeout');await new Promise(r=>setTimeout(r,10))}};

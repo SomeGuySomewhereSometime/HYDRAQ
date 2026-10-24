@@ -1,4 +1,4 @@
-import { NativeSessionsUI } from './native-sessions.js';
+import { NativeSessionsUI, OpenCodeSessionsUI } from './native-sessions.js';
 import { ClaudeSessionsUI } from './claude-sessions.js';
 import { workConflict, workReason } from './work-locks.js';
 import { captureDraftIntent, draftMode, followupOptions, followupDescriptions } from './composer.js';
@@ -101,6 +101,7 @@ let settingsOwner;
 let settingsBaseline;
 const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{state=await api('/api/state');render();}});
 const claudeUI = new ClaudeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{state=await api('/api/state');render();}});
+const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,refresh:async()=>{state=await api('/api/state');render();}});
 const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
@@ -254,7 +255,7 @@ function draftSettings(conversation = current()) {
 }
 
 function cacheSupport(model) {
-  if(providerId()==='opencode')return {status:'unknown',label:'Sessão nativa OpenCode',detail:'A sessão e o histórico são mantidos. Só modelos gratuitos do fornecedor OpenCode; cache por pedido não comunicada pelo ACP. Não usa a quota ChatGPT ou Claude.'};
+  if(providerId()==='opencode')return {status:'unknown',label:'Sessão nativa OpenCode',detail:'A sessão e o histórico são mantidos. Só modelos gratuitos do fornecedor OpenCode; cache lida comunicada nativamente. Não usa a quota ChatGPT ou Claude.'};
   if (providerId() === 'cursor') return { status: 'unknown', label: 'Sessão nativa do Cursor', detail: 'O Grok retoma o mesmo ID nativo. Mudar raciocínio, contexto ou Fast não garante reutilização de cache. O ACP não comunicou contadores de tokens nos ensaios.' };
   if (providerId() === 'claude') return { status: 'unknown', label: 'Cache de prompts do Claude', detail: 'A conversa retoma a sessão original do Claude Code pelo mesmo ID. A cache do servidor é por modelo e expira; mudar de modelo pode reprocessar o contexto. Os contadores mostram a cache efetivamente lida.' };
   if (providerId() === 'antigravity') return { status: 'unknown', label: 'Sessão nativa do Antigravity', detail: 'Gemini e Claude usam a sessão original do agy. Mudanças de modelo ou raciocínio retomam a conversa pelo mesmo ID; não há garantia de reutilização da cache.' };
@@ -285,12 +286,15 @@ function renderCacheInfo(conversation) {
     row.append(element('td', '', entry.name || entry.id), element('td', '', { supported: 'Conserva prefixo*', unsupported: 'Pode reprocessar', unknown: 'Não confirmado' }[cacheSupport(entry).status]));
     table.append(row);
   }
-  $('#model-capabilities').replaceChildren(table, element('p', '', { opencode: 'Variantes anunciadas pelo catálogo atual. Sessão preservada; cache por pedido não medida pelo ACP.', cursor: 'A sessão é preservada; o ACP não confirma cache nem consumo por modelo.', antigravity: 'O protocolo do agy não confirma preservação de cache por modelo.', claude: 'O Claude Code não anuncia preservação por modelo; a cache lida aparece nos contadores de cada pedido.' }[providerId()] || '* Mesmo modelo, com a opção experimental ativa. Não garante acerto de cache.'));
+  $('#model-capabilities').replaceChildren(table, element('p', '', { opencode: 'Variantes anunciadas pelo catálogo atual. Sessão preservada; cache lida comunicada nativamente.', cursor: 'A sessão é preservada; o ACP não confirma cache nem consumo por modelo.', antigravity: 'O protocolo do agy não confirma preservação de cache por modelo.', claude: 'O Claude Code não anuncia preservação por modelo; a cache lida aparece nos contadores de cada pedido.' }[providerId()] || '* Mesmo modelo, com a opção experimental ativa. Não garante acerto de cache.'));
 }
 
 function renderSettings(conversation) {
   const owner = settingsKey(conversation);
   const provider = providerId();
+  const routineOpenCode=state?.providers?.opencode?.permissionProfile==='routine';
+  permissionOptions.opencode=[routineOpenCode?['workspace-write','Trabalho habitual autorizado','Leitura, edição, comandos e pesquisa autorizados. Acesso externo, ficheiros .env e ferramentas adicionais podem pedir confirmação.']:['workspace-write','Perguntar antes','OpenCode original: autorizações na conversa; sem aprovação automática nem sandbox do sistema operativo comprovada.']];
+  const permissionProfile=provider==='opencode'&&routineOpenCode?'routine':'default';
   const basis = conversation ? targetMember(conversation) : null;
   const group = members(conversation);
   const pendingSettings = !switching(conversation) ? conversation?.handoffState?.settings : null;
@@ -301,8 +305,10 @@ function renderSettings(conversation) {
   $('#provider-hint').textContent = { opencode: 'OpenCode original · apenas gratuitos do fornecedor OpenCode', cursor: 'Cursor original · Grok da tua conta', antigravity: 'agy original · Gemini e Claude da tua conta', claude: 'Claude Code original · sessão claude.ai existente', codex: 'Codex original · sessão ChatGPT existente' }[provider] + (conversation ? ' · podes mudar de cliente entre pedidos' : '');
   $('#provider').dataset.tip = `Cliente: ${$('#provider-hint').textContent}.${conversation ? ' Escolher outro cliente nesta conversa faz uma passagem de contexto no próximo pedido.' : ''}`;
   $('#permissions-hint').textContent = { opencode: 'Autorizações e perguntas na conversa. Planear usa o agente nativo; sem sandbox do sistema operativo comprovada. Sem aprovação automática. Só o fornecedor OpenCode gratuito, sem subagentes nesta versão.', cursor: 'Autorizações, perguntas e planos aparecem na conversa. Planear/Perguntar são modos nativos; isolamento do sistema operativo não comprovado. Sem orientação do turno ativo.', antigravity: 'Políticas nativas do agy. Durante a execução: redirecionar com interrupção confirmada e retoma, ou enviar depois. Não há injeção no mesmo turno nativo.', claude: 'Autorizações na conversa. Durante a execução: orientar na próxima oportunidade, redirecionar agora ou enviar depois. Orientar não aprova ações pendentes.' }[provider] || 'As autorizações adicionais aparecem na conversa.';
-  if ($('#sandbox').dataset.provider !== provider) {
+  if(provider==='opencode'&&routineOpenCode)$('#permissions-hint').textContent='Trabalho habitual autorizado: ler, editar, executar comandos e testes, pesquisar e consultar a memória. Acesso externo e ficheiros .env podem pedir confirmação. Planear mantém as restrições de edição. Só modelos gratuitos OpenCode.';
+  if ($('#sandbox').dataset.provider !== provider || $('#sandbox').dataset.permissionProfile !== permissionProfile) {
     $('#sandbox').dataset.provider = provider;
+    $('#sandbox').dataset.permissionProfile = permissionProfile;
     $('#sandbox').replaceChildren(...permissionOptions[provider].map(([value,label])=> { const option=element('option','',label);option.value=value;return option; }));
   }
   const signature = JSON.stringify([provider,providerState().models]);
@@ -577,10 +583,10 @@ function renderMessages(conversation) {
     const avatar = element('span', 'avatar', message.role === 'user' ? (automaticReturn?'H':'TU') : '');
     if (message.role !== 'user') avatar.append(icon());
     header.append(avatar);
-    header.append(element('span','',message.role === 'user' ? (automaticReturn?'HYDRAQ · Avaliação do parecer':message.kind === 'steer' ? 'Tu · Orientação' : message.source === 'terminal' ? 'Tu · Claude original' : 'Tu') : providerName(owner.provider)));
+    header.append(element('span','',message.role === 'user' ? (automaticReturn?'HYDRAQ · Avaliação do parecer':message.kind === 'steer' ? 'Tu · Orientação' : message.source === 'terminal' ? 'Tu · '+providerName(owner.provider)+' original' : 'Tu') : providerName(owner.provider)));
     if (message.model) {
       const modelName = providerState(owner.provider).models?.find(model => model.id === message.model)?.name || message.model;
-      header.append(element('span', 'message-model', [modelName, effortLabels[message.effort] || message.effort, message.source === 'terminal' && message.role !== 'user' ? 'Claude original' : null].filter(Boolean).join(' · ')));
+      header.append(element('span', 'message-model', [modelName, effortLabels[message.effort] || message.effort, message.source === 'terminal' && message.role !== 'user' ? providerName(owner.provider)+' original' : null].filter(Boolean).join(' · ')));
     }
     const time = element('time','',new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}));
     time.dateTime = message.at;
@@ -730,8 +736,8 @@ function renderTurnUsage(conversation) {
     view.append(session); return;
   }
   if(conversation?.provider==='opencode'){
-    if(turn?.usage)view.append(usageMetrics([['Entrada',turn.usage.inputTokens],['Saída',turn.usage.outputTokens],['Total nativo',turn.usage.totalTokens]]));
-    view.append(element('p','usage-empty',`Custo comunicado: ${Number.isFinite(turn?.costUSD)?new Intl.NumberFormat('pt-PT',{style:'currency',currency:'USD',maximumFractionDigits:6}).format(turn.costUSD):'não medido'}. Só modelos gratuitos OpenCode. Cache por pedido não comunicada; subagentes desativados nesta versão.`));return;
+    if(turn?.usage)view.append(usageMetrics([['Entrada',turn.usage.inputTokens],['Cache lida',turn.usage.cachedInputTokens],['Cache escrita',turn.usage.cacheWriteInputTokens],['Saída',turn.usage.outputTokens],['Raciocínio',turn.usage.reasoningOutputTokens]]));
+    view.append(element('p','usage-empty',`Custo comunicado: ${Number.isFinite(turn?.costUSD)?new Intl.NumberFormat('pt-PT',{style:'currency',currency:'USD',maximumFractionDigits:6}).format(turn.costUSD):'não medido'}. Só modelos gratuitos OpenCode. Contadores de cache nativos quando disponíveis; subagentes desativados nesta versão.`));return;
   }
   if (conversation?.provider === 'cursor') { view.append(element('p','usage-empty','Contadores de tokens e cache indisponíveis neste protocolo.')); return; }
   if (!turn?.usage) {
@@ -1041,7 +1047,7 @@ function renderSend() {
   const hasImages=imageAttachments.list().length>0;
   const openCodeNoImage=providerId()==='opencode'&&!providerState().models?.find(m=>m.id===$('#model').value)?.images;
   imageAttachments.render(busy || sending || openCodeNoImage || providerState().capabilities?.images===false);
-  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
+  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain');
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
   $('#send').textContent = sending ? 'A enviar…' : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
@@ -1052,7 +1058,7 @@ function renderSend() {
   $('#use-as-request').disabled = sending;
   $('#composer').classList.toggle('steering', steering || expired);
   $('#prompt').placeholder = steering ? 'Acrescenta uma orientação para a tarefa em curso…' : 'Descreve o que queres fazer…';
-  $('#composer-hint').textContent = nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ nas configurações.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ nas configurações.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
+  $('#composer-hint').textContent = openCodeUI.session() ? 'Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ nas configurações.' : nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ nas configurações.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ nas configurações.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
 }
 
 function renderUncertainty(conversation) {
@@ -1111,6 +1117,7 @@ function render() {
   projectMemory.render();
   nativeUI.render();
   claudeUI.render();
+  openCodeUI.render();
   opinionUI.renderAutomatic();
   const connection = providerState().connection;
   const account = providerState().account;
