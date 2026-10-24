@@ -57,12 +57,14 @@ export class ClaudeSessionsUI {
   releasable() { return !this.query('[data-claude-release]').disabled; }
   /** A confirmation, or a launch that failed, waits in this section. */
   attention() { const command = this.query('[data-claude-command]'); return Boolean(this.confirmation) || (!command.hidden && command.open); }
+  // The state is fetched once the action settled, so everything that shows this section's progress follows it.
   async run(action) {
     if (this.pending) return;
     this.pending = true; this.render();
-    try { await action(); await this.refresh(); }
+    try { await action(); }
     catch (error) { this.toast(error.message); }
     finally { this.pending = false; this.render(); }
+    await this.refresh().catch(error => this.toast(error.message));
   }
   list(more) {
     return this.run(async () => {

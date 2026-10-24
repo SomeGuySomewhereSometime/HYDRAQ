@@ -125,16 +125,20 @@ O protocolo documentado não aceita mensagens de controlo para autorizações ou
 - **Abrir:** depois do primeiro pedido, usa **Abrir no terminal · Antigravity**, por baixo da caixa de mensagens (também em **Configurações e detalhes → Antigravity original**).
   - A HYDRAQ fecha o seu processo agy dessa conversa.
   - Abre `agy --conversation <ID>` na mesma pasta, com o mesmo modelo, `--sandbox` e o modo escolhido.
-  - No terminal, o agy pode pedir confirmação nas ações que a tua configuração ainda não autoriza. Shift+Tab muda de modo, por isso Planear não é garantia de que não escreve.
+  - No terminal, o agy pode pedir confirmação nas ações que a tua configuração ainda não autoriza. Shift+Tab muda de modo, por isso Planear não é garantia de que não escreve. No ensaio, `--sandbox` restringiu os comandos de terminal, mas não impediu escrever ficheiros fora da pasta do projeto.
   - Enquanto a conversa lá estiver, a HYDRAQ não envia pedidos desse grupo nem trabalha nessa pasta. No Dual, só o principal vai ao terminal.
 - **Voltar:** sai do agy (`/exit`) e escolhe **Continuar na HYDRAQ**.
   - Se ainda houver um agy com a conversa aberta, o regresso é recusado.
-  - Um agy sem ID na mesma pasta pode tê-la aberto, por isso aí a HYDRAQ pede-te confirmação.
+  - Um agy sem ID na mesma pasta pode tê-la aberto, por isso aí a HYDRAQ pede-te confirmação, tanto ao abrir como ao voltar, para nunca ficarem dois a escrever na mesma conversa. Se não conseguir ver os processos, também pergunta.
 - **O que volta:** a HYDRAQ lê o registo do agy dessa conversa, uma base de dados num formato interno não documentado, observado no agy 1.4.7.
-  - Traz os pedidos que escreveste no terminal, as respostas, os ficheiros e os comandos usados (sem os resultados dos comandos) e os ficheiros alterados vistos pelo git.
+  - Traz os pedidos que escreveste no terminal e as respostas.
+    - Um pedido só conta como concluído se acabar com uma resposta do agy, sem ferramenta depois. O agy não marca as interrupções; sem essa resposta, o pedido fica «interrompido · conclusão não confirmada», com o texto como progresso.
+    - Um ficheiro só conta como alterado se o resultado da escrita foi bem-sucedido. Uma escrita recusada, ou sem resultado, fica como tentativa, com o motivo.
+    - Os comandos voltam sem a saída.
+    - Os ficheiros que o git viu mudar são indicados para o tempo todo no terminal, sem os atribuir a um pedido.
   - O histórico de pedidos do agy serve de segunda testemunha: se lá estiver um pedido que falta no registo, a leitura conta como incompleta.
   - A leitura falha em vez de adivinhar. Se o formato mudar numa atualização do agy, voltam só os pedidos, com a indicação de que a resposta ficou no Antigravity original, e os ficheiros vistos pelo git. Numa passagem ou no Dual, os outros modelos recebem esses pedidos como «resposta não importada» e o contexto aparece como parcial.
-  - Pedidos trazidos antes sem resposta recebem-na num regresso seguinte, quando o registo a tiver.
+  - Pedidos trazidos antes sem resposta recebem-na num regresso seguinte, quando o registo a tiver. Cada pedido fica com o passo mais próximo com o mesmo texto, que não serve a mais nenhum; se houver empate, fica como estava.
   - Um pedido sem resposta no registo, por exemplo interrompido, fica assinalado.
   - O próprio agy continua com tudo, porque a conversa é a mesma.
 

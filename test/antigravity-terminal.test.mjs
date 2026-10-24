@@ -18,12 +18,14 @@ const header = at => bytes(5, bytes(1, [...varint(8), ...varint(Math.floor(at / 
 const step = { user: (text, at) => [14, [...header(at), ...bytes(19, [...bytes(2, text), ...bytes(3, bytes(1, text))])]],
   answer: (text, at) => [15, [...header(at), ...bytes(20, [...bytes(1, text), ...bytes(6, 'bot-1'), ...bytes(8, text)])]],
   tool: (name, args, at) => [15, [...header(at), ...bytes(20, [...bytes(6, 'bot-2'), ...bytes(7, [...bytes(1, 'call_1'), ...bytes(2, name), ...bytes(3, JSON.stringify(args))])])]],
-  other: (type, at) => [type, header(at)] };
+  other: (type, at) => [type, header(at)],
+  done: at => [132, [...header(at), ...bytes(140, bytes(2, bytes(1, 'Created file.')))]],
+  refused: (error, at) => [132, [...header(at), ...bytes(31, [...bytes(2, error), ...bytes(3, error)])], 7] };
 function agyStore(file, steps) {
   const db = new DatabaseSync(file);
   db.exec('CREATE TABLE IF NOT EXISTS steps (idx integer PRIMARY KEY, step_type integer NOT NULL DEFAULT 0, status integer NOT NULL DEFAULT 0, step_payload blob)');
-  const start = db.prepare('SELECT COALESCE(MAX(idx), -1) AS last FROM steps').get().last + 1, insert = db.prepare('INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, 3, ?)');
-  steps.forEach(([type, payload], index) => insert.run(start + index, type, new Uint8Array(payload)));
+  const start = db.prepare('SELECT COALESCE(MAX(idx), -1) AS last FROM steps').get().last + 1, insert = db.prepare('INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, ?, ?)');
+  steps.forEach(([type, payload, status = 3], index) => insert.run(start + index, type, status, new Uint8Array(payload)));
   db.close();
 }
 import { OpinionClient } from './fixtures/opinion-client.mjs';
@@ -83,7 +85,7 @@ test('Antigravity original: passa a mesma conversa ao terminal, bloqueia a HYDRA
   assert.equal(result.imported, 1); assert.match(result.warning, /Confirmaste/);
   assert.equal(c.terminal, undefined);
   const turn = c.turns.at(-1), message = c.messages.at(-1);
-  assert.equal(turn.source, 'terminal'); assert.equal(turn.partial, 'terminal'); assert.deepEqual(turn.facts.files, ['b.txt', 'novo.txt']);
+  assert.equal(turn.source, 'terminal'); assert.equal(turn.partial, 'terminal'); assert.deepEqual(turn.facts.files, []); assert.deepEqual(turn.facts.periodFiles, ['b.txt', 'novo.txt']);
   assert.equal(message.text, 'Pedido no terminal'); assert.equal(message.source, 'terminal');
   assert.match(message.terminalNote, /ficou no Antigravity original e não foi importada.*b\.txt, novo\.txt/);
   assert.equal(c.turns.filter(entry => entry.source === 'terminal').length, 1);
@@ -156,19 +158,19 @@ test('Antigravity original: com o registo do agy legível, voltam os pedidos com
   await history({ display: 'Cria b.txt e diz quanto é 2+2', timestamp: now + 1000, conversationId: c.threadId }, { display: 'E agora?', timestamp: now + 4000, conversationId: c.threadId });
   git.lines = [' M a.txt', '?? b.txt'];
   const result = await terminal.release(c.id);
-  assert.deepEqual({ imported: result.imported, answered: result.answered, warning: result.warning }, { imported: 2, answered: 1, warning: null });
+  assert.deepEqual({ imported: result.imported, answered: result.answered, unconfirmed: result.unconfirmed, warning: result.warning }, { imported: 2, answered: 1, unconfirmed: 1, warning: null });
   const [first, second] = c.turns.filter(turn => turn.source === 'terminal');
   assert.equal(first.status, 'completed'); assert.equal(first.partial, undefined); assert.equal(first.finalAnswer, 'Criei b.txt. **2+2 é 4.**');
-  assert.deepEqual(first.facts.files, ['b.txt']); assert.deepEqual(first.facts.commands, [{ command: 'npm test', exitCode: null, status: 'sem resultado lido' }]);
+  assert.deepEqual(first.facts.files, ['b.txt']); assert.deepEqual(first.facts.commands, [{ command: 'npm test', exitCode: null, status: 'sem resultado registado' }]);
   const shown = c.messages.filter(m => m.turnId === first.id);
   assert.deepEqual(shown.map(m => [m.role, m.text, m.source, m.terminalNote]), [['user', 'Cria b.txt e diz quanto é 2+2', 'terminal', undefined], ['assistant', 'Criei b.txt. **2+2 é 4.**', 'terminal', undefined]]);
   assert.equal(shown[1].phase, 'final_answer'); assert.equal(shown[0].at, new Date(now + 1000).toISOString());
-  assert.equal(second.status, 'interrupted'); assert.match(c.messages.find(m => m.turnId === second.id).terminalNote, /não registou resposta/);
-  assert.deepEqual(second.facts.files, ['b.txt'], 'os ficheiros vistos pelo git vão com o último pedido');
+  assert.equal(second.status, 'interrupted'); assert.equal(second.unconfirmed, true); assert.match(c.messages.find(m => m.turnId === second.id).terminalNote, /não confirmou a conclusão.*vistos pelo git, sem saber que pedido os alterou\): b\.txt/);
+  assert.deepEqual(second.facts.files, []); assert.deepEqual(second.facts.periodFiles, ['b.txt'], 'o que o git viu pertence à estadia no terminal');
   const codex = { id: 'codex-1', provider: 'codex', cwd: directory, messages: [], turns: [] };
   const handoff = buildHandoff({ target: codex, members: [codex, { ...c, provider: 'antigravity' }], git: [] });
   assert.match(handoff.text, /Antigravity original · concluído[\s\S]*Resposta final: Criei b\.txt/);
-  assert.match(handoff.text, /`npm test` sem resultado lido/);
+  assert.match(handoff.text, /`npm test` sem resultado registado/);
   assert.equal(handoff.coverage, 'complete');
   assert.equal(agy.conversations.length, 1);
 });
@@ -202,10 +204,71 @@ test('Antigravity original: registo ilegível fica pelos pedidos; respostas que 
 test('passos do agy: pedido, resposta e ferramentas; formato inesperado falha em vez de adivinhar', () => {
   const at = Date.UTC(2026, 9, 24, 22, 41, 15, 254);
   const decoded = [step.user('olá', at), step.tool('write_file', { Path: 'x.txt' }, at), step.answer('Feito.', at), step.other(132, at)].map(([type, payload], idx) => decodeStep({ idx, step_type: type, step_payload: new Uint8Array(payload) }));
-  assert.deepEqual(decoded.map(s => [s.kind, s.text ?? null, s.at]), [['user', 'olá', '2026-10-24T22:41:15.254Z'], ['model', null, '2026-10-24T22:41:15.254Z'], ['model', 'Feito.', '2026-10-24T22:41:15.254Z'], ['other', null, '2026-10-24T22:41:15.254Z']]);
+  assert.deepEqual(decoded.map(s => [s.kind, s.text ?? null, s.at]), [['user', 'olá', '2026-10-24T22:41:15.254Z'], ['model', null, '2026-10-24T22:41:15.254Z'], ['model', 'Feito.', '2026-10-24T22:41:15.254Z'], ['result', null, '2026-10-24T22:41:15.254Z']]);
   assert.deepEqual(decoded[1].tools, [{ name: 'write_file', args: { Path: 'x.txt' } }]);
   assert.deepEqual(stepTurns(decoded).map(turn => [turn.prompt.text, turn.answers.map(a => a.text), turn.tools.length]), [['olá', ['Feito.'], 1]]);
+  // Finished only when the request ends on a finished model step with text and no tool call.
+  const finished = (...steps) => stepTurns(steps.map(([type, payload], idx) => decodeStep({ idx, step_type: type, status: 3, step_payload: new Uint8Array(payload) })))[0].complete;
+  assert.equal(finished(step.user('a', at), step.answer('Pronto.', at)), true);
+  assert.equal(finished(step.user('a', at), step.answer('Vou fazer.', at), step.tool('write_file', { Path: 'x' }, at)), false);
+  assert.equal(finished(step.user('a', at), step.tool('read_file', { Path: 'x' }, at), step.done(at)), false);
+  assert.equal(finished(step.user('a', at), step.tool('write_file', { Path: 'x' }, at), step.done(at), step.answer('Feito.', at)), true);
   assert.throws(() => decodeStep({ idx: 0, step_type: 14, step_payload: new Uint8Array([0x0f, 0xff]) }));
   assert.throws(() => decodeStep({ idx: 0, step_type: 14, step_payload: new Uint8Array(bytes(19, bytes(2, [0xff, 0xfe]))) }));
   assert.throws(() => decodeStep({ idx: 0, step_type: 15, step_payload: new Uint8Array(header(at)) }));
+});
+
+test('pedido interrompido no terminal não passa a concluído; escrita recusada não passa a ficheiro alterado', async t => {
+  const { directory, home, terminal, chat } = await setup(t);
+  const c = await chat(), file = path.join(home, 'conversations', c.threadId + '.db'), now = Date.now();
+  await rm(file); agyStore(file, [step.user('Memoriza GIRASSOL', now - 60_000), step.answer('OK.', now - 59_000)]);
+  await terminal.open(c.id, { launch: false });
+  agyStore(file, [step.user('Cria blocked.txt', now + 1000), step.tool('write_file', { Path: path.join(directory, 'blocked.txt') }, now + 1100),
+    step.refused('open blocked.txt: permission denied', now + 1200), step.answer('A escrita foi recusada por falta de permissões.', now + 1300),
+    step.user('Cria x.txt', now + 2000), step.answer('Vou criar x.txt.', now + 2100), step.tool('write_file', { Path: path.join(directory, 'x.txt') }, now + 2200)]);
+  const result = await terminal.release(c.id);
+  assert.deepEqual({ imported: result.imported, answered: result.answered, unconfirmed: result.unconfirmed }, { imported: 2, answered: 1, unconfirmed: 1 });
+  const [refused, stopped] = c.turns.filter(turn => turn.source === 'terminal');
+  assert.equal(refused.status, 'completed'); assert.deepEqual(refused.facts.files, []);
+  assert.deepEqual(refused.facts.attempted, [{ file: 'blocked.txt', result: 'recusado: open blocked.txt: permission denied' }]);
+  // Text before a tool call is progress: without agy finishing, nothing is a final answer.
+  assert.equal(stopped.status, 'interrupted'); assert.equal(stopped.unconfirmed, true); assert.equal(stopped.finalAnswer, undefined);
+  assert.deepEqual(c.messages.filter(m => m.turnId === stopped.id && m.role === 'assistant').map(m => [m.text, m.phase]), [['Vou criar x.txt.', 'commentary']]);
+  assert.deepEqual(stopped.facts.attempted, [{ file: 'x.txt', result: 'sem resultado registado' }]);
+  const codex = { id: 'codex-1', provider: 'codex', cwd: directory, messages: [], turns: [] };
+  const text = buildHandoff({ target: codex, members: [codex, { ...c, provider: 'antigravity' }], git: [] }).text;
+  assert.doesNotMatch(text, /Ficheiros alterados \(observados\): (blocked|x)\.txt/);
+  assert.match(text, /Tentativas de alteração sem confirmação: blocked\.txt \(recusado: open blocked\.txt: permission denied\)/);
+  assert.match(text, /interrompido\nO cliente original não confirmou a conclusão deste pedido[\s\S]*Resposta parcial: Vou criar x\.txt\./);
+});
+
+test('recuperação: pedidos iguais recebem cada um a sua resposta; um empate fica por recuperar', async t => {
+  const { home, terminal, chat, history } = await setup(t);
+  const c = await chat(), file = path.join(home, 'conversations', c.threadId + '.db'), now = Date.now();
+  await rm(file); agyStore(file, [step.user('Memoriza GIRASSOL', now - 60_000), step.answer('OK.', now - 59_000)]);
+  await terminal.open(c.id, { launch: false });
+  agyStore(file, [[14, [0x0f, 0xff]]]);
+  await history({ display: 'continua', timestamp: now + 1000, conversationId: c.threadId }, { display: 'continua', timestamp: now + 4000, conversationId: c.threadId },
+    { display: 'empate', timestamp: now + 8000, conversationId: c.threadId });
+  assert.equal((await terminal.release(c.id)).imported, 3);
+  const [first, second, tie] = c.turns.filter(turn => turn.partial === 'terminal');
+  const db = new DatabaseSync(file); db.prepare('DELETE FROM steps WHERE idx = 2').run(); db.close();
+  agyStore(file, [step.user('continua', now + 1000), step.answer('Etapa 1.', now + 1500), step.user('continua', now + 4000), step.answer('Etapa 2.', now + 4500),
+    step.user('empate', now + 7000), step.answer('Resposta A.', now + 7100), step.user('empate', now + 9000), step.answer('Resposta B.', now + 9100)]);
+  await terminal.open(c.id, { launch: false });
+  assert.equal((await terminal.release(c.id)).recovered, 2);
+  assert.equal(first.finalAnswer, 'Etapa 1.'); assert.equal(second.finalAnswer, 'Etapa 2.');
+  assert.equal(tie.partial, 'terminal', 'dois passos à mesma distância: não se escolhe nenhum');
+});
+
+test('abrir com um agy incerto na mesma pasta pede confirmação; sem ler os processos também', async t => {
+  const { agy, terminal, chat } = await setup(t);
+  const c = await chat();
+  terminal.holders = async () => ({ found: [], unsure: [555] });
+  await assert.rejects(terminal.open(c.id, { launch: false }), error => error.code === 'TERMINAL_CONFIRM' && /processo 555.*dois a escrever/.test(error.message));
+  assert.equal(c.terminal, undefined);
+  terminal.holders = async () => ({ found: [], unsure: [], unknown: true });
+  await assert.rejects(terminal.open(c.id, { launch: false }), error => error.code === 'TERMINAL_CONFIRM' && /Não foi possível verificar/.test(error.message));
+  assert.ok((await terminal.open(c.id, { launch: false, confirm: ['closed'] })).command);
+  assert.ok(c.terminal); assert.equal(agy.session, null);
 });

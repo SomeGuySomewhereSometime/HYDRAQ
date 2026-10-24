@@ -37,12 +37,14 @@ export class NativeSessionsUI {
   releasable() { return !this.query('[data-native-release]').disabled; }
   /** A launch that failed leaves the command open here: the person has to copy it. */
   attention() { const command = this.query('[data-native-command]'); return !command.hidden && command.open; }
+  // The state is fetched once the action settled, so everything that shows this section's progress follows it.
   async run(action) {
     if (this.pending) return;
     this.pending = true; this.render();
-    try { await action(); await this.refresh(); }
+    try { await action(); }
     catch (error) { this.toast(error.message); }
     finally { this.pending = false; this.render(); }
+    await this.refresh().catch(error => this.toast(error.message));
   }
   list(more) {
     return this.run(async () => {
@@ -103,7 +105,7 @@ export class OpenCodeSessionsUI {
   session(){const c=this.current();return this.state()?.conversations.find(item=>item.provider==='opencode'&&item.terminal&&(item.group||item.id)===(c?.group||c?.id));}
   releasable(){return !this.query('[data-release]').disabled;}
   attention(){const command=this.query('[data-command]');return !command.hidden&&command.open;}
-  async run(action){if(this.pending)return;this.pending=true;this.render();try{await action();await this.refresh();}catch(error){this.toast(error.message);}finally{this.pending=false;this.render();}}
+  async run(action){if(this.pending)return;this.pending=true;this.render();try{await action();}catch(error){this.toast(error.message);}finally{this.pending=false;this.render();}await this.refresh().catch(error=>this.toast(error.message));}
   render(){
     const session=this.session(),c=session||this.current();this.host.classList.toggle('hidden',!c||c.provider!=='opencode'||this.state()?.providers.opencode?.transport!=='http');if(!c)return;
     this.query('[data-status]').textContent=c.nativeHistory?.status==='unavailable'?'Histórico indisponível: '+c.nativeHistory.error:session?'A conversa está no terminal. O histórico aparece aqui em direto. Fecha o OpenCode antes de continuar na HYDRAQ.':c.threadId?'A mesma sessão privada pode continuar no terminal OpenCode.':'Envia primeiro um pedido para criar a sessão OpenCode.';
@@ -125,24 +127,31 @@ export class AntigravitySessionsUI {
       <details data-command hidden><summary>Comando para abrir noutro terminal</summary><textarea readonly rows="4" aria-label="Comando do Antigravity original"></textarea></details>`;
     const query = selector => this.host.querySelector(selector);
     this.query = query;
-    this.open = () => this.run(async () => {
-      const result = await this.api(`/api/conversations/${(this.session() || this.current()).id}/antigravity-open`, {});
-      this.commandId = result.conversationId;
-      query('textarea').value = result.command || '';
-      query('[data-command]').hidden = false;
-      if (result.warning) { query('[data-command]').open = true; this.toast(result.warning); }
+    // HYDRAQ does not guess that agy is closed: an unsure answer, opening or coming back, waits for the person.
+    const open = (id, confirm = []) => this.run(async () => {
+      try {
+        const result = await this.api(`/api/conversations/${id}/antigravity-open`, {confirm});
+        this.commandId = result.conversationId;
+        query('textarea').value = result.command || '';
+        query('[data-command]').hidden = false;
+        if (result.warning) { query('[data-command]').open = true; this.toast(result.warning); }
+      } catch (error) {
+        if (error.code !== 'TERMINAL_CONFIRM') throw error;
+        this.confirmation = {context: this.current()?.id, message: error.message, label: 'Não é esta conversa · abrir', proceed: () => open(id, [...confirm, error.confirm])};
+      }
     });
-    // HYDRAQ does not guess that agy is closed: an unsure answer waits for the person's confirmation.
+    this.open = () => open((this.session() || this.current()).id);
     const release = (id, confirm = []) => this.run(async () => {
       try {
         const result = await this.api(`/api/conversations/${id}/antigravity-release`, {confirm});
         query('[data-command]').hidden = true;
-        const answered = result.answered ?? 0;
-        this.toast([result.imported ? `${result.imported} pedido(s) do Antigravity original adicionados à conversa${answered === result.imported ? ', com as respostas.' : answered ? `, ${answered} com resposta.` : '. As respostas ficaram no agy.'}` : 'Nenhum pedido novo no Antigravity original.',
+        const answered = result.answered ?? 0, unconfirmed = result.unconfirmed ?? 0;
+        this.toast([result.imported ? `${result.imported} pedido(s) do Antigravity original adicionados à conversa${answered === result.imported ? ', com as respostas.' : answered ? `, ${answered} com resposta.` : unconfirmed ? '.' : '. As respostas ficaram no agy.'}` : 'Nenhum pedido novo no Antigravity original.',
+          unconfirmed ? `${unconfirmed} sem conclusão confirmada pelo agy.` : '',
           result.recovered ? `Recuperada(s) ${result.recovered} resposta(s) de pedidos trazidos antes sem elas.` : '', result.warning].filter(Boolean).join(' '));
       } catch (error) {
         if (error.code !== 'TERMINAL_CONFIRM') throw error;
-        this.confirmation = {context: this.current()?.id, message: error.message, proceed: () => release(id, [...confirm, error.confirm])};
+        this.confirmation = {context: this.current()?.id, message: error.message, label: 'Confirmo que o agy está fechado', proceed: () => release(id, [...confirm, error.confirm])};
       }
     });
     this.release = () => release(this.session()?.id);
@@ -159,12 +168,14 @@ export class AntigravitySessionsUI {
   }
   releasable() { return !this.query('[data-release]').disabled; }
   attention() { const command = this.query('[data-command]'); return Boolean(this.confirmation) || (!command.hidden && command.open); }
+  // The state is fetched once the action settled, so everything that shows this section's progress follows it.
   async run(action) {
     if (this.pending) return;
     this.pending = true; this.render();
-    try { await action(); await this.refresh(); }
+    try { await action(); }
     catch (error) { this.toast(error.message); }
     finally { this.pending = false; this.render(); }
+    await this.refresh().catch(error => this.toast(error.message));
   }
   render() {
     const state = this.state(), c = this.current(), session = this.session();
@@ -185,6 +196,7 @@ export class AntigravitySessionsUI {
     const confirm = this.query('[data-confirm]');
     confirm.hidden = !this.confirmation;
     confirm.querySelector('p').textContent = this.confirmation?.message || '';
+    this.query('[data-proceed]').textContent = this.confirmation?.label || 'Confirmo que o agy está fechado';
     for (const button of confirm.querySelectorAll('button')) button.disabled = Boolean(this.pending);
   }
 }

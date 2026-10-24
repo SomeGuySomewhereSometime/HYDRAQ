@@ -1,8 +1,15 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 84
+Versão atual: 85
 
 ## Resumo atual
+
+- Correções do terminal Antigravity (entrada 85), após a revisão do Codex:
+  - abrir com um agy incerto na mesma pasta pede confirmação;
+  - «concluído» só quando o pedido acaba numa resposta terminada do agy; caso contrário fica interrompido, com a conclusão não confirmada;
+  - um ficheiro só conta como alterado se a escrita foi bem-sucedida; as recusas ficam como tentativas, e o que o git viu fica para o tempo todo no terminal;
+  - a recuperação associa cada pedido a um só passo.
+  - Ensaios reais com o Gemini 3.8 Flash (escrita aceite, recusada e Esc); 427/427 testes; 17 verificações em browser por aparência.
 
 - Respostas do terminal Antigravity (entrada 84): ao voltar do agy, a HYDRAQ lê o registo dele (SQLite com passos em protobuf, formato observado no agy 1.4.7) e traz os pedidos com as respostas e as ferramentas usadas. Se a leitura falhar, fica o regresso parcial, com aviso. Pedidos trazidos antes sem resposta são completados no regresso seguinte. Ensaio real com o Gemini 3.8 Flash; 424/424 testes e 16 verificações em browser por aparência. Commit a5ebd68, ativado na 4318 (PID 1398948).
 
@@ -944,3 +951,32 @@ Versão atual: 84
   - A página real carrega sem erros e sem escritas.
   - Provas em `.hydraq/agy-terminal-2026-10-24/restart-84/`.
 - Por validar com o utilizador: os dois pedidos da conversa de teste devem ser completados no próximo regresso do terminal nessa conversa. Sem push.
+
+### 85 — 2026-10-25 — Claude
+
+- Por pedido do utilizador, correção das quatro falhas que o Codex reproduziu no regresso do terminal Antigravity. Ensaios reais primeiro, para ver como o agy regista cada caso:
+  - uma escrita recusada fica com o resultado no estado 7 e o erro («permission denied»);
+  - uma escrita aceite fica no estado 3 («Created file.»);
+  - uma interrupção com Esc não deixa marca própria: falta a resposta final.
+  - Também no ensaio: `--sandbox` não impediu escrever fora da pasta do projeto.
+- **Correções:**
+  1. **Abertura:** pede `TERMINAL_CONFIRM` com um agy incerto na pasta ou quando não consegue ler os processos («desconhecido», nunca «fechado»). A interface mostra o cartão também na abertura.
+  2. **Conclusão:** só quando o pedido acaba num passo do modelo com texto, sem ferramenta e terminado. Caso contrário fica `interrupted` + `unconfirmed`, com o texto como progresso; a passagem e o Dual dizem «não confirmou a conclusão» e «Resposta parcial».
+  3. **Ficheiros:** cada ferramenta é associada ao seu resultado.
+     - Ficam em `files` só as escritas bem-sucedidas.
+     - As recusas, ou as escritas sem resultado, ficam em `attempted`, com o motivo.
+     - Os comandos ficam «executado (saída não lida)», «falhou: …» ou «sem resultado registado».
+     - O que o git viu fica em `periodFiles`, para o tempo todo no terminal, sem o atribuir a um pedido.
+  4. **Recuperação:** fica com o passo mais próximo com o mesmo texto, em 5 s; cada passo serve um só pedido, e um empate fica por recuperar.
+  - Também: nas quatro secções de terminal, o estado é atualizado depois de cada ação, para o botão junto à caixa seguir uma confirmação feita no cartão.
+- Ficheiros:
+  - `lib/antigravity-steps.mjs`, `lib/antigravity-terminal.mjs`, `lib/handoff.mjs`, `lib/http.mjs`;
+  - `public/native-sessions.js`, `public/claude-sessions.js`;
+  - `test/antigravity-terminal.test.mjs`, README.
+- Verificado:
+  - 427/427 testes sequenciais, com os quatro casos do Codex como regressão.
+  - Os três pedidos reais (escrita aceite, recusa, Esc) importados pelo código corrigido ficam com a classificação certa.
+  - O caminho normal real continua a trazer a resposta.
+  - Browser: 17/17 em Atelier, Grafite, Linho e Mono (e a 390 px, que não é prioridade para o utilizador). O ensaio do Dual continua 61/61 e 60/60.
+  - Provas em `.hydraq/agy-terminal-2026-10-24/` (VALIDACAO, secção da entrada 85).
+- Por fazer: reinício da 4318, autorizado pelo utilizador, a seguir.
