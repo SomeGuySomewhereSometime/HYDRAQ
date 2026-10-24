@@ -4,7 +4,7 @@ Versão atual: 84
 
 ## Resumo atual
 
-- Respostas do terminal Antigravity (entrada 84): ao voltar do agy, a HYDRAQ lê o registo dele (SQLite com passos em protobuf, formato observado no agy 1.4.7) e traz os pedidos com as respostas e as ferramentas usadas. Se a leitura falhar, fica o regresso parcial, com aviso. Pedidos trazidos antes sem resposta são completados no regresso seguinte. Ensaio real com o Gemini 3.8 Flash; 424/424 testes e 16 verificações em browser por aparência. Ativação na 4318 por fazer.
+- Respostas do terminal Antigravity (entrada 84): ao voltar do agy, a HYDRAQ lê o registo dele (SQLite com passos em protobuf, formato observado no agy 1.4.7) e traz os pedidos com as respostas e as ferramentas usadas. Se a leitura falhar, fica o regresso parcial, com aviso. Pedidos trazidos antes sem resposta são completados no regresso seguinte. Ensaio real com o Gemini 3.8 Flash; 424/424 testes e 16 verificações em browser por aparência. Commit a5ebd68, ativado na 4318 (PID 1398948).
 
 - Antigravity no terminal original (entrada 83): «Abrir no terminal · Antigravity» abre `agy --conversation <ID>` com o mesmo modelo, `--sandbox` e modo, com o grupo reservado; no Dual, só o principal. O regresso traz os pedidos escritos no terminal e os ficheiros alterados vistos pelo git, com a indicação de que as respostas ficaram no agy, que os outros modelos recebem como contexto parcial. Ensaio real com o Gemini 3.8 Flash (mesma sessão e memória nos dois sentidos, regresso recusado com o terminal aberto), 421/421 testes e 14 verificações em browser por aparência. Commit 6a7c578 (com o Mono da entrada 82), ativado na 4318 (PID 1389562). Por validar numa janela real.
 
@@ -936,5 +936,11 @@ Versão atual: 84
 - Limites:
   - formato interno não documentado: uma atualização do agy pode fazer voltar ao regresso parcial;
   - os resultados dos comandos não são lidos.
-- Por validar: reinício da 4318. Os dois pedidos da conversa de teste do utilizador serão completados no próximo regresso do terminal nessa conversa.
-- Sem commit nem push.
+- Ativação: commit a5ebd68. Reinício controlado pedido pelo utilizador: PID 1389562 → 1398948, no scope `hydraq-20261024T230029Z.scope`.
+  - Antes, nada em curso e sem atividade há 10 minutos.
+  - 50 conversas; conversas, pareceres, revisões automáticas, colaboração, projetos e Dual iguais por hash, sem nenhuma diferença.
+  - Cinco clientes ligados. Os ficheiros servidos são iguais ao disco.
+  - A rota `antigravity-release` responde, sem efeitos.
+  - A página real carrega sem erros e sem escritas.
+  - Provas em `.hydraq/agy-terminal-2026-10-24/restart-84/`.
+- Por validar com o utilizador: os dois pedidos da conversa de teste devem ser completados no próximo regresso do terminal nessa conversa. Sem push.
