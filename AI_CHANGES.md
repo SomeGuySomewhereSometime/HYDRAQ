@@ -1,10 +1,12 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 62
+Versão atual: 63
 
 ## Resumo atual
 
-- Memória no terminal Claude validada (entrada 62): o comando do terminal pré-autoriza só as quatro ferramentas de memória; arquivo/mudança de projeto deixam o motivo no lugar da credencial e desarquivar devolve o acesso; consultas repetidas associadas ao pedido quando inequívoco. Claude Code interativo real (2.1.309/2.1.310), modo normal e Planear: sem pedido de autorização, indisponibilidade clara, recuperação após reiniciar uma HYDRAQ isolada e regresso com pedidos/consultas. `/model` do TUI Codex aceite só para modelo/raciocínio, com notificação ao TUI, verificado com o TUI original sem inferência. 373 testes. Guardado no Git; 4318 ainda por reiniciar.
+- Ativação na 4318 (entrada 63): reinício controlado pedido pelo utilizador, de PID 1033727 para 1122403, com o mesmo Node/ambiente e scope próprio. Cinco clientes ligados; 34 conversas, pareceres/revisões e projetos iguais antes/depois por hash. Sem trabalho/decisões/reservas/terminais antes e depois; sem novos pedidos a modelos. Entradas 61–62 agora carregadas na instalação ativa.
+
+- Memória no terminal Claude validada (entrada 62): o comando do terminal pré-autoriza só as quatro ferramentas de memória; arquivo/mudança de projeto deixam o motivo no lugar da credencial e desarquivar devolve o acesso; consultas repetidas associadas ao pedido quando inequívoco. Claude Code interativo real (2.1.309/2.1.310), modo normal e Planear: sem pedido de autorização, indisponibilidade clara, recuperação após reiniciar uma HYDRAQ isolada e regresso com pedidos/consultas. `/model` do TUI Codex aceite só para modelo/raciocínio, com notificação ao TUI, verificado com o TUI original sem inferência. 373 testes. Guardado no Git; ativação registada na entrada 63.
 
 - Memória no terminal Claude (entrada 61): configuração MCP privada por processo, recuperação da credencial após reinício, autorização durante a passagem e consultas persistidas/associadas apenas com correspondência inequívoca. 371 testes aprovados; Claude Haiku real retomou o mesmo ID, consultou a memória e importou o pedido com a consulta. Ensaio TUI Codex 0.159 sem inferência confirmou fila local via `turn/start`, mudanças por `thread/settings/update` e receção de definições; histórico partilhado integral ainda não validado. Código integrado, sem reiniciar a 4318 nem alterar a integração Codex de produção.
 
@@ -611,3 +613,7 @@ Versão atual: 62
 - Reais: Claude Code interativo aberto com o comando gerado, perfil e HYDRAQ isolados (só Claude, porta/dados temporários): modo normal sem pedido de autorização, «indisponível» com a HYDRAQ parada, mesmo terminal leu o marcador novo após reinício (credencial no mesmo ficheiro), `/exit` e 3 pedidos importados com consultas associadas às chamadas nativas; Planear com uma consulta e regresso; `-p` em Planear só com a autorização do comando. O Claude Code atualizou-se sozinho de 2.1.309 para 2.1.310 durante o ensaio; o cenário completo repetido na 2.1.310 passou. TUI Codex 0.159 contra o probe em `PROBE_SETTINGS=hydraq`, sem inferência: «Model changed to gpt-6-sol medium for this session only» e rodapé atualizado.
 - Por validar: revogação vista num terminal Claude real (coberta pelo helper real em teste), botão que abre a janela de terminal, `/model` com «guardar como predefinição» e na HYDRAQ de produção com o TUI real. Instalação 4318 ainda não reiniciada: estava livre (34 conversas, sem tarefas, autorizações, filas, revisões ou terminais), mas o reinício não foi autorizado nesta sessão. Provas em `.hydraq/terminal-memory-review-2026-10-24/`.
 
+### 63 — 2026-10-24 — Codex
+
+- Por pedido explícito do utilizador, reinício da 4318 depois de confirmar ausência de tarefas, autorizações, filas, reservas e terminais. Fotografias privadas antes/depois; SIGTERM só ao processo confirmado, aguardando a saída completa antes do novo arranque, com o mesmo Node/ambiente/pasta num scope próprio do systemd. PID 1033727 → 1122403, código fd99405 (entradas 61–62) carregado.
+- Verificado: saúde e scope do processo novo; cinco clientes ligados; hashes iguais para as 34 conversas completas, pareceres/revisões e catálogo dos projetos (10 lotes, 8 incorporações, 7 ciclos, 3 políticas, 2 projetos e 8 grupos). Sem reservas ou decisões após o arranque. Nenhuma inferência nova; o reinício não substitui os ensaios funcionais reais pendentes da entrada 62. Provas em `.hydraq/restart-20261024T003800Z/report.json`, com fotografias privadas na mesma pasta.
