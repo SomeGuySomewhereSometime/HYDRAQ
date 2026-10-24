@@ -10,6 +10,7 @@ Versão atual: 85
   - um ficheiro só conta como alterado se a escrita foi bem-sucedida; as recusas ficam como tentativas, e o que o git viu fica para o tempo todo no terminal;
   - a recuperação associa cada pedido a um só passo.
   - Ensaios reais com o Gemini 3.8 Flash (escrita aceite, recusada e Esc); 427/427 testes; 17 verificações em browser por aparência.
+  - Commit 8f780b2, ativado na 4318 (PID 1419244).
 
 - Respostas do terminal Antigravity (entrada 84): ao voltar do agy, a HYDRAQ lê o registo dele (SQLite com passos em protobuf, formato observado no agy 1.4.7) e traz os pedidos com as respostas e as ferramentas usadas. Se a leitura falhar, fica o regresso parcial, com aviso. Pedidos trazidos antes sem resposta são completados no regresso seguinte. Ensaio real com o Gemini 3.8 Flash; 424/424 testes e 16 verificações em browser por aparência. Commit a5ebd68, ativado na 4318 (PID 1398948).
 
@@ -979,4 +980,10 @@ Versão atual: 85
   - O caminho normal real continua a trazer a resposta.
   - Browser: 17/17 em Atelier, Grafite, Linho e Mono (e a 390 px, que não é prioridade para o utilizador). O ensaio do Dual continua 61/61 e 60/60.
   - Provas em `.hydraq/agy-terminal-2026-10-24/` (VALIDACAO, secção da entrada 85).
-- Por fazer: reinício da 4318, autorizado pelo utilizador, a seguir.
+- Ativação: commit 8f780b2. Reinício autorizado pelo utilizador: PID 1398948 → 1419244, no scope `hydraq-20261024T235442Z.scope`.
+  - Antes, nada em curso e sem atividade há 15 minutos.
+  - 51 conversas; conversas, pareceres, revisões automáticas, colaboração, projetos e Dual iguais por hash.
+  - Cinco clientes ligados. Os ficheiros servidos são iguais ao disco.
+  - A abertura aceita a confirmação e responde sem efeitos a um ID inexistente.
+  - A página real carrega sem erros e sem escritas.
+  - Provas em `.hydraq/agy-terminal-2026-10-24/restart-85/`. Sem push.
