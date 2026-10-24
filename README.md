@@ -130,11 +130,13 @@ O protocolo documentado não aceita mensagens de controlo para autorizações ou
 - **Voltar:** sai do agy (`/exit`) e escolhe **Continuar na HYDRAQ**.
   - Se ainda houver um agy com a conversa aberta, o regresso é recusado.
   - Um agy sem ID na mesma pasta pode tê-la aberto, por isso aí a HYDRAQ pede-te confirmação.
-- **O que a HYDRAQ consegue ler:** o agy guarda as respostas num formato interno que a HYDRAQ não lê.
-  - Voltam os pedidos que escreveste, tirados do histórico de pedidos do agy (sem comandos `/`), e os ficheiros alterados, vistos pelo git.
-  - Cada pedido traz a indicação de que a resposta ficou no Antigravity original. Se o agy mudou a conversa sem pedido registado, isso também fica assinalado.
+- **O que volta:** a HYDRAQ lê o registo do agy dessa conversa, uma base de dados num formato interno não documentado, observado no agy 1.4.7.
+  - Traz os pedidos que escreveste no terminal, as respostas, os ficheiros e os comandos usados (sem os resultados dos comandos) e os ficheiros alterados vistos pelo git.
+  - O histórico de pedidos do agy serve de segunda testemunha: se lá estiver um pedido que falta no registo, a leitura conta como incompleta.
+  - A leitura falha em vez de adivinhar. Se o formato mudar numa atualização do agy, voltam só os pedidos, com a indicação de que a resposta ficou no Antigravity original, e os ficheiros vistos pelo git. Numa passagem ou no Dual, os outros modelos recebem esses pedidos como «resposta não importada» e o contexto aparece como parcial.
+  - Pedidos trazidos antes sem resposta recebem-na num regresso seguinte, quando o registo a tiver.
+  - Um pedido sem resposta no registo, por exemplo interrompido, fica assinalado.
   - O próprio agy continua com tudo, porque a conversa é a mesma.
-  - Numa passagem ou no Dual, os outros modelos recebem esses pedidos como «resposta não importada», nunca como trabalho concluído, e o contexto aparece como parcial.
 
 Os avisos **Ferramenta recusada**, **Quota ou limite** e **Sem resposta** aparecem junto do pedido e no resumo do parecer, mesmo recolhido. A resposta válida é conservada quando há ferramentas recusadas; um sucesso nativo sem texto passa a falha explícita. Quota só é assinalada com erro/código nativo ou mensagem explícita de diagnóstico do processo, nunca por contadores de tokens, texto do modelo, um código 429 isolado ou falta de resposta. Os detalhes mostram a evidência filtrada e limitada. Os avisos seguem com um parecer selecionado, para o principal conhecer as limitações da inspeção; pedidos antigos podem recuperar recusas dos factos guardados, sem inventar o motivo que não foi registado.
 

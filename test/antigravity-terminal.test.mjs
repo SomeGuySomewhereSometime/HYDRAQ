@@ -8,6 +8,24 @@ import { Antigravity } from '../lib/antigravity.mjs';
 import { Providers } from '../lib/providers.mjs';
 import { buildHandoff } from '../lib/handoff.mjs';
 import { gitChanges, terminalPrompts } from '../lib/antigravity-terminal.mjs';
+import { decodeStep, stepTurns } from '../lib/antigravity-steps.mjs';
+import { DatabaseSync } from 'node:sqlite';
+
+// agy's record of a conversation, as observed in agy 1.4.7: SQLite steps with protobuf payloads.
+const varint = value => { const out = []; do { let byte = value % 128; value = Math.floor(value / 128); if (value) byte |= 128; out.push(byte); } while (value); return out; };
+const bytes = (number, payload) => { const body = typeof payload === 'string' ? [...Buffer.from(payload)] : payload; return [...varint(number * 8 + 2), ...varint(body.length), ...body]; };
+const header = at => bytes(5, bytes(1, [...varint(8), ...varint(Math.floor(at / 1000)), ...varint(16), ...varint((at % 1000) * 1e6)]));
+const step = { user: (text, at) => [14, [...header(at), ...bytes(19, [...bytes(2, text), ...bytes(3, bytes(1, text))])]],
+  answer: (text, at) => [15, [...header(at), ...bytes(20, [...bytes(1, text), ...bytes(6, 'bot-1'), ...bytes(8, text)])]],
+  tool: (name, args, at) => [15, [...header(at), ...bytes(20, [...bytes(6, 'bot-2'), ...bytes(7, [...bytes(1, 'call_1'), ...bytes(2, name), ...bytes(3, JSON.stringify(args))])])]],
+  other: (type, at) => [type, header(at)] };
+function agyStore(file, steps) {
+  const db = new DatabaseSync(file);
+  db.exec('CREATE TABLE IF NOT EXISTS steps (idx integer PRIMARY KEY, step_type integer NOT NULL DEFAULT 0, status integer NOT NULL DEFAULT 0, step_payload blob)');
+  const start = db.prepare('SELECT COALESCE(MAX(idx), -1) AS last FROM steps').get().last + 1, insert = db.prepare('INSERT INTO steps (idx, step_type, status, step_payload) VALUES (?, ?, 3, ?)');
+  steps.forEach(([type, payload], index) => insert.run(start + index, type, new Uint8Array(payload)));
+  db.close();
+}
 import { OpinionClient } from './fixtures/opinion-client.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -125,4 +143,69 @@ test('pedidos do terminal: só desta conversa, depois da passagem e sem comandos
   assert.deepEqual(gitChanges([' M a', '?? b'], [' M a', ' M c', 'A  b']), ['c', 'b']);
   assert.deepEqual(gitChanges([' M a'], []), ['a']);
   assert.equal(gitChanges(null, []), null);
+});
+
+test('Antigravity original: com o registo do agy legível, voltam os pedidos com as respostas e as ferramentas', async t => {
+  const { directory, home, agy, terminal, git, chat, history } = await setup(t);
+  const c = await chat(), file = path.join(home, 'conversations', c.threadId + '.db'), now = Date.now();
+  await rm(file); agyStore(file, [step.user('Memoriza GIRASSOL', now - 60_000), step.other(90, now - 60_000), step.answer('OK.', now - 59_000)]);
+  await terminal.open(c.id, { launch: false });
+  assert.equal(c.terminal.steps, 2);
+  agyStore(file, [step.user('Cria b.txt e diz quanto é 2+2', now + 1000), step.other(101, now + 1000), step.tool('write_file', { Path: path.join(directory, 'b.txt'), Content: 'x' }, now + 2000), step.other(132, now + 2500),
+    step.tool('run_command', { CommandLine: 'npm test' }, now + 2600), step.answer('Criei b.txt. **2+2 é 4.**', now + 3000), step.user('E agora?', now + 4000)]);
+  await history({ display: 'Cria b.txt e diz quanto é 2+2', timestamp: now + 1000, conversationId: c.threadId }, { display: 'E agora?', timestamp: now + 4000, conversationId: c.threadId });
+  git.lines = [' M a.txt', '?? b.txt'];
+  const result = await terminal.release(c.id);
+  assert.deepEqual({ imported: result.imported, answered: result.answered, warning: result.warning }, { imported: 2, answered: 1, warning: null });
+  const [first, second] = c.turns.filter(turn => turn.source === 'terminal');
+  assert.equal(first.status, 'completed'); assert.equal(first.partial, undefined); assert.equal(first.finalAnswer, 'Criei b.txt. **2+2 é 4.**');
+  assert.deepEqual(first.facts.files, ['b.txt']); assert.deepEqual(first.facts.commands, [{ command: 'npm test', exitCode: null, status: 'sem resultado lido' }]);
+  const shown = c.messages.filter(m => m.turnId === first.id);
+  assert.deepEqual(shown.map(m => [m.role, m.text, m.source, m.terminalNote]), [['user', 'Cria b.txt e diz quanto é 2+2', 'terminal', undefined], ['assistant', 'Criei b.txt. **2+2 é 4.**', 'terminal', undefined]]);
+  assert.equal(shown[1].phase, 'final_answer'); assert.equal(shown[0].at, new Date(now + 1000).toISOString());
+  assert.equal(second.status, 'interrupted'); assert.match(c.messages.find(m => m.turnId === second.id).terminalNote, /não registou resposta/);
+  assert.deepEqual(second.facts.files, ['b.txt'], 'os ficheiros vistos pelo git vão com o último pedido');
+  const codex = { id: 'codex-1', provider: 'codex', cwd: directory, messages: [], turns: [] };
+  const handoff = buildHandoff({ target: codex, members: [codex, { ...c, provider: 'antigravity' }], git: [] });
+  assert.match(handoff.text, /Antigravity original · concluído[\s\S]*Resposta final: Criei b\.txt/);
+  assert.match(handoff.text, /`npm test` sem resultado lido/);
+  assert.equal(handoff.coverage, 'complete');
+  assert.equal(agy.conversations.length, 1);
+});
+
+test('Antigravity original: registo ilegível fica pelos pedidos; respostas que faltavam são recuperadas no regresso seguinte', async t => {
+  const { home, terminal, chat, history } = await setup(t);
+  const c = await chat(), file = path.join(home, 'conversations', c.threadId + '.db'), now = Date.now();
+  await rm(file); agyStore(file, [step.user('Memoriza GIRASSOL', now - 60_000), step.answer('OK.', now - 59_000)]);
+  await terminal.open(c.id, { launch: false });
+  // A payload agy wrote in a format this reader does not know: the requests come back without answers.
+  agyStore(file, [[14, [0x0f, 0xff]]]);
+  await history({ display: 'Quanto é 3+4?', timestamp: now + 1000, conversationId: c.threadId });
+  const partial = await terminal.release(c.id);
+  assert.equal(partial.imported, 1); assert.match(partial.warning, /Não foi possível ler as respostas/);
+  const turn = c.turns.at(-1);
+  assert.equal(turn.partial, 'terminal'); assert.match(c.messages.at(-1).terminalNote, /não foi importada/);
+  // agy's record is readable again and holds that request with its answer.
+  const db = new DatabaseSync(file); db.prepare('DELETE FROM steps WHERE idx = 2').run(); db.close();
+  agyStore(file, [step.user('Quanto é 3+4?', now + 1000), step.answer('3+4 é 7.', now + 2000)]);
+  await terminal.open(c.id, { launch: false });
+  const result = await terminal.release(c.id);
+  assert.deepEqual({ imported: result.imported, recovered: result.recovered }, { imported: 0, recovered: 1 });
+  assert.equal(turn.partial, undefined); assert.equal(turn.finalAnswer, '3+4 é 7.'); assert.equal(turn.recovered, true);
+  assert.equal(c.messages.find(m => m.turnId === turn.id && m.role === 'user').terminalNote, undefined);
+  assert.equal(c.messages.filter(m => m.turnId === turn.id && m.role === 'assistant').at(-1).text, '3+4 é 7.');
+  // Recovering twice adds nothing.
+  await terminal.open(c.id, { launch: false });
+  assert.equal((await terminal.release(c.id)).recovered, 0);
+});
+
+test('passos do agy: pedido, resposta e ferramentas; formato inesperado falha em vez de adivinhar', () => {
+  const at = Date.UTC(2026, 9, 24, 22, 41, 15, 254);
+  const decoded = [step.user('olá', at), step.tool('write_file', { Path: 'x.txt' }, at), step.answer('Feito.', at), step.other(132, at)].map(([type, payload], idx) => decodeStep({ idx, step_type: type, step_payload: new Uint8Array(payload) }));
+  assert.deepEqual(decoded.map(s => [s.kind, s.text ?? null, s.at]), [['user', 'olá', '2026-10-24T22:41:15.254Z'], ['model', null, '2026-10-24T22:41:15.254Z'], ['model', 'Feito.', '2026-10-24T22:41:15.254Z'], ['other', null, '2026-10-24T22:41:15.254Z']]);
+  assert.deepEqual(decoded[1].tools, [{ name: 'write_file', args: { Path: 'x.txt' } }]);
+  assert.deepEqual(stepTurns(decoded).map(turn => [turn.prompt.text, turn.answers.map(a => a.text), turn.tools.length]), [['olá', ['Feito.'], 1]]);
+  assert.throws(() => decodeStep({ idx: 0, step_type: 14, step_payload: new Uint8Array([0x0f, 0xff]) }));
+  assert.throws(() => decodeStep({ idx: 0, step_type: 14, step_payload: new Uint8Array(bytes(19, bytes(2, [0xff, 0xfe]))) }));
+  assert.throws(() => decodeStep({ idx: 0, step_type: 15, step_payload: new Uint8Array(header(at)) }));
 });

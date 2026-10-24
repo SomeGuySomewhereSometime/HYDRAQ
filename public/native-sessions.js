@@ -137,7 +137,9 @@ export class AntigravitySessionsUI {
       try {
         const result = await this.api(`/api/conversations/${id}/antigravity-release`, {confirm});
         query('[data-command]').hidden = true;
-        this.toast([result.imported ? `${result.imported} pedido(s) do Antigravity original adicionados à conversa. As respostas ficaram no agy.` : 'Nenhum pedido novo no Antigravity original.', result.warning].filter(Boolean).join(' '));
+        const answered = result.answered ?? 0;
+        this.toast([result.imported ? `${result.imported} pedido(s) do Antigravity original adicionados à conversa${answered === result.imported ? ', com as respostas.' : answered ? `, ${answered} com resposta.` : '. As respostas ficaram no agy.'}` : 'Nenhum pedido novo no Antigravity original.',
+          result.recovered ? `Recuperada(s) ${result.recovered} resposta(s) de pedidos trazidos antes sem elas.` : '', result.warning].filter(Boolean).join(' '));
       } catch (error) {
         if (error.code !== 'TERMINAL_CONFIRM') throw error;
         this.confirmation = {context: this.current()?.id, message: error.message, proceed: () => release(id, [...confirm, error.confirm])};
@@ -177,8 +179,8 @@ export class AntigravitySessionsUI {
     this.query('[data-release]').disabled = Boolean(this.pending) || preparing;
     const since = session ? new Date(session.terminal.since).toLocaleTimeString('pt-PT', {hour: '2-digit', minute: '2-digit'}) : '';
     this.query('[data-status]').textContent = session
-      ? `Esta conversa está no Antigravity original desde as ${since}. A HYDRAQ não envia pedidos nem trabalha nesta pasta até voltares. Sai do agy (/exit) e escolhe Continuar na HYDRAQ: voltam os pedidos que escreveste e os ficheiros alterados; as respostas ficam no agy.`
-      : 'Continua a mesma conversa no agy original, num terminal, com o mesmo modelo e as mesmas restrições (lá podes mudar de modo). Ao voltar, a HYDRAQ mostra os pedidos e os ficheiros alterados; as respostas ficam no agy. Envia primeiro um pedido para a guardar.';
+      ? `Esta conversa está no Antigravity original desde as ${since}. A HYDRAQ não envia pedidos nem trabalha nesta pasta até voltares. Sai do agy (/exit) e escolhe Continuar na HYDRAQ: voltam os pedidos e as respostas que o agy registou.`
+      : 'Continua a mesma conversa no agy original, num terminal, com o mesmo modelo e as mesmas restrições (lá podes mudar de modo). Ao voltar, a HYDRAQ traz os pedidos e as respostas do registo do agy; se não o conseguir ler, só os pedidos e os ficheiros alterados. Envia primeiro um pedido para a guardar.';
     if (this.commandId !== session?.id) this.query('[data-command]').hidden = true;
     const confirm = this.query('[data-confirm]');
     confirm.hidden = !this.confirmation;

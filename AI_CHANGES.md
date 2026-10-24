@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 83
+Versão atual: 84
 
 ## Resumo atual
+
+- Respostas do terminal Antigravity (entrada 84): ao voltar do agy, a HYDRAQ lê o registo dele (SQLite com passos em protobuf, formato observado no agy 1.4.7) e traz os pedidos com as respostas e as ferramentas usadas. Se a leitura falhar, fica o regresso parcial, com aviso. Pedidos trazidos antes sem resposta são completados no regresso seguinte. Ensaio real com o Gemini 3.8 Flash; 424/424 testes e 16 verificações em browser por aparência. Ativação na 4318 por fazer.
 
 - Antigravity no terminal original (entrada 83): «Abrir no terminal · Antigravity» abre `agy --conversation <ID>` com o mesmo modelo, `--sandbox` e modo, com o grupo reservado; no Dual, só o principal. O regresso traz os pedidos escritos no terminal e os ficheiros alterados vistos pelo git, com a indicação de que as respostas ficaram no agy, que os outros modelos recebem como contexto parcial. Ensaio real com o Gemini 3.8 Flash (mesma sessão e memória nos dois sentidos, regresso recusado com o terminal aberto), 421/421 testes e 14 verificações em browser por aparência. Commit 6a7c578 (com o Mono da entrada 82), ativado na 4318 (PID 1389562). Por validar numa janela real.
 
@@ -908,3 +910,31 @@ Versão atual: 83
   - Provas em `.hydraq/agy-terminal-2026-10-24/restart/`.
 - Por validar: uma janela real de terminal e pedidos colados com várias linhas.
 - Ficaram duas conversas de ensaio no agy do utilizador. Sem push.
+
+### 84 — 2026-10-24 — Claude
+
+- Problema comunicado pelo utilizador depois do teste na 4318: «não recuperou as mensagens do antigravity». Os pedidos voltaram com a nota prevista; as respostas não.
+- **Causa e leitura:** no registo do agy (`conversations/<ID>.db`, tabela `steps`):
+  - o pedido está no tipo 14 (campo 19.2), com a hora em 5.1;
+  - a resposta está no tipo 15 (20.1), e as ferramentas em 20.7, com o nome e os argumentos JSON.
+- **Implementação:**
+  - `lib/antigravity-steps.mjs`: leitor estrito com `node:sqlite` só de leitura, sem dependências novas. Um campo inesperado faz falhar a leitura.
+  - `AntigravityTerminal`:
+    - ao abrir, guarda o último passo;
+    - ao voltar, importa os passos seguintes como pedidos com resposta (ou «interrompido», com nota, se não houver resposta) e regista os ficheiros e comandos das ferramentas (comandos «sem resultado lido»), com os caminhos relativos como no git;
+    - o histórico de pedidos confirma a contagem;
+    - se a leitura falhar, fica o regresso parcial com aviso;
+    - os pedidos parciais anteriores são completados quando o texto coincide e a hora difere menos de 2 minutos.
+  - O aviso no browser indica as respostas importadas e recuperadas, e os textos da secção foram atualizados.
+- Ficheiros: `lib/antigravity-steps.mjs` (novo), `lib/antigravity-terminal.mjs`, `public/native-sessions.js`, `test/antigravity-terminal.test.mjs`, README.
+- Verificado:
+  - 424/424 testes sequenciais, 3 deles novos com uma base no formato observado.
+  - **Ensaio real** (Gemini 3.8 Flash): o pedido do terminal voltou com a resposta («6 vezes 7 é 42.»), e um pedido anterior que tinha vindo sem resposta foi completado. A mesma conversa continuou na HYDRAQ.
+  - As conversas reais do utilizador e as de ensaio leem-se por completo.
+  - **Browser:** 16/16 em Atelier a 1440 e 390 px, Grafite a 1024 px, Linho e Mono a 1440 px.
+  - Provas em `.hydraq/agy-terminal-2026-10-24/` (VALIDACAO, secção da entrada 84).
+- Limites:
+  - formato interno não documentado: uma atualização do agy pode fazer voltar ao regresso parcial;
+  - os resultados dos comandos não são lidos.
+- Por validar: reinício da 4318. Os dois pedidos da conversa de teste do utilizador serão completados no próximo regresso do terminal nessa conversa.
+- Sem commit nem push.
