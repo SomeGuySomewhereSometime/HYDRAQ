@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, readFile, writeFile, rm, stat, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile, rm, stat, symlink, unlink } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import path from 'node:path';
@@ -13,6 +13,47 @@ import { ContextMcp } from '../lib/context-mcp.mjs';
 import { createHttpServer } from '../lib/http.mjs';
 import { EventEmitter } from 'node:events';
 const root=new URL('../',import.meta.url).pathname;
+
+test('regresso do terminal aguarda a consulta admitida e recusa consultas novas',async t=>{
+ const s=await setup(t),c=await s.make(s.p,{provider:'claude',threadId:randomUUID()}),hub={...s,conversations:()=>s.conversations};
+ c.terminal={sessionId:c.threadId,mcpProjectId:s.p.id};const broker=new ContextMcp(hub,s.dir+'/runtime');broker.endpoint('http://127.0.0.1:1/api/context/query');t.after(()=>broker.close());
+ await broker.issue(c);const lease=broker.sessions.get(c.id);let finish;hub.context.query=()=>new Promise(resolve=>{finish=resolve;});
+ const pending=broker.query(lease.token,'get_project_memory',{});c.terminal.returning=true;
+ await assert.rejects(broker.query(lease.token,'get_project_memory',{}),/regressar/);
+ let drained=false;const drain=broker.drain(c.id).then(()=>{drained=true;});await new Promise(r=>setTimeout(r,10));assert.equal(drained,false);
+ finish({revision:1});await pending;await drain;assert.equal(c.terminal.contextReads.length,1);assert.equal(broker.queries.size,0);
+});
+
+test('terminal MCP recupera pelo mesmo helper após reinício e mantém revogação e âmbito',async t=>{
+ const s=await setup(t),c=await s.make(s.p,{provider:'claude',threadId:randomUUID()}),hub=Object.assign(new EventEmitter(),s,{conversations:()=>s.conversations,snapshot:()=>({})});
+ c.terminal={sessionId:c.threadId,mcpProjectId:s.p.id};let persisted=0;hub.clients={claude:{conversations:[c],persist:async()=>{persisted++;await writeFile(s.dir+'/pending.json',JSON.stringify(c.terminal));}}};
+ hub.contextMcp=new ContextMcp(hub,s.dir+'/runtime');
+ const start=async()=>{const server=createHttpServer({hydraq:hub,publicDir:root+'public'});await new Promise(r=>server.listen(0,'127.0.0.1',r));await hub.contextMcp.restoring;t.after(()=>{server.closeStreams();server.close();});return server;};
+ const firstServer=await start(),config=hub.contextMcp.sessions.get(c.id).config;
+ const child=spawn(process.execPath,[root+'lib/context-mcp-server.mjs'],{env:{...process.env,...config.env},stdio:['pipe','pipe','pipe']});t.after(()=>child.kill());
+ let buffer='',sequence=0;const waiting=new Map();child.stdout.on('data',data=>{buffer+=data;let end;while((end=buffer.indexOf('\n'))>=0){const message=JSON.parse(buffer.slice(0,end));buffer=buffer.slice(end+1);waiting.get(message.id)?.(message);waiting.delete(message.id);}});
+ const call=(method,params={})=>new Promise((resolve,reject)=>{const id=++sequence,timer=setTimeout(()=>reject(Error('MCP timeout')),5000);waiting.set(id,result=>{clearTimeout(timer);resolve(result);});child.stdin.write(JSON.stringify({id,method,params})+'\n');});
+ assert.ok((await call('initialize')).result);
+ hub.contextMcp.sessions.get(c.id).expires=0;
+ assert.equal((await call('tools/call',{name:'get_project_memory',arguments:{}})).result.isError,false);
+ assert.equal(persisted,1);assert.equal(JSON.parse(await readFile(s.dir+'/pending.json')).contextReads.length,1);
+ const old=hub.contextMcp.sessions.get(c.id).token;await hub.contextMcp.close();firstServer.closeStreams();await new Promise(r=>firstServer.close(r));
+ const unavailable=await call('tools/call',{name:'get_project_memory',arguments:{}});assert.equal(unavailable.result.isError,true);assert.match(unavailable.result.content[0].text,/indisponível/);assert.doesNotMatch(unavailable.result.content[0].text,/ENOENT/);
+ hub.contextMcp=new ContextMcp(hub,s.dir+'/runtime');await start();t.after(()=>hub.contextMcp.close());
+ const lease=hub.contextMcp.sessions.get(c.id);assert.equal(lease.file,config.file);assert.equal(lease.config.name,config.name);assert.notEqual(lease.token,old);
+ assert.equal((await call('tools/call',{name:'get_project_memory',arguments:{}})).result.isError,false);
+ await assert.rejects(hub.contextMcp.query(old,'get_project_memory',{}),/sem sessão/);
+ await s.projects.change(s.projects.data.revision,d=>{d.groups[c.group].projectId=s.q.id;});
+ await assert.rejects(hub.contextMcp.query(lease.token,'get_project_memory',{}),/projeto.*mudou/);
+ await hub.contextMcp.revoke(c.id,'project-changed');
+ const revoked=await call('tools/call',{name:'get_project_memory',arguments:{}});assert.equal(revoked.result.isError,true);
+ assert.match(revoked.result.content[0].text,/já não tem acesso à memória deste projeto/);assert.doesNotMatch(revoked.result.content[0].text,/Aguarda|indisponível/);
+ // After a restart the marker of the old process is cleaned up; the restore leaves the reason again.
+ await unlink(config.file);assert.match((await call('tools/call',{name:'get_project_memory',arguments:{}})).result.content[0].text,/indisponível/);
+ await hub.contextMcp.restoreTerminals();assert.equal(hub.contextMcp.sessions.has(c.id),false);
+ assert.deepEqual(Object.keys(JSON.parse(await readFile(config.file,'utf8'))).sort(),['ownerIdentity','ownerPid','revoked']);
+ assert.match((await call('tools/call',{name:'get_project_memory',arguments:{}})).result.content[0].text,/movida para outro projeto/);
+});
 async function setup(t){
  const dir=await mkdtemp(path.join(os.tmpdir(),'hydraq-context-'));t.after(()=>rm(dir,{recursive:true,force:true}));
  const projects=new Projects(dir+'/state');await projects.load();const p=await projects.create({name:'A',root:dir,revision:0});await mkdir(dir+'/other');const q=await projects.create({name:'B',root:dir+'/other',revision:1});
@@ -146,7 +187,7 @@ test('pesquisa suporta aspas e quebras de linha no texto original',async t=>{
 
 test('rotação MCP mantém nome/caminho, rejeita o token anterior e renova consultas de turno ativo',async t=>{
  const s=await setup(t),c=await s.make(),hub={...s,conversations:()=>s.conversations},broker=new ContextMcp(hub,s.dir+'/runtime');broker.endpoint('http://127.0.0.1:1/api/context/query');t.after(()=>broker.close());
- const first=await broker.issue(c),old=JSON.parse(await readFile(first.file)).token;broker.sessions.get(c.id).expires=0;
+ const [first,concurrent]=await Promise.all([broker.issue(c),broker.issue(c)]);assert.equal(first,concurrent);const old=JSON.parse(await readFile(first.file)).token;broker.sessions.get(c.id).expires=0;
  const second=await broker.issue(c),fresh=JSON.parse(await readFile(second.file)).token;assert.equal(second.name,first.name);assert.equal(second.file,first.file);assert.notEqual(fresh,old);await assert.rejects(broker.query(old,'get_project_memory',{}),/sem sessão/);
  broker.sessions.get(c.id).expires=0;await assert.rejects(broker.query(fresh,'get_project_memory',{}),/expirada/);
  c.turns.push({requestId:'long',status:'running'});assert.equal((await broker.query(fresh,'get_project_memory',{})).revision,0);assert.ok(broker.sessions.get(c.id).expires>Date.now());c.turns[0].status='completed';

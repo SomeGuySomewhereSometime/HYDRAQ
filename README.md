@@ -119,6 +119,8 @@ A sessão nativa recebe um ID escolhido pelo HYDRAQ (`--session-id`) no primeiro
 
 Limites verificados com o Claude Code 2.1.304: uma mensagem enviada durante o turno fica em fila como pedido seguinte, por isso não há **Orientar**; as perguntas `AskUserQuestion` do cliente principal aparecem na conversa (opções, várias escolhas ou resposta livre; **Não responder** recusa) e seguem como `answers` nativos; revisores e pareceres continuam sem esta ferramenta. Se o projeto tiver `AGENTS.md` e não tiver `CLAUDE.md`, o processo recebe uma indicação para ler `AGENTS.md`, sem criar ficheiros. Hooks, plugins e MCP configurados no teu Claude Code continuam ativos.
 
+A passagem para o terminal Claude conserva agora o MCP de memória nas conversas de projeto, com configuração privada por processo, as quatro ferramentas de memória pré-autorizadas e recuperação após reinício do servidor. Arquivo ou mudança de projeto revogam o acesso com o motivo visível no terminal. As consultas são guardadas e associadas ao histórico importado quando a correspondência é inequívoca. Detalhes e limites em [Claude original](docs/claude-original.md).
+
 ## Cursor original: Grok por ACP
 
 O adaptador usa `agent --sandbox enabled acp` por stdio/JSON-RPC, com sessões independentes (`session/new`/`session/load`). Só apresenta os Grok anunciados por `cursor/list_available_models`; os IDs dos parâmetros vêm do catálogo nativo. Contexto **500K por defeito onde disponível**, com seletor 256K/500K; **Fast desligado por defeito**, com opção para ligar. Contexto, Fast, modelo, raciocínio e modo ficam registados por pedido e aplicam-se ao próximo turno, conservando o ID. Uma mudança não suportada é recusada antes de enviar o pedido; não há substituição silenciosa de modelo ou opções.

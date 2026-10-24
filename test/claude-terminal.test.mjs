@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile, writeFile, appendFile, mkdir, realpath, utimes } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, writeFile, appendFile, mkdir, realpath, utimes, stat } from 'node:fs/promises';
+import { createHttpServer } from '../lib/http.mjs';
+import { attachTerminalContextReads } from '../lib/terminal-context-reads.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -12,6 +14,78 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const waitFor = async predicate => { const deadline = Date.now() + 5000; while (!predicate()) { if (Date.now() > deadline) throw new Error('Tempo excedido.'); await new Promise(r => setTimeout(r, 10)); } };
 const fake = path.join(root, 'test/fixtures/fake-claude.mjs');
 const lines = entries => entries.map(entry => JSON.stringify(entry)).join('\n') + '\n';
+
+test('consultas MCP repetidas só são associadas quando apontam para um único pedido e dentro do seu intervalo',()=>{
+ const read={id:'read',server:'hydraq_test',tool:'get_project_memory',arguments:{},at:'2026-10-23T10:00:01Z'};
+ const tool={id:'call1',name:'mcp__hydraq_test__get_project_memory',input:{},at:'2026-10-23T10:00:00Z'};
+ const parsed=[{prompt:{uuid:'p'},messages:[],tools:[tool]}];
+ const make=reads=>({terminal:{contextReads:reads},turns:[{requestId:'terminal:p',completedAt:'2026-10-23T10:00:02Z'},{requestId:'terminal:q',completedAt:'2026-10-23T10:00:09Z'}]});
+ const repeated=make([read,{...read,id:'read2'}]);attachTerminalContextReads(repeated,parsed);
+ assert.equal(repeated.terminal.contextReads.length,0);assert.deepEqual(repeated.turns[0].contextReads.map(r=>[r.id,r.association,r.nativeToolCallId]),[['read','request',undefined],['read2','request',undefined]]);
+ const multipleCalls=make([read]);attachTerminalContextReads(multipleCalls,[{...parsed[0],tools:[tool,{...tool,id:'call2'}]}]);
+ assert.equal(multipleCalls.terminal.contextReads.length,0);assert.equal(multipleCalls.turns[0].contextReads[0].nativeCalls,2);
+ const twoRequests=make([read]);attachTerminalContextReads(twoRequests,[...parsed,{prompt:{uuid:'q'},messages:[],tools:[{...tool,id:'call3',at:'2026-10-23T10:00:05Z'}]}]);
+ assert.equal(twoRequests.terminal.contextReads.length,1,'chamadas iguais em pedidos diferentes ficam sem pedido identificado');assert.equal(twoRequests.turns[0].contextReads,undefined);
+ const late=make([{...read,at:'2026-10-23T10:00:03Z'}]);attachTerminalContextReads(late,parsed);assert.equal(late.terminal.contextReads.length,1);
+ const early=make([read,{...read,id:'early',at:'2026-10-23T09:59:59Z'}]);attachTerminalContextReads(early,parsed);
+ assert.deepEqual(early.terminal.contextReads.map(r=>r.id),['early']);assert.deepEqual(early.turns[0].contextReads.map(r=>r.id),['read']);
+ const unique=make([read]);attachTerminalContextReads(unique,parsed);attachTerminalContextReads(unique,parsed);
+ assert.equal(unique.turns[0].contextReads.length,1);assert.equal(unique.turns[0].contextReads[0].nativeToolCallId,'call1');assert.equal(unique.turns[0].contextReads[0].association,'tool-and-arguments');
+});
+
+test('terminal Claude recebe MCP privado, conserva consultas e importa só associações inequívocas',async t=>{
+  const {providers,claude,directory,env}=await hub(t);
+  const server=createHttpServer({hydraq:providers,publicDir:root+'/public'});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeStreams();server.close();});
+  const project=await providers.createProject({name:'Memória terminal',root:directory,revision:0});
+  await providers.context.save(project.id,{revision:0,text:'MEMORIA_TERMINAL'});
+  const chat=await providers.create({provider:'claude',projectId:project.id,revision:providers.projects.data.revision,model:'haiku',effort:'low',sandbox:'plan'}),c=claude.conversation(chat.id);
+  await providers.send(c.id,'início','seed');await waitFor(()=>c.status==='completed');
+  const file=path.join(projectDirectory(env,directory),c.threadId+'.jsonl'),s=sessionEntries(c.threadId,directory);
+  await mkdir(path.dirname(file),{recursive:true});await writeFile(file,lines([s.add('user',{message:{content:'início'}}),s.add('assistant',{message:{id:'seed',stop_reason:'end_turn',content:[{type:'text',text:'OK'}]}})]));
+  const info=await providers.claudeTerminal.open(c.id,{launch:false}),configFile=c.terminal.mcpConfigFile;
+  assert.match(info.command,/--mcp-config/);assert.doesNotMatch(info.command,/mcpServers|--strict-mcp-config/);
+  assert.equal((await stat(configFile)).mode&0o777,0o600);
+  const config=JSON.parse(await readFile(configFile,'utf8')),name=Object.keys(config.mcpServers)[0],lease=providers.contextMcp.sessions.get(c.id);
+  assert.equal(config.mcpServers[name].env.HYDRAQ_CONTEXT_LEASE,lease.file);
+  const argv=await providers.claudeTerminal.argv(c),allowed=argv[argv.indexOf('--allowedTools')+1];
+  assert.equal(argv[argv.indexOf('--mcp-config')+1],configFile);
+  assert.deepEqual(allowed.split(','),['get_project_memory','list_project_conversations','search_project_conversations','read_conversation_excerpt'].map(tool=>`mcp__${name}__${tool}`),'só as quatro ferramentas de memória ficam pré-autorizadas');
+  assert.ok(info.command.includes(`--allowedTools ${allowed}`),'o comando manual leva a mesma autorização');
+  lease.expires=0;assert.equal((await providers.contextMcp.query(lease.token,'get_project_memory',{})).text,'MEMORIA_TERMINAL');
+  await providers.contextMcp.query(lease.token,'list_project_conversations',{});await providers.contextMcp.query(lease.token,'list_project_conversations',{});
+  assert.equal(c.terminal.contextReads.length,3);assert.equal(c.turns[0].contextReads?.some(r=>r.source==='terminal')||false,false);
+  const read=c.terminal.contextReads[0],at=delta=>new Date(Date.parse(read.at)+delta).toISOString();
+  await appendFile(file,lines([s.add('user',{timestamp:at(-100),promptSource:'typed',message:{content:'Consulta memória'}}),s.add('assistant',{timestamp:at(-50),message:{id:'tool-message',content:[{type:'tool_use',id:'memory-call',name:`mcp__${name}__get_project_memory`,input:{}}]}}),s.add('user',{timestamp:at(20),message:{content:[{type:'tool_result',tool_use_id:'memory-call',content:'MEMORIA_TERMINAL'}]}}),s.add('assistant',{timestamp:at(50),message:{id:'done',stop_reason:'end_turn',content:[{type:'text',text:'Lida'}]}})]));
+  const result=await providers.claudeTerminal.release(c.id);assert.equal(result.imported,1);
+  assert.equal(c.turns.at(-1).contextReads[0].nativeToolCallId,'memory-call');assert.equal(c.unattributedContextReads.length,2);
+  assert.ok(c.unattributedContextReads.every(r=>r.association==='unidentified-request'));
+  assert.ok(lease.expires>Date.now());lease.expires=0;await assert.rejects(providers.contextMcp.query(lease.token,'get_project_memory',{}),/expirada/);
+});
+
+test('terminal Claude: arquivar deixa o motivo no lugar da credencial e desarquivar devolve o acesso',async t=>{
+  const {providers,claude,directory,env}=await hub(t);
+  const server=createHttpServer({hydraq:providers,publicDir:root+'/public'});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeStreams();server.close();});
+  const project=await providers.createProject({name:'Arquivo terminal',root:directory,revision:0});
+  const chat=await providers.create({provider:'claude',projectId:project.id,revision:providers.projects.data.revision,model:'haiku',effort:'low',sandbox:'plan'}),c=claude.conversation(chat.id);
+  await providers.send(c.id,'início','seed');await waitFor(()=>c.status==='completed');
+  const file=path.join(projectDirectory(env,directory),c.threadId+'.jsonl'),s=sessionEntries(c.threadId,directory);
+  await mkdir(path.dirname(file),{recursive:true});await writeFile(file,lines([s.add('user',{message:{content:'início'}}),s.add('assistant',{message:{id:'seed',stop_reason:'end_turn',content:[{type:'text',text:'OK'}]}})]));
+  await providers.claudeTerminal.open(c.id,{launch:false});
+  const lease=providers.contextMcp.sessions.get(c.id),read=async()=>JSON.parse(await readFile(lease.file,'utf8'));
+  await providers.organizeGroups({groups:[c.group||c.id],revision:providers.projects.data.revision,title:'Mesmo projeto',projectId:project.id});
+  assert.equal(providers.contextMcp.sessions.get(c.id),lease,'guardar o mesmo projeto não revoga');
+  await providers.organizeGroups({groups:[c.group||c.id],revision:providers.projects.data.revision,archived:true});
+  assert.deepEqual(Object.keys(await read()).sort(),['ownerIdentity','ownerPid','revoked']);assert.equal((await read()).revoked,'conversation-archived');
+  await assert.rejects(providers.contextMcp.query(lease.token,'get_project_memory',{}),/sem sessão/);
+  const command=(await providers.claudeTerminal.open(c.id,{launch:false})).command;assert.match(command,/--mcp-config/,'o terminal arquivado mantém a configuração para explicar o motivo');
+  await providers.organizeGroups({groups:[c.group||c.id],revision:providers.projects.data.revision,archived:false});
+  const restored=providers.contextMcp.sessions.get(c.id);assert.ok(restored);assert.equal(restored.file,lease.file);assert.equal((await read()).token,restored.token);
+  assert.equal((await providers.contextMcp.query(restored.token,'get_project_memory',{})).revision,0);
+  await providers.updateProject(project.id,{revision:providers.projects.data.revision,archived:true});
+  assert.equal((await read()).revoked,'project-archived');
+  await providers.updateProject(project.id,{revision:providers.projects.data.revision,archived:false});
+  assert.ok((await read()).token,'desarquivar o projeto devolve o acesso ao terminal');
+});
 
 async function hub(t, extraEnv = {}) {
   const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), 'hydraq-claude-terminal-')));

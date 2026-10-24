@@ -22,6 +22,25 @@ Enquanto a conversa está no terminal, a HYDRAQ não envia pedidos, orientaçõe
 
 O pedido seguinte na HYDRAQ retoma a mesma sessão (`--resume`), por isso o Claude lembra-se do que foi feito no terminal.
 
+## Memória do projeto no terminal
+
+Ao abrir no terminal uma conversa associada a um projeto, a HYDRAQ acrescenta as quatro ferramentas MCP de consulta através de um ficheiro privado `--mcp-config` e pré-autoriza apenas essas quatro com `--allowedTools`, como nos seus próprios processos. O botão e o comando manual usam a mesma configuração; os MCP pessoais continuam disponíveis e as restantes ferramentas seguem as autorizações habituais. A credencial não aparece no comando nem no ficheiro de configuração: o helper lê-a de um ficheiro privado separado em cada consulta.
+
+O servidor HYDRAQ tem de estar disponível. Durante uma paragem, as consultas indicam que a memória está indisponível e que se deve aguardar. No arranque, a HYDRAQ reemite a credencial das conversas que continuam no terminal, no mesmo caminho: um helper já aberto recupera na consulta seguinte. A autorização não expira enquanto a conversa estiver no terminal e continuar no projeto autorizado. Ao regressar, volta o prazo normal de uma hora.
+
+Arquivar a conversa ou o projeto, ou mudar a conversa de projeto, revoga o acesso: o token é substituído no mesmo ficheiro pelo motivo, e o terminal passa a responder que a conversa já não tem acesso à memória daquele projeto, em vez de pedir para aguardar. Se a mudança acontecer com a HYDRAQ desligada, o arranque volta a deixar o motivo. Desarquivar ou voltar ao projeto autorizado devolve o acesso ao terminal aberto. Guardar a organização sem mudar o projeto não revoga.
+
+As consultas bem-sucedidas ficam guardadas enquanto o terminal está aberto. No regresso, são comparadas com as chamadas MCP nativas da transcrição (mesmo servidor, ferramenta e argumentos):
+
+- uma consulta e uma chamada no mesmo pedido: associação à chamada (`tool-and-arguments`, com o ID nativo);
+- várias consultas ou chamadas iguais, todas no mesmo pedido: associação a esse pedido (`request`), sem escolher uma chamada concreta. Uma consulta de um subagente durante o pedido fica no mesmo pedido;
+- cada consulta tem de estar entre a primeira chamada correspondente e o fim do pedido;
+- chamadas iguais em pedidos diferentes, ramos não importados e consultas fora do intervalo ficam como `unidentified-request` em `unattributedContextReads`. A hora, sozinha, nunca decide.
+
+Até 1000 consultas pendentes/sem pedido são conservadas por conversa; excedentes têm contador explícito. O regresso aguarda consultas já admitidas antes de importar o histórico.
+
+Validado com o Claude Code interativo (2.1.309 e 2.1.310), aberto com o comando gerado, em perfil e HYDRAQ isolados: consultas sem pedido de autorização em modo normal e em Planear, mensagem de indisponibilidade com a HYDRAQ parada, recuperação do mesmo terminal depois de reiniciar a HYDRAQ (marcador de memória novo) e regresso com os pedidos e as consultas associados. Scripts em `validation/claude-terminal-interactive.py`.
+
 ## Associar uma sessão existente
 
 **Associar sessão Claude existente** lista as sessões do Claude Code guardadas na pasta indicada pelo terminal (`cli`) ou pela app Claude (`claude-desktop`), com o título do próprio Claude quando existe. Sessões criadas por programas (`sdk-*`), incluindo as da HYDRAQ, ficam de fora. A associação recusa sessões abertas noutro Claude ou de outra pasta, mantém o ID nativo e importa o histórico; sem confirmação do CLI ou com linhas ilegíveis, pede a mesma decisão explícita. As conversas normais de claude.ai (chat no browser, app ou telemóvel) ficam nos servidores da Anthropic e não aparecem; sessões do Claude Code na web exigem `claude --teleport`.
@@ -40,7 +59,7 @@ Cada processo Claude da HYDRAQ recebe `--settings {"crossSessionInbound":"refuse
 - `/clear` no terminal começa outra sessão, que não volta automaticamente; podes associá-la depois.
 - Se a conversa for rebobinada para antes do ponto de partida, a HYDRAQ importa o ramo novo e avisa; o histórico anterior continua visível, mas o Claude segue a partir desse ponto.
 - O trabalho dos membros de uma equipa de agentes fica nas suas transcrições; a HYDRAQ importa o que o Claude principal mostra.
-- O servidor MCP de memória do projeto não é passado ao terminal.
+- O MCP acrescentado exige uma conversa associada a um projeto e o servidor disponível; sessões abertas antes desta integração precisam de ser abertas novamente com o novo comando para receberem a configuração.
 - Windows ainda não é suportado.
 
-Validação: `.hydraq/claude-original-2026-10-23/VALIDACAO.md`.
+Validação: `.hydraq/claude-original-2026-10-23/VALIDACAO.md`; memória no terminal em `.hydraq/terminal-memory-2026-10-24/VALIDACAO.md` e `.hydraq/terminal-memory-review-2026-10-24/VALIDACAO.md`.

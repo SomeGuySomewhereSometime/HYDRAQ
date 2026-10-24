@@ -89,6 +89,30 @@ test('TUI conserva a prioridade nativa de modelo/raciocínio e a página inicial
   assert.equal(c.turns.at(-1).model, 'gpt-other'); assert.equal(c.turns.at(-1).effort, 'high');
 });
 
+test('/model no TUI muda só modelo/raciocínio da sessão, notifica o TUI e recusa outras definições', async t => {
+  const {hub, c} = await setup(t); const {call, events} = await peer(t, hub, c);
+  // Parameters as the original TUI 0.159 sends them for a session-only /model choice.
+  const update = (extra = {}) => call('thread/settings/update', {threadId:c.threadId, disabledPluginIds:null, cwd:null, approvalPolicy:null, approvalsReviewer:null, sandboxPolicy:null, permissions:null,
+    model:'gpt-other', effort:'high', summary:null, collaborationMode:{mode:'default',settings:{model:'gpt-other',reasoning_effort:'high',developer_instructions:null}}, multiAgentMode:null, personality:null, ...extra});
+  assert.deepEqual(await update(), {});
+  assert.deepEqual([c.model, c.effort], ['gpt-other', 'high']);
+  await wait(() => events.some(e => e.method === 'thread/settings/updated'));
+  const notice = events.find(e => e.method === 'thread/settings/updated').params;
+  assert.equal(notice.threadId, c.threadId);
+  assert.deepEqual([notice.threadSettings.model, notice.threadSettings.effort, notice.threadSettings.collaborationMode.settings.reasoning_effort], ['gpt-other', 'high', 'high']);
+  assert.deepEqual(notice.threadSettings.sandboxPolicy, {type:'readOnly', networkAccess:false});
+  await assert.rejects(update({effort:'low', collaborationMode:{mode:'default',settings:{model:'gpt-other',reasoning_effort:'low',developer_instructions:null}}}), /não suportado/);
+  await assert.rejects(update({model:'gpt-inexistente', collaborationMode:null}), /catálogo/);
+  await assert.rejects(update({permissions:'full'}), /permissões/);
+  await assert.rejects(update({sandboxPolicy:{type:'workspaceWrite', writableRoots:[c.cwd], networkAccess:false}}), /acesso/);
+  await assert.rejects(update({collaborationMode:{mode:'plan',settings:{model:'gpt-other',reasoning_effort:'high',developer_instructions:null}}}), /colaboração/);
+  await assert.rejects(update({threadId:'outra'}), /pertence/);
+  assert.deepEqual([c.model, c.effort], ['gpt-other', 'high'], 'pedidos recusados não alteram a sessão');
+  await call('turn/start', {threadId:c.threadId, input:[{type:'text', text:'depois do /model'}]});
+  await wait(() => c.status === 'completed');
+  assert.deepEqual([c.turns.at(-1).model, c.turns.at(-1).effort], ['gpt-other', 'high']);
+});
+
 test('desligar terminal em execução conserva o pedido e bloqueia transferência até terminar', async t => {
   const {hub, codex, c} = await setup(t); const {call, ws} = await peer(t, hub, c);
   await call('turn/start', {threadId: c.threadId, input: [{type: 'text', text: 'hold'}]});
