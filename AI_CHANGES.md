@@ -4,7 +4,7 @@ Versão atual: 81
 
 ## Resumo atual
 
-- Participantes do Dual e terminal visível (entrada 81): trocar o cliente de um participante (por exemplo, Claude → OpenCode) sem desligar o Dual, com as rondas anteriores a manterem quem respondeu e o novo a receber o histórico; no Atelier, a barra de clientes fica no Dual com os dois participantes fixos, que abrem as suas definições; «Abrir no terminal · …» e «Continuar na HYDRAQ» junto à caixa, em todas as aparências, e no Dual só o principal vai ao terminal. 417/417 testes e 363 verificações em browser isolado, com clientes simulados. Interface servida ao recarregar; o servidor exige reinício da 4318 para mudar de cliente. Por validar com clientes reais.
+- Participantes do Dual e terminal visível (entrada 81): trocar o cliente de um participante (por exemplo, Claude → OpenCode) sem desligar o Dual, com as rondas anteriores a manterem quem respondeu e o novo a receber o histórico; no Atelier, a barra de clientes fica no Dual com os dois participantes fixos, que abrem as suas definições; «Abrir no terminal · …» e «Continuar na HYDRAQ» junto à caixa, em todas as aparências, e no Dual só o principal vai ao terminal. 417/417 testes e 363 verificações em browser isolado, com clientes simulados. Commit 76bc3b9, ativado na 4318 (PID 1364783). Por validar com clientes reais.
 
 - Logótipo pelo briefing do utilizador (entrada 80): proposta monocromática com formas orgânicas e lettering HYDRAQ, PNG transparente/prompt em `output/imagegen/hydraq-logo-brief-v1.*`; sem integração na interface.
 
@@ -840,7 +840,12 @@ Versão atual: 81
   - Corrigido no ensaio: o botão «Continuar na HYDRAQ» ficava ilegível com o rato por cima.
   - Provas em `.hydraq/dual-participants-2026-10-24/`.
 - Simulado: o terminal (funções de abrir e voltar do Codex substituídas no ensaio) e a lista de modelos do OpenCode por pasta.
-- Por validar:
-  - reinício da 4318, para a rota `replace` e as regras do servidor (sem reinício, a interface carrega, mas trocar de cliente dá erro);
-  - ensaio com os clientes reais.
-- Sem commit nem push.
+- Ativação: commit 76bc3b9. Reinício controlado da 4318, pedido pelo utilizador: PID 1284193 → 1364783, no scope `hydraq-20261024T203247Z.scope`, com o mesmo Node e ambiente.
+  - Antes, nada em curso: conversas paradas, sem decisões, reservas, terminais ou entregas Dual.
+  - 47 conversas; pareceres, revisões automáticas, colaboração, projetos e registos Dual iguais por hash.
+  - Nas conversas, a única diferença foi o registo do fecho limpo (código 0) do processo Antigravity de uma conversa concluída, ao parar o servidor. As mensagens e os pedidos ficaram iguais.
+  - Cinco clientes ligados. Os ficheiros servidos são iguais ao disco.
+  - A rota `replace` responde «Participante inválido.» a um pedido inválido, sem efeitos.
+  - A página real carrega sem erros e sem escritas, com o botão do terminal.
+  - Provas em `.hydraq/dual-participants-2026-10-24/restart/`.
+- Por validar: ensaio com os clientes reais (troca de cliente numa conversa real; abrir/voltar do terminal no Dual). Sem push.
