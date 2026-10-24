@@ -4,7 +4,7 @@ Versão atual: 83
 
 ## Resumo atual
 
-- Antigravity no terminal original (entrada 83): «Abrir no terminal · Antigravity» abre `agy --conversation <ID>` com o mesmo modelo, `--sandbox` e modo, com o grupo reservado; no Dual, só o principal. O regresso traz os pedidos escritos no terminal e os ficheiros alterados vistos pelo git, com a indicação de que as respostas ficaram no agy, que os outros modelos recebem como contexto parcial. Ensaio real com o Gemini 3.8 Flash (mesma sessão e memória nos dois sentidos, regresso recusado com o terminal aberto), 421/421 testes e 14 verificações em browser por aparência. Ativação na 4318 por fazer.
+- Antigravity no terminal original (entrada 83): «Abrir no terminal · Antigravity» abre `agy --conversation <ID>` com o mesmo modelo, `--sandbox` e modo, com o grupo reservado; no Dual, só o principal. O regresso traz os pedidos escritos no terminal e os ficheiros alterados vistos pelo git, com a indicação de que as respostas ficaram no agy, que os outros modelos recebem como contexto parcial. Ensaio real com o Gemini 3.8 Flash (mesma sessão e memória nos dois sentidos, regresso recusado com o terminal aberto), 421/421 testes e 14 verificações em browser por aparência. Commit 6a7c578 (com o Mono da entrada 82), ativado na 4318 (PID 1389562). Por validar numa janela real.
 
 - Mono (entrada 82): quarta aparência, preto/branco e cinzentos neutros com cores apenas para identificar os clientes. Grafite/Atelier/Linho e preferências existentes preservados. 417/417 testes, 52 verificações de interface e 60 do Dual/terminal em browser isolado com clientes simulados. Disponível na 4318 ao recarregar, sem reinício; escolher Aparência → Mono.
 
@@ -897,9 +897,14 @@ Versão atual: 83
     - a secção aparecia sem estilo.
   - Provas em `.hydraq/agy-terminal-2026-10-24/`.
 - Simulado: no browser, o processo e a janela do agy. O terminal real foi comandado por script num pseudoterminal; a abertura de uma janela real com `x-terminal-emulator` não foi ensaiada.
-- Por validar:
-  - reinício da 4318;
-  - uma janela real;
-  - pedidos colados com várias linhas.
-- Ficaram duas conversas de ensaio no agy do utilizador.
-- Sem commit nem push.
+- Ativação: commit 6a7c578, que inclui o Mono do Codex (entrada 82). Reinício controlado da 4318, pedido pelo utilizador: PID 1364783 → 1389562, no scope `hydraq-20261024T223607Z.scope`, com o mesmo ambiente.
+  - Antes, nada em curso. Um pedido Antigravity «hey» tinha terminado às 22:34 e o agy da HYDRAQ estava só à espera.
+  - 49 conversas; pareceres, revisões automáticas, colaboração, projetos e Dual iguais por hash.
+  - Nas conversas, a única diferença foi o registo do fecho limpo (código 0) desse agy na conversa «hey».
+  - Cinco clientes ligados, e `antigravityTerminal` disponível.
+  - Os ficheiros servidos são iguais ao disco.
+  - As rotas `antigravity-open` e `antigravity-release` respondem «Conversa não encontrada.» a um ID inexistente, sem efeitos.
+  - A página real carrega sem erros e sem escritas.
+  - Provas em `.hydraq/agy-terminal-2026-10-24/restart/`.
+- Por validar: uma janela real de terminal e pedidos colados com várias linhas.
+- Ficaram duas conversas de ensaio no agy do utilizador. Sem push.
