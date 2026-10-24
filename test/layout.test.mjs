@@ -46,14 +46,17 @@ test('panel widths stay within limits and leave room for the conversation', () =
   assert.equal(clampWidth('inspector', 500, { viewport: 700, other: 264 }), PANEL_LIMITS.inspector.min);
 });
 
-test('appearance preserves Grafite and Atelier and accepts Linho; removed themes fall back to the default', async () => {
+test('appearance preserves existing profiles and accepts Mono; removed themes fall back to the default', async () => {
   const { THEMES, APPEARANCES, appearanceOf } = await import('../public/layout.js');
-  assert.deepEqual(THEMES, ['classic', 'atelier', 'linho']);
-  assert.deepEqual(APPEARANCES.map(entry => entry.name), ['Grafite', 'Atelier', 'Linho']);
+  assert.deepEqual(THEMES, ['classic', 'atelier', 'linho', 'mono']);
+  assert.deepEqual(APPEARANCES.map(entry => entry.name), ['Grafite', 'Atelier', 'Linho', 'Mono']);
   assert.equal(defaultLayout().theme, 'atelier');
   assert.equal(readLayout(JSON.stringify({ theme: 'linho' })).theme, 'linho');
   assert.equal(readLayout(null, 'linho').theme, 'linho');
   assert.equal(appearanceOf('linho').name, 'Linho');
+  assert.equal(readLayout(JSON.stringify({ theme: 'mono' })).theme, 'mono');
+  assert.equal(readLayout(null, 'mono').theme, 'mono');
+  assert.equal(appearanceOf('mono').name, 'Mono');
   // Preferences saved with Editorial, Meridiano or old palettes open on the default appearance.
   for (const old of ['editorial', 'meridiano', 'neon']) assert.equal(readLayout(JSON.stringify({ theme: old })).theme, defaultLayout().theme);
   const classic = readLayout(JSON.stringify({ theme: 'classic', palette: 'nevoa', mode: 'dark' }));

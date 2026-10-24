@@ -5,7 +5,7 @@ const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',cursor
 const shortNames={codex:'Codex',claude:'Claude',antigravity:'Antigravity',cursor:'Cursor',opencode:'OpenCode'};
 const effortLabels={default:'Automático',none:'Sem raciocínio',minimal:'Mínimo',low:'Leve',medium:'Médio',high:'Alto',xhigh:'Muito alto',max:'Máximo',ultra:'Ultra'};
 const busy=new Set(['starting','running','waiting','inProgress']);
-const coverageLabels={complete:'completo',excerpt:'em excerto',summary:'resumido',none:'sem nada novo'};
+const coverageLabels={complete:'completo',excerpt:'em excerto',summary:'resumido',partial:'parcial: respostas do terminal não importadas',none:'sem nada novo'};
 export const DUAL_KEYS=['a','b'];
 export const isReadMode=sandbox=>['read-only','plan','ask'].includes(sandbox);
 export const dualRecord=(state,group)=>state?.dual?.records?.find(record=>record.groupId===group)||null;

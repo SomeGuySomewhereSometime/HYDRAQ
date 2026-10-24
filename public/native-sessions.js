@@ -113,7 +113,81 @@ export class OpenCodeSessionsUI {
   }
 }
 
-const terminalNames = {codex: 'Codex', claude: 'Claude', opencode: 'OpenCode'};
+/** Antigravity original: the same conversation in agy. Coming back brings the requests typed there and what git saw change; the answers stay in agy. */
+export class AntigravitySessionsUI {
+  constructor({api, state, current, refresh, toast}) {
+    Object.assign(this, {api, state, current, refresh, toast});
+    this.host = document.querySelector('#antigravity-sessions');
+    this.host.innerHTML = `<p class="settings-title">Antigravity original</p>
+      <p data-status class="reading-hint"></p>
+      <div class="native-actions"><button type="button" data-open>Abrir no terminal</button><button type="button" data-release>Continuar na HYDRAQ</button></div>
+      <div data-confirm class="claude-confirm" role="alert" hidden><p></p><div class="native-actions"><button type="button" data-proceed>Confirmo que o agy está fechado</button><button type="button" data-cancel>Cancelar</button></div></div>
+      <details data-command hidden><summary>Comando para abrir noutro terminal</summary><textarea readonly rows="4" aria-label="Comando do Antigravity original"></textarea></details>`;
+    const query = selector => this.host.querySelector(selector);
+    this.query = query;
+    this.open = () => this.run(async () => {
+      const result = await this.api(`/api/conversations/${(this.session() || this.current()).id}/antigravity-open`, {});
+      this.commandId = result.conversationId;
+      query('textarea').value = result.command || '';
+      query('[data-command]').hidden = false;
+      if (result.warning) { query('[data-command]').open = true; this.toast(result.warning); }
+    });
+    // HYDRAQ does not guess that agy is closed: an unsure answer waits for the person's confirmation.
+    const release = (id, confirm = []) => this.run(async () => {
+      try {
+        const result = await this.api(`/api/conversations/${id}/antigravity-release`, {confirm});
+        query('[data-command]').hidden = true;
+        this.toast([result.imported ? `${result.imported} pedido(s) do Antigravity original adicionados à conversa. As respostas ficaram no agy.` : 'Nenhum pedido novo no Antigravity original.', result.warning].filter(Boolean).join(' '));
+      } catch (error) {
+        if (error.code !== 'TERMINAL_CONFIRM') throw error;
+        this.confirmation = {context: this.current()?.id, message: error.message, proceed: () => release(id, [...confirm, error.confirm])};
+      }
+    });
+    this.release = () => release(this.session()?.id);
+    query('[data-open]').onclick = () => this.open();
+    query('[data-release]').onclick = () => this.release();
+    query('[data-proceed]').onclick = () => { const proceed = this.confirmation?.proceed; this.confirmation = null; this.render(); proceed?.(); };
+    query('[data-cancel]').onclick = () => { this.confirmation = null; this.render(); };
+  }
+  session() {
+    const c = this.current();
+    if (!c) return null;
+    const group = c.group || c.id;
+    return this.state()?.conversations.find(item => item.provider === 'antigravity' && item.terminal && (item.group || item.id) === group) || null;
+  }
+  releasable() { return !this.query('[data-release]').disabled; }
+  attention() { const command = this.query('[data-command]'); return Boolean(this.confirmation) || (!command.hidden && command.open); }
+  async run(action) {
+    if (this.pending) return;
+    this.pending = true; this.render();
+    try { await action(); await this.refresh(); }
+    catch (error) { this.toast(error.message); }
+    finally { this.pending = false; this.render(); }
+  }
+  render() {
+    const state = this.state(), c = this.current(), session = this.session();
+    if (this.confirmation && this.confirmation.context !== c?.id) this.confirmation = null;
+    this.host.classList.toggle('hidden', !c || !state?.antigravityTerminal?.available || Boolean(c.provider !== 'antigravity' && !session));
+    const target = session || c, preparing = Boolean(target && state?.antigravityTerminal?.pending?.includes(target.id));
+    const busy = ['starting', 'running', 'waiting', 'uncertain'].includes(target?.status);
+    const open = this.query('[data-open]');
+    open.textContent = session ? 'Ver comando do terminal' : 'Abrir no terminal';
+    open.disabled = Boolean(this.pending) || preparing || (!session && (!c || c.provider !== 'antigravity' || busy || !c.threadId || !c.turns?.length));
+    this.query('[data-release]').hidden = !session;
+    this.query('[data-release]').disabled = Boolean(this.pending) || preparing;
+    const since = session ? new Date(session.terminal.since).toLocaleTimeString('pt-PT', {hour: '2-digit', minute: '2-digit'}) : '';
+    this.query('[data-status]').textContent = session
+      ? `Esta conversa está no Antigravity original desde as ${since}. A HYDRAQ não envia pedidos nem trabalha nesta pasta até voltares. Sai do agy (/exit) e escolhe Continuar na HYDRAQ: voltam os pedidos que escreveste e os ficheiros alterados; as respostas ficam no agy.`
+      : 'Continua a mesma conversa no agy original, num terminal, com o mesmo modelo e as mesmas restrições (lá podes mudar de modo). Ao voltar, a HYDRAQ mostra os pedidos e os ficheiros alterados; as respostas ficam no agy. Envia primeiro um pedido para a guardar.';
+    if (this.commandId !== session?.id) this.query('[data-command]').hidden = true;
+    const confirm = this.query('[data-confirm]');
+    confirm.hidden = !this.confirmation;
+    confirm.querySelector('p').textContent = this.confirmation?.message || '';
+    for (const button of confirm.querySelectorAll('button')) button.disabled = Boolean(this.pending);
+  }
+}
+
+const terminalNames = {codex: 'Codex', claude: 'Claude', opencode: 'OpenCode', antigravity: 'Antigravity'};
 const working = new Set(['starting', 'running', 'waiting']);
 /**
  * The terminal handover next to the composer: who holds the conversation, and the way back. It drives the
@@ -140,6 +214,7 @@ export class TerminalSwitch {
     if (provider === 'codex' && !state?.nativeSessions?.available) return 'unavailable';
     if (provider === 'claude' && !state?.claudeTerminal?.available) return 'unavailable';
     if (provider === 'opencode' && state?.providers?.opencode?.transport !== 'http') return 'unavailable';
+    if (provider === 'antigravity' && !state?.antigravityTerminal?.available) return 'unavailable';
     if (this.dual()?.running(this.current())) return 'Aguarda o fim da ronda dual.';
     if (working.has(target.status) || target.status === 'uncertain') return 'Aguarda que o pedido termine.';
     if (state?.providers?.[provider]?.connection !== 'connected') return `Liga primeiro o ${terminalNames[provider]}.`;

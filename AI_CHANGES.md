@@ -1,8 +1,12 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 81
+Versão atual: 83
 
 ## Resumo atual
+
+- Antigravity no terminal original (entrada 83): «Abrir no terminal · Antigravity» abre `agy --conversation <ID>` com o mesmo modelo, `--sandbox` e modo, com o grupo reservado; no Dual, só o principal. O regresso traz os pedidos escritos no terminal e os ficheiros alterados vistos pelo git, com a indicação de que as respostas ficaram no agy, que os outros modelos recebem como contexto parcial. Ensaio real com o Gemini 3.8 Flash (mesma sessão e memória nos dois sentidos, regresso recusado com o terminal aberto), 421/421 testes e 14 verificações em browser por aparência. Ativação na 4318 por fazer.
+
+- Mono (entrada 82): quarta aparência, preto/branco e cinzentos neutros com cores apenas para identificar os clientes. Grafite/Atelier/Linho e preferências existentes preservados. 417/417 testes, 52 verificações de interface e 60 do Dual/terminal em browser isolado com clientes simulados. Disponível na 4318 ao recarregar, sem reinício; escolher Aparência → Mono.
 
 - Participantes do Dual e terminal visível (entrada 81): trocar o cliente de um participante (por exemplo, Claude → OpenCode) sem desligar o Dual, com as rondas anteriores a manterem quem respondeu e o novo a receber o histórico; no Atelier, a barra de clientes fica no Dual com os dois participantes fixos, que abrem as suas definições; «Abrir no terminal · …» e «Continuar na HYDRAQ» junto à caixa, em todas as aparências, e no Dual só o principal vai ao terminal. 417/417 testes e 363 verificações em browser isolado, com clientes simulados. Commit 76bc3b9, ativado na 4318 (PID 1364783). Por validar com clientes reais.
 
@@ -849,3 +853,53 @@ Versão atual: 81
   - A página real carrega sem erros e sem escritas, com o botão do terminal.
   - Provas em `.hydraq/dual-participants-2026-10-24/restart/`.
 - Por validar: ensaio com os clientes reais (troca de cliente numa conversa real; abrir/voltar do terminal no Dual). Sem push.
+
+
+### 82 — 2026-10-24 — Codex
+
+- Por pedido do utilizador, acrescentada a aparência **Mono**, inspirada na sobriedade preto/branco do Codex: superfícies neutras, tipografia sans-serif local, ações brancas e cores dos clientes preservadas em identificadores. Menus, conversa/código, revisão/Dual, configurações e terminal seguem a nova aparência, com ajustes para móvel/paisagem, foco e movimento reduzido. UI UX Pro Max usada como orientação; sem fontes remotas, dependências ou alterações ao funcionamento.
+- Grafite, Atelier e Linho mantidos: CSS anterior preservado byte a byte, novos estilos delimitados por `data-theme="mono"` (além da própria amostra no menu). Comparação de estilos/geometria aprovada nos três perfis. Aparência por omissão e seleção guardada não mudaram. Catálogo/teste de preferências e README atualizados.
+- Verificado: **417/417** testes sequenciais, sintaxe e diff --check; **52/52** verificações em `validation/mono-ui.mjs` a 1440/1024/768/390/375 px e 844×390, incluindo contraste dos textos/nove tons/ação/paleta, rascunho, persistência, foco e leitura 22 px; **60/60** no ensaio Dual/terminal existente com clientes simulados. Capturas da revisão com dois revisores a 1024 px inspecionadas; sem erros JS/console. Stub do ensaio adaptado só para suportar `off` na limpeza. Provas e limites em `.hydraq/mono-2026-10-24/VALIDACAO.md`.
+- 4318 serve style.css/layout.js iguais ao disco por hash, sem reiniciar o serviço, alterar conversas, modelos, logótipos propostos ou a aparência do browser do utilizador. Sem inferência real, commit ou push; sem ensaio com leitor de ecrã/dispositivo físico.
+
+### 83 — 2026-10-24 — Claude
+
+- Por pedido do utilizador, depois da análise com o Codex: «Abrir no terminal» para a Antigravity.
+  - **Fase 0 (ensaio real antes do código):** agy 1.4.7 e Gemini 3.8 Flash (o Gemini 4 Argon está sem quota). `agy --conversation <ID>` abre a mesma conversa com a memória dos dois lados. O histórico de pedidos do agy regista os pedidos do terminal, com o ID e a hora, e não os da HYDRAQ. As respostas ficam numa SQLite num formato interno, que não é lido. `--mode plan` é respeitado, mas Shift+Tab muda de modo.
+  - **`lib/antigravity-terminal.mjs`:**
+    - ao abrir, fecha o agy da HYDRAQ e guarda o ponto de partida (histórico, base de dados, git);
+    - bloqueia o grupo como os outros terminais; no Dual, só o principal abre;
+    - ao voltar, recusa se um agy tiver o ID nos argumentos, e pede confirmação (`TERMINAL_CONFIRM`) com um agy sem ID na mesma pasta;
+    - importa só os pedidos dessa conversa feitos depois da abertura, cada um com «a resposta ficou no Antigravity original e não foi importada»;
+    - junta os ficheiros que o git viu mudar, e assinala atividade sem pedido registado.
+  - **Passagem e Dual:** esses pedidos aparecem como «RESPOSTA NÃO IMPORTADA», com o contexto `partial` («parcial» no painel do Dual). O rótulo «original» passa a usar o nome do cliente.
+  - **Interface:**
+    - secção «Antigravity original» nas configurações;
+    - botão junto à caixa, em todas as aparências;
+    - nota na mensagem importada;
+    - indicação na caixa de mensagens.
+- Ficheiros:
+  - `lib/antigravity-terminal.mjs` (novo), `lib/antigravity.mjs` (`releaseSession`), `lib/providers.mjs`, `lib/native-sessions.mjs`, `lib/http.mjs`, `lib/handoff.mjs`;
+  - `public/native-sessions.js`, `public/app.js`, `public/dual.js`, `public/index.html`, `public/style.css`;
+  - `test/antigravity-terminal.test.mjs` (novo), README.
+- Verificado:
+  - 421/421 testes sequenciais, 4 deles novos.
+  - **Ensaio real pelo caminho da HYDRAQ**, numa HYDRAQ isolada:
+    - o processo da HYDRAQ fecha e o envio é recusado;
+    - com o terminal aberto, o regresso é recusado com o número do processo;
+    - no terminal, o agy criou `NOTA.txt`;
+    - no regresso, 1 pedido importado, com a nota e o ficheiro;
+    - a HYDRAQ continuou a mesma conversa, e o agy lembrou-se da palavra e do ficheiro.
+  - **Browser** (servidor real; agy, janela e ficheiros simulados): 14/14 em Atelier a 1440 e 390 px, Grafite a 1024 px, Linho e Mono a 1440 px. O ensaio Dual continua 61/61 e 60/60.
+  - O ensaio corrigiu três problemas:
+    - o código de confirmação não chegava ao browser;
+    - se a preparação falhasse, a conversa ficava marcada como «no terminal»;
+    - a secção aparecia sem estilo.
+  - Provas em `.hydraq/agy-terminal-2026-10-24/`.
+- Simulado: no browser, o processo e a janela do agy. O terminal real foi comandado por script num pseudoterminal; a abertura de uma janela real com `x-terminal-emulator` não foi ensaiada.
+- Por validar:
+  - reinício da 4318;
+  - uma janela real;
+  - pedidos colados com várias linhas.
+- Ficaram duas conversas de ensaio no agy do utilizador.
+- Sem commit nem push.

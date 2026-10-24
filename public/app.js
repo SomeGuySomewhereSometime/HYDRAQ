@@ -1,4 +1,4 @@
-import { NativeSessionsUI, OpenCodeSessionsUI, TerminalSwitch } from './native-sessions.js';
+import { NativeSessionsUI, OpenCodeSessionsUI, AntigravitySessionsUI, TerminalSwitch } from './native-sessions.js';
 import { ClaudeSessionsUI } from './claude-sessions.js';
 import { workConflict, workReason } from './work-locks.js';
 import { captureDraftIntent, draftMode, followupOptions, followupDescriptions } from './composer.js';
@@ -107,9 +107,10 @@ let settingsBaseline;
 const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{accept(await api('/api/state'));render();}});
 const claudeUI = new ClaudeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{accept(await api('/api/state'));render();}});
 const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,refresh:async()=>{accept(await api('/api/state'));render();}});
+const agyUI = new AntigravitySessionsUI({api,state:()=>state,current,toast,refresh:async()=>{accept(await api('/api/state'));render();}});
 // Opens the settings at a section that needs the person: a failed launch's command or a confirmation.
 function revealSettings(target){layout.toggle('inspector',true);$('#inspector-tabs [data-inspector-view=system]')?.click();$('#settings-details').open=true;(target||$('#settings-details')).scrollIntoView({block:'nearest'});}
-const terminalSwitch = new TerminalSwitch({host:$('#terminal-switch'),state:()=>state,current,dual:()=>dualUI,choose,reveal:revealSettings,sections:{codex:nativeUI,claude:claudeUI,opencode:openCodeUI}});
+const terminalSwitch = new TerminalSwitch({host:$('#terminal-switch'),state:()=>state,current,dual:()=>dualUI,choose,reveal:revealSettings,sections:{codex:nativeUI,claude:claudeUI,opencode:openCodeUI,antigravity:agyUI}});
 const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
@@ -642,6 +643,8 @@ function renderMessages(conversation) {
       if(!opinionUI.renderSubmission(content,message))content.append(element('p','',message.text));
       imageAttachments.renderMessage(content,[...(message.attachments||[]),...(message.contextImages||[])]);
       article.append(content);
+      // A request typed in an original client whose answer HYDRAQ could not read says so where it appears.
+      if(message.terminalNote)article.append(element('p','terminal-note',message.terminalNote));
       if(message.projectContext){const details=element('details','handoff-context');details.append(element('summary','','Contexto do projeto enviado com este pedido'),element('pre','',message.projectContext));article.append(details);}
       if (message.handoffContext) {
         const details = element('details', 'handoff-context');
@@ -1086,7 +1089,7 @@ function renderSend() {
   const hasImages=imageAttachments.list().length>0;
   const openCodeNoImage=(providerId()==='opencode'&&!providerState().models?.find(m=>m.id===$('#model').value)?.images)||Boolean(dualUI?.imagesBlocked(conversation));
   imageAttachments.render(busy || sending || openCodeNoImage || providerState().capabilities?.images===false);
-  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain') || Boolean(dual && dualUI.unavailable(conversation));
+  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session() || agyUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain') || Boolean(dual && dualUI.unavailable(conversation));
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
   $('#send').textContent = sending ? 'A enviar…' : dual && busy ? 'Aguarda o fim da ronda' : dual ? dualSendLabel(dual, { writing: !dualRead(sandboxValue()) }) : pendingDual ? 'Enviar aos dois ↗' : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
@@ -1097,8 +1100,8 @@ function renderSend() {
   $('#use-as-request').disabled = sending;
   $('#composer').classList.toggle('steering', steering || expired);
   $('#prompt').placeholder = steering ? 'Acrescenta uma orientação para a tarefa em curso…' : 'Descreve o que queres fazer…';
-  $('#composer-hint').textContent = openCodeUI.session() ? 'Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ, aqui ao lado.' : nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ, aqui ao lado.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ, aqui ao lado.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
-  if ((dual || pendingDual) && !nativeUI.session() && !claudeUI.session() && !openCodeUI.session()) {
+  $('#composer-hint').textContent = openCodeUI.session() ? 'Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ, aqui ao lado.' : nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ, aqui ao lado.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ, aqui ao lado.' : agyUI.session() ? 'Esta conversa está no Antigravity original. Sai do agy (/exit) e usa Continuar na HYDRAQ, aqui ao lado.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
+  if ((dual || pendingDual) && !nativeUI.session() && !claudeUI.session() && !openCodeUI.session() && !agyUI.session()) {
     const name = key => providerName(dual.members[key].provider);
     $('#composer-hint').textContent = dual && busy ? (dualUI.running(conversation) ? 'Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.' : workReason(workBlock()) + ' · Este projeto/pasta ou cliente está reservado.')
       : !dual || dual.target === 'both' ? 'Enter para enviar aos dois · respondem sem ver a resposta um do outro'
@@ -1163,6 +1166,7 @@ function render() {
   nativeUI.render();
   claudeUI.render();
   openCodeUI.render();
+  agyUI.render();
   terminalSwitch.render();
   opinionUI.renderAutomatic();
   const connection = providerState().connection;
