@@ -272,3 +272,51 @@ test('abrir com um agy incerto na mesma pasta pede confirmação; sem ler os pro
   assert.ok((await terminal.open(c.id, { launch: false, confirm: ['closed'] })).command);
   assert.ok(c.terminal); assert.equal(agy.session, null);
 });
+
+for (const legacy of [false, true]) test(`recuperação: um passo não é reutilizado no regresso seguinte${legacy ? ', mesmo num registo antigo' : ', depois de recarregar o histórico'}`, async t => {
+  const { home, options, agy, terminal, chat, history } = await setup(t);
+  const c = await chat(), file = path.join(home, 'conversations', c.threadId + '.db'), now = Date.now();
+  await rm(file); agyStore(file, [step.user('Memoriza GIRASSOL', now - 60_000), step.answer('OK.', now - 59_000)]);
+  await terminal.open(c.id, { launch: false });
+  agyStore(file, [[14, [0x0f, 0xff]]]);
+  await history({ display: 'continua', timestamp: now + 1000, conversationId: c.threadId },
+    { display: 'continua', timestamp: now + 3000, conversationId: c.threadId });
+  assert.equal((await terminal.release(c.id)).imported, 2);
+  const db = new DatabaseSync(file); db.prepare('DELETE FROM steps WHERE idx = 2').run(); db.close();
+  agyStore(file, [step.user('continua', now + 1000), step.answer('Resposta só ao primeiro pedido.', now + 1500)]);
+  await terminal.open(c.id, { launch: false });
+  assert.equal((await terminal.release(c.id)).recovered, 1);
+  const [first, second] = c.turns.filter(turn => turn.source === 'terminal');
+  assert.equal(first.finalAnswer, 'Resposta só ao primeiro pedido.'); assert.equal(second.partial, 'terminal');
+  if (legacy) delete first.nativeStep;
+  await agy.persist();
+  const reloaded = new Antigravity(options); await reloaded.load();
+  agy.conversations = reloaded.conversations;
+  const restored = agy.conversation(c.id);
+  await terminal.open(c.id, { launch: false });
+  assert.equal((await terminal.release(c.id)).recovered, 0, 'o passo já pertence ao primeiro pedido, mesmo depois de recarregar');
+  const [savedFirst, savedSecond] = restored.turns.filter(turn => turn.source === 'terminal');
+  if (!legacy) assert.deepEqual(savedFirst.nativeStep, { conversationId: c.threadId, index: 2 });
+  assert.equal(savedSecond.partial, 'terminal'); assert.equal(savedSecond.finalAnswer, undefined);
+  assert.equal(restored.messages.some(message => message.turnId === savedSecond.id && message.role === 'assistant'), false);
+});
+
+test('recuperação: um passo já importado normalmente continua reservado nos registos antigos', async t => {
+  const { home, agy, terminal, chat } = await setup(t);
+  const c = await chat(), file = path.join(home, 'conversations', c.threadId + '.db'), now = Date.now();
+  await rm(file); agyStore(file, [step.user('Memoriza GIRASSOL', now - 60_000), step.answer('OK.', now - 59_000)]);
+  await terminal.open(c.id, { launch: false });
+  agyStore(file, [step.user('continua', now + 1000), step.answer('Resposta já importada.', now + 1500)]);
+  assert.equal((await terminal.release(c.id)).imported, 1);
+  const imported = c.turns.at(-1);
+  assert.deepEqual(imported.nativeStep, { conversationId: c.threadId, index: 2 });
+  delete imported.nativeStep; // Before this fix, normal imports kept the index only in requestId.
+  const at = new Date(now + 3000).toISOString(), requestId = `terminal:${c.threadId}:${now + 3000}`;
+  const partial = { id: 'missing-answer', requestId, source: 'terminal', partial: 'terminal', status: 'completed', startedAt: at, completedAt: at,
+    facts: { version: 2, files: [], commands: [] } };
+  c.turns.push(partial); c.messages.push({ id: 'missing-prompt', turnId: partial.id, requestId, role: 'user', text: 'continua', at, terminalNote: 'Resposta não importada.' });
+  await agy.persist();
+  await terminal.open(c.id, { launch: false });
+  assert.equal((await terminal.release(c.id)).recovered, 0);
+  assert.equal(partial.partial, 'terminal'); assert.equal(partial.finalAnswer, undefined);
+});

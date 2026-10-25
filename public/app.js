@@ -12,6 +12,7 @@ import { ModelPicker } from './model-picker.js';
 import { OpinionUI, opinionResultAnchors, diagnosticsView } from './opinions.js';
 import { Layout, Tooltips, AppearanceMenu, ClientColors, APPEARANCES, COLUMNS } from './layout.js';
 // A server started before the dual routes does not serve dual.js: the composer then works without Dual.
+const claudexModule = await import('./claudex.js').catch(() => null);
 const dualModule = await import('./dual.js').catch(() => null);
 const { isReadMode: dualRead, dualSendLabel } = dualModule || {};
 
@@ -28,6 +29,10 @@ function icon() {
   const path = document.createElementNS(svg.namespaceURI, 'path');
   path.setAttribute('d', 'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M5.6 18.4 18.4 5.6');
   svg.append(path);
+  // The approved HYDRAQ symbol is shown in Mono; the other appearances keep their icon.
+  const mark = document.createElementNS(svg.namespaceURI, 'use');
+  for (const [key, value] of Object.entries({ href: '#mono-logo-symbol', width: '24', height: '24', display: 'none', class: 'mono-message-symbol' })) mark.setAttribute(key, value);
+  svg.append(mark);
   return svg;
 }
 
@@ -75,7 +80,7 @@ function diffContent(target, text) {
 let state;
 let token;
 // Assigned once the composer helpers exist; read through optional chaining before that.
-let dualUI;
+let dualUI, claudexUI;
 let selected = localStorage.getItem('hydraq.conversation') || null;
 let selectedProject = localStorage.getItem('hydraq.project') || null;
 let projectOverview = !selected && localStorage.getItem('hydraq.projectView') === 'true';
@@ -233,6 +238,7 @@ function saveComposerDraft() {
 }
 function choose(id, projectId=selectedProject, overview=false, internal=false) {
   if(sending&&!internal){toast('Aguarda a confirmação do envio antes de mudar de conversa.');return;}
+  if(!internal&&id){const c=state?.conversations.find(c=>c.id===id);if(c?.claudexTask&&claudexUI){claudexUI.choose(c.claudexTask);return;}}
   saveComposerDraft();
   collaborationUI.show('conversations',false);
   layout.closeDrawers();
@@ -250,6 +256,7 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
 const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{accept(await api('/api/state'));render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id)});
 const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:current,getProject:project,getKey:composerKey,getProvider:providerId,toast,renderImages:(target,images)=>imageAttachments.renderMessage(target,images),changed:()=>render()});
 const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
+claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area:collaborationUI,toast,markdown,openConversation:id=>choose(id,selectedProject,false,true)}):null;
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 
 dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
@@ -1211,6 +1218,7 @@ function render() {
   const collaboration=state.collaboration?.sessions.find(s=>s.id===state.collaboration.activeId);
   if(collaboration&&collaborationUI.view!=='collaboration'){banner.classList.remove('hidden');banner.textContent=`Colaboração · ${collaboration.title} · ${collaboration.pendingDecisions?'Aguarda a tua decisão':'Em curso'} — Abrir`;banner.onclick=()=>{collaborationUI.choose(collaboration.id);collaborationUI.show('collaboration');};}
   collaborationUI.render();
+  claudexUI?.render();
 }
 function renderTopbar(conversation, visibleTitle) {
   const title = conversation ? visibleTitle : projectOverview ? (project()?.name || 'Sem projeto') : 'Nova conversa';

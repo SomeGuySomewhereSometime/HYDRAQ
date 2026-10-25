@@ -141,3 +141,14 @@ test('revisor mantém ferramentas de leitura e recusa escrita sem aprovação po
  assert.equal(client.approvals.size,0);assert.equal(c.messages.at(-1).text,'Recusado.');assert.equal(c.items[0].status,'declined');
  const args=JSON.parse(await readFile(log,'utf8'));assert.ok(args.includes('--restricted'));assert.ok(args.includes('--strict-mcp-config'));assert.equal(args[args.indexOf('--tools')+1],'Read,Glob,Grep');assert.equal(args[args.indexOf('--mcp-config')+1],'{"mcpServers":{}}');
 });
+
+test('ClaudeX: ferramentas de leitura, aviso de colega sem autoria humana, e escrita recusada',async t=>{
+ const {client,directory}=await setup(t);const argv=path.join(directory,'args.json');client.env.FAKE_CLAUDE_ARGS_LOG=argv;await client.connect();
+ const c=await client.create({cwd:directory,model:'haiku',effort:'low',sandbox:'plan'});
+ await client.send(c.id,'hold','cx1',{internal:'claudex',planOnly:true});
+ const args=JSON.parse(await readFile(argv,'utf8'));assert.ok(args.includes('--strict-mcp-config'));assert.equal(args[args.indexOf('--tools')+1],'Read,Glob,Grep,WebSearch,WebFetch,AskUserQuestion');assert.equal(JSON.parse(args[args.indexOf('--settings')+1]).disableAllHooks,true);
+ const packets=[],write=client.session.child.stdin.write.bind(client.session.child.stdin);client.session.child.stdin.write=(data,...rest)=>{packets.push(JSON.parse(data));return write(data,...rest);};
+ await client.steer(c.id,'Aviso do coordenador','cxnotice',c.turnId,'next',{kind:'peer-notice',taskId:'cx-task'});await waitFor(()=>c.status==='completed');
+ const message=c.messages.find(m=>m.requestId==='cxnotice');assert.equal(message.kind,'peer-notice');assert.equal(message.delivery,'accepted');assert.equal(message.internal,'claudex');assert.equal(packets.find(p=>p.priority)?.origin,undefined);
+ await client.send(c.id,'tool-approval','cx2',{internal:'claudex',planOnly:true});await waitFor(()=>c.status==='completed');assert.equal(client.approvals.size,0);assert.ok(c.items.some(i=>i.denied));
+});

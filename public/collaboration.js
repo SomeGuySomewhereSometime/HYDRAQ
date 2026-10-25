@@ -10,7 +10,7 @@ export class CollaborationUI {
   constructor({ api, getState, toast, changed, markdown }) {
     Object.assign(this, { api, getState, toast, changed, markdown });
     this.root = document.querySelector('#collaboration-view');
-    this.view = location.hash==='#collaboration'||localStorage.getItem('hydraq.view') === 'collaboration' ? 'collaboration' : 'conversations';
+    this.view = location.hash==='#claudex'||localStorage.getItem('hydraq.view')==='claudex'?'claudex':location.hash==='#collaboration'||localStorage.getItem('hydraq.view') === 'collaboration' ? 'collaboration' : 'conversations';
     this.selected = localStorage.getItem('hydraq.collaboration');
     this.controls = {};
     document.querySelector('#tab-conversations').addEventListener('click', () => this.show('conversations'));
@@ -18,7 +18,7 @@ export class CollaborationUI {
     this.build();
     this.timer = setInterval(() => { if (this.view === 'collaboration' && this.selected && active.has(this.detail?.status)) this.refresh(); }, 1000);
   }
-  show(view, notify = true) { this.view = view; localStorage.setItem('hydraq.view', view);const url=new URL(location.href);url.hash=view==='collaboration'?'collaboration':'';history.replaceState(null,'',url); if (notify) this.changed(); }
+  show(view, notify = true) { this.view = view; localStorage.setItem('hydraq.view', view);const url=new URL(location.href);url.hash=['collaboration','claudex'].includes(view)?view:'';history.replaceState(null,'',url); if (notify) this.changed(); }
   button(text, fn, cls = '') {
     const b = node('button', cls, text); b.type = 'button'; b.addEventListener('click', async () => { b.disabled = true; try { await fn(); } catch (e) { this.toast(e.message); } finally { b.disabled = false; } }); return b;
   }
@@ -96,7 +96,7 @@ export class CollaborationUI {
     const state = this.getState(); if (!state) return;
     const visible = this.view === 'collaboration';
     this.root.classList.toggle('hidden', !visible);
-    document.querySelector('#tab-collaboration').setAttribute('aria-selected', String(visible)); document.querySelector('#tab-conversations').setAttribute('aria-selected', String(!visible));
+    document.querySelector('#tab-collaboration').setAttribute('aria-selected', String(visible)); document.querySelector('#tab-conversations').setAttribute('aria-selected', String(this.view==='conversations'));
     if (!visible) return;
     document.querySelector('#chat-workspace').classList.add('hidden'); document.querySelector('#project-overview').classList.add('hidden');
     document.querySelector('#project-name').textContent = 'Colaboração';

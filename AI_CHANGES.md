@@ -1,8 +1,20 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 85
+Versão atual: 93
 
 ## Resumo atual
+
+- ClaudeX revisto (entrada 93): pausa/retoma da mesma tarefa e sessões, proteções configuráveis 30 turnos/60 minutos (0 desativa), despertares por novidade/ação concreta, impasses com autoria e colaboração com evidência. Par preferido GPT-6.1 Sol + Opus 5.5; ensaio real deste par completou pausa/retoma e segunda versão com objeções fundamentadas e aprovação conjunta. Código integrado, ativação na 4318 depende de reinício.
+
+- Reinício pedido para recarregar a autenticação do Codex (entrada 92): HYDRAQ novamente disponível na 4318, 60 conversas preservadas e cinco clientes ligados. Recuperação da autenticação num novo pedido por confirmar.
+
+- Documentos maiores no ClaudeX (entrada 90): resposta final até 100 000 caracteres e transporte MCP/HTTP até 640 000 bytes. 18/18 testes ClaudeX aprovados, incluindo passagem completa de um documento no limite e aprovação/publicação sem cortes. Ativado na 4318 por reinício autorizado (entrada 91), com as 52 conversas preservadas e cinco clientes ligados.
+
+- ClaudeX (entrada 88): área própria, apenas Codex + Claude, para análise/pesquisa/planeamento em paralelo, mensagens durante o trabalho e uma resposta comum com aprovação exata dos dois por defeito. 448/448 testes, 21 verificações de interface e ensaio real com duas restrições privadas distintas aprovados. Ativado na 4318 por reinício autorizado (entrada 89); 52 conversas preservadas, cinco clientes ligados e aba confirmada no browser.
+
+- Identidade do Mono (entrada 87): logótipo aprovado em SVG, com lettering branco e símbolo na cor do cliente ativo; avatares, nomes e margens das respostas identificam cada autor. Apontamentos de cor na caixa, seleção e estado do cliente, mantendo as superfícies neutras. Grafite/Atelier/Linho preservados. 13 testes e 63 verificações em browser isolado aprovados. Já servido pela 4318, sem reinício; atualizar a página.
+
+- Recuperação Antigravity entre regressos (entrada 86): guarda a conversa e o índice do passo nativo associado a cada pedido, impedindo reutilizar uma resposta noutro regresso, mesmo depois de recarregar o histórico. Inclui proteção para importações antigas. 430/430 testes aprovados. Ativada na 4318 por reinício pedido pelo utilizador (PID 1433897); 51 conversas preservadas e cinco clientes ligados.
 
 - Correções do terminal Antigravity (entrada 85), após a revisão do Codex:
   - abrir com um agy incerto na mesma pasta pede confirmação;
@@ -987,3 +999,65 @@ Versão atual: 85
   - A abertura aceita a confirmação e responde sem efeitos a um ID inexistente.
   - A página real carrega sem erros e sem escritas.
   - Provas em `.hydraq/agy-terminal-2026-10-24/restart-85/`. Sem push.
+
+### 86 — 2026-10-25 — Codex
+
+- Corrigida a reutilização de uma resposta recuperada num regresso seguinte ao terminal: importações e recuperações guardam `nativeStep` (conversa e índice), e os passos já associados ficam excluídos nas recuperações seguintes.
+- Compatibilidade: importações antigas usam o índice já presente no identificador do pedido; recuperações antigas sem índice reservam os candidatos compatíveis, mantendo os casos ambíguos como parciais.
+- Verificado: 13/13 testes do terminal e **430/430** na suite completa sequencial, incluindo três regressões que falhavam antes da correção — dois regressos com histórico recarregado, recuperação antiga e importação antiga. Sintaxe e `git diff --check` aprovados. Clientes simulados e bases temporárias; sem novas inferências reais.
+- Ativação por reinício pedido pelo utilizador: PID 1419244 → 1433897, no scope `hydraq-recovery86-1792890400361908296.scope`, com o mesmo executável, pasta e ambiente de execução (apenas o `INVOCATION_ID` do systemd mudou).
+  - Sem tarefas, aprovações ou terminais ativos antes e depois; 51 conversas preservadas. A comparação integral só detetou duas atualizações de `nativeHistory.checkedAt` do OpenCode; mensagens e restantes campos iguais. Pareceres/revisões, colaboração, projetos e Dual iguais por hash.
+  - Cinco clientes ligados, health com o novo PID, scope ativo e ficheiros da interface iguais ao disco. A fonte da correção manteve o mesmo hash durante o reinício; sem novas inferências reais.
+  - Provas em `.hydraq/agy-recovery-2026-10-25/restart-86/verification.json`. Sem commit ou push.
+
+### 87 — 2026-10-25 — Codex
+
+- Apenas no Mono: integrado o logótipo enviado pelo utilizador, com contornos vetoriais inline e proporções preservadas. Lettering branco e símbolo na cor do cliente ativo, também no ecrã inicial e nos avatares. As cores existentes/personalizadas identificam os autores nas respostas; caixa, cliente selecionado e estado recebem detalhes discretos de cor. Botão Copiar ajustado ao mesmo acabamento.
+- UI UX Pro Max consultada para identificação por texto/ícone além da cor e contraste. Sem fontes, imagens remotas, dependências ou mudanças de comportamento. SVG alternativo oculto nas outras aparências; CSS anterior mantido e novos seletores delimitados ao Mono.
+- Verificado: **13/13** testes existentes de preferências/composição/interface Dual; **63/63** verificações em `validation/mono-ui.mjs`, com clientes simulados, sem erros JavaScript/console. Mono a 1440/1024/768/390/375 px e 844×390, contraste, foco, rascunhos, preferências, cinco autores, cor personalizada e dois painéis Dual. Grafite/Atelier/Linho com estilos/geometria iguais a 1440 px; CSS anterior ao Mono igual ao HEAD. Capturas inspecionadas em `.hydraq/mono-2026-10-25/`.
+- A 4318 serve index.html/app.js/style.css iguais ao disco por hash, com o mesmo PID 1433897; basta atualizar a página. Sem reinício, novas inferências reais, alteração da preferência do browser, commit ou push.
+
+### 88 — 2026-10-25 — Codex
+
+- Implementado **ClaudeX** separado do Dual e da Colaboração, apenas com os clientes normais Codex e Claude. Projeto opcional, escolhas de modelo/raciocínio congeladas por tarefa, posições iniciais independentes, caixa de mensagens MCP da tarefa e avisos aos participantes em execução. Uma continuação pode arrancar enquanto o colega trabalha; os envios não esperam resposta.
+- Por defeito, publica um único documento depois de ambos declararem prontidão e aprovarem a mesma versão/hash e revisão das mensagens. Contributos, objeções e requisitos novos anulam as aprovações. Síntese sem consenso é uma opção explícita e não recebe o selo de acordo. O resultado comum fica no histórico normal com autoria ClaudeX para passagens de contexto.
+- Reservas próprias, identidades por participante, mensagens persistidas, limites de diálogo, paragem antes de novos despertares e recuperação sem reenvio automático. Perguntas nativas ao utilizador partilham a resposta com ambos. Continuação explícita transporta o progresso em novas sessões, sem herdar aprovações.
+- Apenas análise: Codex em só leitura, sem aprovar escrita/escalada, com MCP/apps externos, plugins, hooks e controlo do computador/browser desativados nesta sessão; Claude em Planear, com ferramentas limitadas, MCP estrito e hooks desativados. Configurações globais preservadas. Inventário real do Codex confirmou apenas as sete ferramentas MCP ClaudeX disponíveis.
+- Verificado: **448/448** testes completos sequenciais após integração; inclui concorrência, acordo exato, objeções tardias, paragem, reinício, falhas, contexto de projeto e respostas humanas. **21/21** verificações em browser isolado, com os quatro temas, 1440/390 px e zero erros JS. Sintaxe e `git diff --check` aprovados. Corrigidas duas regressões detetadas na validação síncrona das respostas às perguntas do Claude.
+- Ensaio real final: GPT-6.1 Sol/Low + Claude Haiku/Low, sessões e dados temporários, sem API paga. Cada um recebeu uma restrição privada diferente; partilharam descobertas enquanto ambos estavam em execução, incorporaram offline/exportação JSON sem conta e aprovaram o mesmo hash/contexto. A prova demonstra funcionamento; a comparação de qualidade com um modelo só e com respostas independentes, usando igual orçamento, fica por realizar.
+- Documentação em `docs/claudex.md`; provas em `.hydraq/claudex-2026-10-25/`. Alterações anteriores de Mono e recuperação Antigravity preservadas. Sem reinício da instalação ativa, commit ou push; a aba exige que o servidor carregue esta versão.
+
+### 89 — 2026-10-25 — Codex
+
+- Reinício pedido pelo utilizador para ativar o ClaudeX: PID 1433897 → 1523390, no scope `hydraq-claudex88-1792927861766205807.scope`. Paragem normal, sem tarefas, autorizações ou reservas pendentes. Mesmo executável, pasta e ambiente, exceto o novo `INVOCATION_ID`.
+- Preservadas as 52 conversas: comparação integral com apenas duas atualizações de `nativeHistory.checkedAt`; pareceres/revisões, colaboração, projetos e Dual iguais por hash. Cinco clientes ligados; ClaudeX disponível e sem erro.
+- Confirmado no browser temporário: aba e área ClaudeX visíveis, modelos Codex/Claude disponíveis, início habilitado e zero erros JavaScript. Os quatro ficheiros da interface verificados na 4318 coincidem com o disco. Sem novos pedidos aos modelos, commit ou push.
+- Provas em `.hydraq/claudex-2026-10-25/restart-88/verification.json`, `browser.json` e captura `live-ui.png`. Basta atualizar a página aberta para receber a nova aba.
+
+### 90 — 2026-10-25 — Codex
+
+- A pedido do utilizador, aumentado o documento final ClaudeX de 24 000 para 100 000 caracteres e o transporte das chamadas MCP/HTTP de 40 000 caracteres para 640 000 bytes. Limites partilhados entre esquema, coordenador e transporte; o tamanho em bytes contempla Unicode e expansão por escapes JSON. As outras rotas mantêm os seus limites.
+- Verificado: **18/18** testes ClaudeX. Novo ensaio com clientes simulados atravessa o processo MCP e HTTP locais com 100 000 caracteres, incluindo escapes JSON, confirma o texto/hash na aprovação, publicação e gravação, e verifica recusa acima dos limites. Sintaxe e `git diff --check` aprovados; sem novas inferências reais.
+- Documentação atualizada. Prova em `.hydraq/claudex-2026-10-25/large-document-tests.log`. Sem reinício da instalação ativa, commit ou push. Os limites de turnos e restantes propostas de coordenação não foram alterados nesta entrada.
+
+### 91 — 2026-10-25 — Codex
+
+- Reinício pedido pelo utilizador para ativar os documentos maiores do ClaudeX: PID 1523390 → 1536546, scope `hydraq-claudex90-1792931227422627343.scope`. Paragem normal, sem tarefas, autorizações ou reservas em curso; mesmo executável, pasta e ambiente, exceto `INVOCATION_ID`.
+- Preservadas 52 conversas, com apenas duas atualizações de `nativeHistory.checkedAt`; pareceres, colaboração, projetos, Dual e ClaudeX iguais por hash. Cinco clientes ligados; interface servida igual ao disco e fontes estáveis durante o reinício.
+- Limite novo confirmado na 4318: um pedido de 50 KB chega à autenticação (403 por token inválido), e acima de 640 KB recebe 413. Nenhuma tarefa ou ferramenta executada; sem novas inferências reais. Provas em `.hydraq/claudex-2026-10-25/restart-90/verification.json` e `transport.json`. Sem commit ou push.
+
+### 92 — 2026-10-25 — Codex
+
+- Reinício pedido pelo utilizador após erro de autenticação Codex: PID 1536546 → 1547074, scope `hydraq-auth-1792931935662655549.scope`; paragem normal, sem conversas ativas, aprovações ou reservas pendentes. Mesmo executável, pasta e ambiente, exceto `INVOCATION_ID`.
+- Verificado: 60 conversas preservadas, apenas duas atualizações de `nativeHistory.checkedAt`; projetos, pareceres, colaboração, Dual e ClaudeX iguais por hash. Cinco clientes ligados e interface servida igual ao disco.
+- Sem novo pedido aos modelos: a recuperação efetiva da autenticação ainda não está confirmada; erros anteriores mantidos no histórico. Prova em `.hydraq/claudex-2026-10-25/restart-auth/verification.json`.
+
+### 93 — 2026-10-25 — Codex
+
+- Implementadas pausa/retoma da mesma tarefa e sessões nativas, com proteções configuráveis de 30 turnos por participante e 60 minutos ativos por retoma; 0 desativa. Removidos os pequenos tetos de contribuições, chamadas, versões e atualizações. A pausa preserva progresso e permite ajustar as proteções. «Terminar tarefa» liberta as conversas; recuperação verifica reservas, projeto, sessões e entregas incertas antes de enviar.
+- Despertares por informação nova ou ação concreta de proposta/revisão, sem continuar só por faltar prontidão. Prontidões/aprovações repetidas não fabricam progresso. Instruções reforçam investigação complementar, fontes, verificação de afirmações e objeções fundamentadas. Sem ferramenta de espera prolongada. Documentos mantêm 100 000 caracteres e transporte 640 000 bytes.
+- Impasse explícito e documento aprovado como «Acordo sobre as divergências»; se a descrição for recusada, preserva posições atribuídas sem selo de acordo. A interface distingue candidatas de documentos aprovados, disponibiliza pausa/retoma, e avisa quando o servidor ainda precisa de reinício. Preferência inicial GPT-6.1 Sol + Opus 5.5 quando disponíveis; restantes modelos opcionais.
+- Corrigidas falhas encontradas nos testes: reserva após configuração inválida, paragem mesmo com erro de gravação, corrida na finalização da pausa e falhas de interrupção visíveis com reserva preservada e opção de repetir. Credenciais MCP por geração não reativam chamadas antigas. Codex retém processos MCP num thread/resume: a retoma renova o processo Codex da HYDRAQ apenas quando livre e sem terminais/decisões/estados incertos, preservando o identificador nativo e o histórico. Configuração global preservada.
+- Validação focada final: **38/38** testes e **38/38** verificações em browser isolado, sem erros JavaScript, quatro aparências e desktop/móvel. Inclui reservas, corrida de pausa/paragem, falha e confirmação tardia da interrupção, reinício, nova credencial, impasses e limite de documento. Suite completa sequencial após integração final: **469/469**, sem falhas, omissões ou cancelamentos; `git diff --check` aprovado.
+- Ensaio real principal: **GPT-6.1 Sol/low + Claude Opus 5.5/low** (catálogo resolveu `claude-opus-5-5`), dados/sessões temporários. Investigaram um contrato de importação, pausaram, retomaram as mesmas sessões, identificaram colisões em dois ficheiros de teste e aprovaram a segunda candidata com o mesmo hash/contexto. 3 turnos de cada lado, 9 mensagens, duas versões. Execução simultânea e leitura de contributos durante execução observadas. Ensaio adicional Sol+Haiku também completou; cenário controlado, não prova superioridade geral de qualidade.
+- Provas em `.hydraq/claudex-2026-10-25/improvements-93/`, incluindo `opus-evidence.json`. Subagentes GPT-6.1 Sol usados na implementação/validação; revisão e correções integradas nesta tarefa. Trabalho anterior preservado. Sem reinício da instalação ativa, commit ou push.

@@ -12,7 +12,7 @@ import { createHttpServer } from '../lib/http.mjs';
 import { APPEARANCES } from '../public/layout.js';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const out = path.resolve(process.argv[2] || path.join(repo, '.hydraq/mono-2026-10-24'));
+const out = path.resolve(process.argv[2] || path.join(repo, '.hydraq/mono-2026-10-25'));
 const root = await mkdtemp(path.join(tmpdir(), 'hydraq-mono-'));
 await mkdir(out, { recursive: true });
 const results = [], errors = [];
@@ -23,6 +23,7 @@ const check = (name, ok, detail) => {
 const clients = Object.fromEntries(['codex', 'claude', 'antigravity', 'cursor', 'opencode'].map(p => {
   const c = new OpinionClient(p, path.join(root, p), { behavior: 'hold' });
   c.defaultCwd = repo;
+  if (p === 'opencode') c.refreshModels = async cwd => ({ cwd, models: c.models, stale: false });
   return [p, c];
 }));
 const hub = new Providers({ dataDir: path.join(root, 'hub'), defaultCwd: repo, clients, git: async () => [] });
@@ -37,7 +38,7 @@ try {
   browser = await chromium.launch({ headless: true, executablePath: '/usr/bin/google-chrome', args: ['--no-sandbox'] });
   const css = await readFile(path.join(repo, 'public/style.css'), 'utf8');
   const old = execFileSync('git', ['show', 'HEAD:public/style.css'], { cwd: repo, encoding: 'utf8' });
-  check('All pre-existing CSS remains byte-identical', css.slice(0, css.indexOf('/* Mono —')).trimEnd() === old.trimEnd());
+  check('CSS of the other appearances remains byte-identical', css.split('/* Mono —')[0] === old.split('/* Mono —')[0]);
   async function open(theme, width, height) {
     const page = await browser.newPage({ viewport: { width, height } });
     page.on('pageerror', error => errors.push(error.message));
@@ -84,6 +85,24 @@ try {
     const page = await open('mono', width, height);
     await fits(page, 'Welcome ' + width);
     await shot(page, 'mono-welcome-' + width);
+    if (width === 1440) {
+      check('Approved logo replaces the old Mono brand', await page.locator('.mono-brand-art').isVisible() && !(await page.locator('.brand-mark').isVisible()));
+      check('Approved symbol also appears on welcome', await page.locator('.welcome-mark > .mono-logo-symbol').isVisible());
+      for (const provider of Object.keys(clients)) {
+        await page.selectOption('#provider', provider);
+        await page.waitForFunction(provider => document.body.dataset.provider === provider, provider);
+        const identity = await page.evaluate(provider => {
+          const probe = document.createElement('span'); probe.style.color = `var(--c-${provider})`; document.body.append(probe);
+          const expected = getComputedStyle(probe).color; probe.remove();
+          return { expected, symbol: getComputedStyle(document.querySelector('.mono-brand-symbol')).fill,
+            name: getComputedStyle(document.querySelector('#provider-label')).color,
+            wordmark: getComputedStyle(document.querySelector('.mono-brand-wordmark')).fill };
+        }, provider);
+        check('Brand and client status follow ' + provider, identity.symbol === identity.expected && identity.name === identity.expected && identity.wordmark === 'rgb(242, 242, 242)', identity);
+        if (provider === 'antigravity') await shot(page, 'mono-welcome-antigravity');
+      }
+      await page.selectOption('#provider', 'codex');
+    }
     await page.click('#theme-toggle');
     check('All four appearances available ' + width, await page.locator('#appearance-menu [role="menuitemradio"]').count() === APPEARANCES.length);
     await page.keyboard.press('Escape');
@@ -135,6 +154,7 @@ try {
       check('Text, all nine client hues and primary action meet 4.5:1', Object.values(contrast).every(v => v >= 4.5), contrast);
       await hub.send(conversation.id, 'Analisa a arquitetura e propõe os próximos passos.', 'mono-reading', { model: 'test', effort: 'high', sandbox: 'read-only' });
       clients.codex.finish(conversation, '### Uma base clara para construir\n\nMantemos **as decisões visíveis**, o contexto e os passos verificáveis.\n\n1. Compreender o problema.\n2. Implementar com cuidado.\n3. Verificar o resultado.\n\n> Tudo começa com uma boa pergunta.\n\n| Etapa | Estado |\n| --- | --- |\n| Análise | Concluída |\n| Implementação | Por iniciar |\n\n```js\nconst project = "HYDRAQ";\nconsole.log(project);\n```');
+      Object.assign(conversation.turns.at(-1).usage, { cachedInputTokens: 70, uncachedInputTokens: 30, cachePercent: 70 });
       // Announce terminal availability without connecting or launching a real client.
       hub.nativeSessions.codex.client = { call: async () => {}, off: () => {} };
       clients.codex.changed();
@@ -145,6 +165,47 @@ try {
       await page.locator('#text-size').evaluate(el => { el.value = '22'; el.dispatchEvent(new Event('input', { bubbles: true })); });
       check('22px reading preference preserved', await page.locator('.message.assistant .message-content').evaluate(el => getComputedStyle(el).fontSize === '22px'));
       await shot(page, 'mono-conversation-22px');
+      await page.locator('#text-size').evaluate(el => { el.value = '15'; el.dispatchEvent(new Event('input', { bubbles: true })); });
+      for (const provider of Object.keys(clients).filter(provider => provider !== 'codex')) {
+        const peer = await clients[provider].create({ cwd: repo, group: conversation.id, model: 'test', effort: 'high', sandbox: 'read-only' });
+        await clients[provider].send(peer.id, 'Como continuarias este projeto?', 'mono-identity-' + provider);
+        const name = { claude: 'Claude Code', antigravity: 'Antigravity', cursor: 'Cursor', opencode: 'OpenCode' }[provider];
+        clients[provider].finish(peer, `### Uma contribuição do ${name}\n\nCada resposta mantém a identidade de quem a escreveu, com o contexto disponível para o próximo passo.`);
+        Object.assign(peer.turns.at(-1).usage, { cachedInputTokens: 70, uncachedInputTokens: 30, cachePercent: 70 });
+        clients[provider].changed();
+        await page.locator(`.message.assistant[data-provider="${provider}"]`).waitFor();
+      }
+      const authors = await page.locator('.message.assistant').evaluateAll(messages => messages.map(message => {
+        const avatar = message.querySelector('.avatar'), mark = avatar.querySelector('.mono-message-symbol');
+        const probe = document.createElement('span'); probe.style.color = `var(--c-${message.dataset.provider})`; message.append(probe);
+        const expected = getComputedStyle(probe).color; probe.remove();
+        return { provider: message.dataset.provider, expected, avatar: getComputedStyle(avatar).color,
+          markVisible: getComputedStyle(mark).display !== 'none', rail: getComputedStyle(message).borderInlineStartWidth };
+      }));
+      check('All five authors retain their own colour and approved symbol', authors.length === 5 && authors.every(author => author.avatar === author.expected && author.markVisible && author.rail === '2px'), authors);
+      await shot(page, 'mono-multiple-clients');
+      await page.locator('.client-color-row[data-client="antigravity"] [data-hue="azul"]').click();
+      check('Custom client colour updates an earlier answer independently of the active client', await page.locator('.message.assistant[data-provider="antigravity"] .avatar').evaluate(avatar => {
+        const probe = document.createElement('span'); probe.style.color = 'var(--hue-azul)'; document.body.append(probe);
+        const expected = getComputedStyle(probe).color; probe.remove();
+        return getComputedStyle(avatar).color === expected && getComputedStyle(document.querySelector('.mono-brand-symbol')).fill !== expected;
+      }));
+      await page.locator('.client-color-row[data-client="antigravity"] [data-hue="ciano"]').click();
+      const { dual } = await hub.startDual(conversation.id, { provider: 'antigravity', model: 'test', effort: 'high' });
+      await hub.sendDual(dual.id, { text: 'Como preservar a identidade de cada resposta?', requestId: 'mono-dual-identity' });
+      for (const member of Object.values(dual.members)) {
+        const c = clients[member.provider].conversation(member.conversationId);
+        clients[member.provider].finish(c, 'Cada resposta conserva o seu cliente, a sua cor e uma leitura clara.');
+        Object.assign(c.turns.at(-1).usage, { cachedInputTokens: 70, uncachedInputTokens: 30, cachePercent: 70 });
+        clients[member.provider].changed();
+      }
+      await page.locator('.dual-stage .review-panel').first().waitFor();
+      check('Dual retains two independent panels', await page.locator('.dual-stage .review-panel').count() === 2);
+      check('Dual panels fit without horizontal overflow', await page.locator('.dual-stage .review-panel').evaluateAll(panels => panels.every(panel => {
+        const r = panel.getBoundingClientRect(); return r.left >= 0 && r.right <= innerWidth && panel.scrollWidth <= panel.clientWidth + 1;
+      })));
+      await shot(page, 'mono-dual-identities');
+      await hub.endDual(dual.id);
     }
     await page.close();
   }

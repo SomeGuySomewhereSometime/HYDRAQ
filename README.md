@@ -90,6 +90,16 @@ O botão **Dual**, junto a **Revisor**, junta um segundo modelo de outro cliente
 
 Limites atuais: dois clientes diferentes (dois modelos do mesmo cliente ficam para depois), sem mensagens durante uma ronda a dois e sem importação de contexto do projeto nas perguntas Dual. Cada pergunta aos dois consome quota nos dois clientes.
 
+## ClaudeX · Codex e Claude em diálogo
+
+A aba **ClaudeX** cria uma tarefa de análise, pesquisa ou planeamento com Codex e Claude a trabalhar em paralelo. Cada um regista primeiro uma posição independente; depois investigam, confrontam argumentos, respondem a objeções e melhoram o documento em conjunto. As mensagens são lidas quando o cliente tem oportunidade, e um participante que já terminou pode continuar enquanto o outro trabalha.
+
+Escolhe os modelos, o projeto opcional, o autor do documento e as proteções: **30 turnos por participante e 60 minutos ativos** por defeito; **0 desativa** a proteção respetiva. **Pausar os dois** e as proteções conservam a tarefa, o diálogo e as sessões nativas. Em pausa, podes ajustar as proteções; **Retomar a mesma tarefa** continua esse histórico, com um requisito novo opcional.
+
+Por defeito, **Exigir aprovação dos dois** publica uma só resposta depois de ambos aprovarem exatamente a mesma versão. Quando concordam sobre a descrição das diferenças mas mantêm posições distintas, o resultado é identificado como **Acordo sobre as divergências**. Sem aprovação comum, as posições ficam atribuídas e sem selo de consenso. A alternativa **Síntese do autor** dispensa acordo obrigatório. Novos requisitos e contributos invalidam aprovações anteriores.
+
+Este modo usa as sessões/subscrições dos dois clientes, com Codex em só leitura e Claude em Planear, e consome quota nos dois. Não garante acordo nem melhoria de qualidade em todas as tarefas. Depois de uma tarefa concluída, **Nova tarefa a partir deste progresso** abre outras sessões e identifica a origem do contexto. [Funcionamento, proteções, recuperação e validação](docs/claudex.md).
+
 ## Colaboração · principal e executor
 
 1. Abre **Colaboração**, escolhe um projeto existente ou uma pasta e configura a equipa. O principal começa em GPT-6.1 Sol quando disponível; podes escolher outro modelo Codex. O executor desta versão é Grok 4.7, com raciocínio/contexto/Fast configuráveis e Fast desligado por defeito. Em **Revisão independente**, escolhe **Sem revisor** ou **Claude · só leitura**; modelo e raciocínio Claude são configuráveis (Opus/Médio quando disponíveis). Conversas anteriores continuam sem revisor até o escolheres. As escolhas aplicam-se ao próximo pedido.
