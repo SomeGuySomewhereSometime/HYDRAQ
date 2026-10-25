@@ -12,18 +12,18 @@ import {OpinionClient} from './fixtures/opinion-client.mjs';
 import {createHttpServer} from '../lib/http.mjs';
 const wait=async f=>{const end=Date.now()+6000;while(!f()){if(Date.now()>end)throw Error('Timeout');await new Promise(r=>setTimeout(r,15));}};
 async function setup(t){
- const root=await mkdtemp('/tmp/hydraq-cx-test-');const clients=Object.fromEntries(['codex','claude'].map(role=>{const c=new OpinionClient(role,root+'/'+role,{behavior:'hold'});c.notices=[];c.steer=async(...args)=>{c.notices.push(args);return {accepted:true};};return [role,c];}));
+ const root=await mkdtemp('/tmp/hydraq-cx-test-');const clients=Object.fromEntries(['codex','claude','antigravity'].map(role=>{const c=new OpinionClient(role,root+'/'+role,{behavior:'hold'});c.capabilities={steer:role!=='antigravity'};c.notices=[];c.steer=async(...args)=>{c.notices.push(args);return {accepted:true};};return [role,c];}));
  const hub=new Providers({dataDir:root+'/hub',defaultCwd:root,clients,git:async()=>[]});await hub.load();
  const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  t.after(async()=>{server.closeStreams();await new Promise(r=>server.close(r));await hub.close();await rm(root,{recursive:true,force:true});});
  const cx=hub.claudex,body={text:'Compara soluções e planeia.',requestId:randomUUID(),cwd:root,members:{codex:{model:'test',effort:'low'},claude:{model:'test',effort:'high'}}};
- const start=async(extra={})=>{const result=await cx.create({...body,...extra});const r=cx.record(result.task.id);await wait(()=>r.members.codex.turns&&r.members.claude.turns&&cx.native(r,'codex').status==='running'&&cx.native(r,'claude').status==='running');return r;};
+ const start=async(extra={})=>{const result=await cx.create({...body,...extra});const r=cx.record(result.task.id);await wait(()=>(r.roles||['codex','claude']).every(role=>r.members[role].turns&&cx.native(r,role).status==='running'));return r;};
  const token=(r,role)=>[...cx.leases].find(([,l])=>l.taskId===r.id&&l.role===role)?.[0];
  const call=(r,role,name,args={})=>cx.tool(token(r,role),name,args);
  return {root,hub,clients,cx,body,start,call,token,url:'http://127.0.0.1:'+server.address().port};
 }
 const drained=async(ctx,r)=>{try{await wait(()=>!r.pause?.draining&&!ctx.cx.pauseDrains.has(r.id)&&!ctx.cx.jobs.has(r.id));}catch(e){e.message+=JSON.stringify({pause:r.pause,error:ctx.cx.error,jobs:[...ctx.cx.jobs],drains:[...ctx.cx.pauseDrains.keys()],dispatches:r.dispatches,status:r.status});throw e;}};
-async function prepared(ctx,r){for(const role of ['codex','claude'])await ctx.call(r,role,'initial_position',{text:'Posição '+role});for(const role of ['codex','claude']){const v=await ctx.call(r,role,'read_dialogue');await ctx.call(r,role,'ready_to_conclude',v);}const v=await ctx.call(r,'codex','read_dialogue');return (await ctx.call(r,'codex','propose_final',{...v,text:'Plano exato comum.\n\n1. Verificar pressupostos.'})).candidate;}
+async function prepared(ctx,r){for(const role of r.roles||['codex','claude'])await ctx.call(r,role,'initial_position',{text:'Posição '+role});for(const role of r.roles||['codex','claude']){const v=await ctx.call(r,role,'read_dialogue');await ctx.call(r,role,'ready_to_conclude',v);}const v=await ctx.call(r,r.author,'read_dialogue');return (await ctx.call(r,r.author,'propose_final',{...v,text:'Plano exato comum.\n\n1. Verificar pressupostos.'})).candidate;}
 async function approve(ctx,r,role,c){const v=await ctx.call(r,role,'read_dialogue');return ctx.call(r,role,'review_final',{candidateId:c.id,hash:c.hash,revision:v.revision,reviewedThrough:v.reviewedThrough,decision:'approve'});}
 test('ClaudeX sem projeto inicia dois clientes normais em paralelo; caixa MCP independente, avisos durante o trabalho',async t=>{
  const ctx=await setup(t),{cx,start,clients,call,hub}=ctx,r=await start();
@@ -380,4 +380,51 @@ test('atividade usa apenas ferramentas pendentes do turno atual e leitura guarda
   c.items[0].status='completed';assert.equal(ctx.cx.detail(r.id).participants[role].activity.length,1);
   c.status='completed';assert.deepEqual(ctx.cx.detail(r.id).participants[role].activity,[]);
  }
+});
+
+for(const pair of [['codex','claude'],['codex','antigravity'],['antigravity','claude']]){
+ test('par '+pair.join(' + ')+' coordena caixa, pausa, retoma e aprova sem falso acordo',async t=>{
+  const ctx=await setup(t),members=Object.fromEntries(pair.map(role=>[role,{model:'test',effort:'low'}]));
+  const r=await ctx.start({roles:pair,members,author:pair[1]});
+  assert.deepEqual(ctx.cx.snapshot().records[0].roles,pair);assert.equal(ctx.cx.snapshot().protocolVersion,3);
+  assert.deepEqual(Object.keys(ctx.cx.detail(r.id).participants),pair);
+  assert.deepEqual(ctx.cx.scopes()[0].resources,pair.map(k=>'normal:'+k));
+  for(const role of pair){assert.ok(ctx.clients[role].logs[0].settings.contextMcp.names.includes('read_dialogue'));assert.match(ctx.cx.prompt(r,role),new RegExp('o colega é '+pair.find(k=>k!==role)));}
+  const c=await prepared(ctx,r);await approve(ctx,r,pair[0],c);assert.equal(r.result,undefined);
+  await ctx.cx.pause(r.id);await drained(ctx,r);assert.equal(r.approvals[pair[0]].candidateId,c.id);
+  let refreshed=0;ctx.clients.codex.refreshClaudeXTransport=async()=>refreshed++;
+  await ctx.cx.resume(r.id);assert.equal(refreshed,pair.includes('codex')?1:0);
+  await wait(()=>pair.every(role=>ctx.cx.native(r,role).status==='running'));
+  await approve(ctx,r,pair[1],c);
+  for(const role of pair)ctx.clients[role].finish(ctx.cx.native(r,role),'Terminei.');
+  await wait(()=>r.status==='completed');assert.equal(r.result.agreed,true);assert.deepEqual(Object.keys(r.result.approvals).sort(),[...pair].sort());
+  if(pair.includes('antigravity'))assert.equal(ctx.clients.antigravity.notices.length,0);
+ });
+ test('par '+pair.join(' + ')+' publica síntese atribuída sem selo de acordo',async t=>{
+  const ctx=await setup(t),r=await ctx.start({roles:pair,members:Object.fromEntries(pair.map(role=>[role,{model:'test',effort:'low'}])),author:pair[1],consensus:false});
+  const c=await prepared(ctx,r);for(const role of pair)ctx.clients[role].finish(ctx.cx.native(r,role),'Fim');
+  await wait(()=>r.status==='completed');assert.equal(r.result.agreed,false);assert.equal(r.result.text,c.text);assert.deepEqual(r.approvals,{});
+ });
+}
+test('validação de pares recusa repetidos, desconhecidos, autores externos e membros extra',async t=>{
+ const ctx=await setup(t);
+ for(const extra of [{roles:['codex','codex']},{roles:['codex','cursor']},{roles:['claude']},{author:'antigravity'},{members:{...ctx.body.members,antigravity:{model:'test',effort:'low'}}}])await assert.rejects(ctx.cx.create({...ctx.body,...extra}),/distintos|autor|Participantes/);
+ assert.equal(ctx.cx.records.length,0);
+});
+test('tarefas antigas sem roles continuam o par Codex e Claude após carregar',async t=>{
+ const ctx=await setup(t),r=await ctx.start();await ctx.cx.pause(r.id);await drained(ctx,r);delete r.roles;await ctx.cx.persist();
+ clearInterval(ctx.cx.timer);clearTimeout(ctx.cx.scheduled);ctx.cx.loaded=false;await rm(ctx.cx.directory+'/owner.json');ctx.cx.ownsLock=false;
+ const second=new ClaudeX({hub:ctx.hub,directory:ctx.cx.directory,prepare:ctx.cx.prepare});await second.load();assert.equal(second.error,undefined);assert.deepEqual(second.snapshot().records[0].roles,['codex','claude']);await second.close();ctx.cx.raw=await readFile(ctx.cx.directory+'/state.json','utf8');
+});
+
+for(const pair of [['antigravity','claude'],['claude','codex']])test('projeto associado ao grupo comum com primeiro membro '+pair[0]+' e colega '+pair[1],async t=>{
+ const ctx=await setup(t),project=await ctx.hub.createProject({name:'Memória ClaudeX',root:ctx.root,revision:ctx.hub.projects.data.revision});
+ const r=await ctx.start({roles:pair,members:Object.fromEntries(pair.map(role=>[role,{model:'test',effort:'low'}])),projectId:project.id,projectRevision:ctx.hub.projects.data.revision});
+ assert.equal(ctx.hub.projects.group(r.groupId).projectId,project.id);
+ for(const role of pair){
+  const c=ctx.cx.native(r,role);assert.equal(c.group,r.groupId);assert.equal(ctx.hub.projects.group(c.group).projectId,project.id);
+  assert.ok(ctx.hub.contextMcp.sessions.has(c.id));assert.ok(ctx.clients[role].logs[0].settings.contextMcp.names.includes('get_project_memory'));
+  assert.ok(await ctx.call(r,role,'get_project_memory'));
+ }
+ await ctx.cx.pause(r.id);await drained(ctx,r);await ctx.cx.resume(r.id);assert.equal(r.status,'discussing');
 });

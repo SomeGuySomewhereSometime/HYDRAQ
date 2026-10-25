@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile, appendFile, mkdir, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, appendFile, mkdir, readFile, symlink } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,7 @@ const step = { user: (text, at) => [14, [...header(at), ...bytes(19, [...bytes(2
   tool: (name, args, at) => [15, [...header(at), ...bytes(20, [...bytes(6, 'bot-2'), ...bytes(7, [...bytes(1, 'call_1'), ...bytes(2, name), ...bytes(3, JSON.stringify(args))])])]],
   other: (type, at) => [type, header(at)],
   done: at => [132, [...header(at), ...bytes(140, bytes(2, bytes(1, 'Created file.')))]],
+  error: (error, at) => [17, [...header(at), ...bytes(24, bytes(3, [...bytes(1, error), ...bytes(2, 'RESOURCE_EXHAUSTED')]))]],
   refused: (error, at) => [132, [...header(at), ...bytes(31, [...bytes(2, error), ...bytes(3, error)])], 7] };
 function agyStore(file, steps) {
   const db = new DatabaseSync(file);
@@ -216,6 +217,57 @@ test('passos do agy: pedido, resposta e ferramentas; formato inesperado falha em
   assert.throws(() => decodeStep({ idx: 0, step_type: 14, step_payload: new Uint8Array([0x0f, 0xff]) }));
   assert.throws(() => decodeStep({ idx: 0, step_type: 14, step_payload: new Uint8Array(bytes(19, bytes(2, [0xff, 0xfe]))) }));
   assert.throws(() => decodeStep({ idx: 0, step_type: 15, step_payload: new Uint8Array(header(at)) }));
+});
+
+test('passos: checkpoints preservam conclusão; erro 17 não é sucesso de ferramenta; desconhecidos ficam no seu pedido', () => {
+  const at = Date.now(), decode = steps => steps.map(([type, payload, status = 3], idx) => decodeStep({ idx, step_type: type, status, step_payload: new Uint8Array(payload) }));
+  const context = stepTurns(decode([step.other(98, at), step.user('a', at), step.answer('Feito.', at), step.other(23, at)]));
+  assert.equal(context.length, 1);assert.equal(context[0].complete, true);
+  const failed = stepTurns(decode([step.user('a', at), step.tool('write_file', { Path: 'a.txt' }, at), step.error('Individual quota reached.', at)]))[0];
+  assert.equal(failed.complete, false);assert.equal(failed.tools[0].result, null);assert.match(failed.errors[0].error, /quota reached/);
+  const retried = stepTurns(decode([step.user('a', at), step.tool('write_file', { Path: 'a.txt' }, at), step.error('Individual quota reached.', at), step.done(at), step.answer('Feito.', at)]))[0];
+  assert.equal(retried.complete, true);assert.equal(retried.tools[0].result.ok, true);assert.equal(retried.errors.length, 1);
+  const unknown = stepTurns(decode([step.user('a', at), step.tool('write_file', { Path: 'a.txt' }, at), step.other(999, at), step.done(at), step.answer('Talvez.', at),
+    step.user('b', at), step.answer('Outra resposta.', at), step.other(23, at)]));
+  assert.equal(unknown[0].complete, false);assert.equal(unknown[0].tools[0].result, null);assert.equal(unknown[0].unknown[0].type, 999);assert.equal(unknown[1].complete, true);
+  assert.equal(stepTurns(decode([step.user('a', at), step.answer('Pronto.', at), step.other(999, at)]))[0].complete, false);
+  assert.throws(() => decodeStep({ idx: 0, step_type: 999, step_payload: new Uint8Array([0x0f, 0xff]) }));
+});
+
+test('regresso importa erros, recuperação e desconhecidos sem contaminar outros pedidos ou afirmar escritas', async t => {
+  const { directory, home, terminal, chat, agy } = await setup(t), c = await chat(), file = path.join(home, 'conversations', c.threadId + '.db'), now = Date.now();
+  await rm(file);agyStore(file, [step.user('Memoriza GIRASSOL', now - 60000), step.answer('OK.', now - 59000)]);
+  await terminal.open(c.id, { launch: false });
+  agyStore(file, [step.other(98, now), step.user('Quota', now + 1000), step.tool('write_file', { Path: path.join(directory, 'quota.txt') }, now + 1100), step.error('Individual quota reached. Retry after 1 hour.', now + 1200),
+    step.user('Recupera', now + 2000), step.error('Individual quota reached.', now + 2100), step.answer('Recuperei.', now + 2200), step.other(23, now + 2300),
+    step.user('Desconhecido', now + 3000), step.tool('write_file', { Path: path.join(directory, 'unknown.txt') }, now + 3100), step.other(999, now + 3200), step.done(now + 3300), step.answer('Texto preservado.', now + 3400),
+    step.user('Normal', now + 4000), step.answer('Pronto.', now + 4100), step.other(23, now + 4200)]);
+  const result = await terminal.release(c.id), turns = c.turns.filter(t => t.source === 'terminal');
+  assert.deepEqual([result.imported, result.answered, result.unconfirmed], [4, 2, 2]);
+  const [failed, recovered, unknown, normal] = turns;
+  assert.equal(failed.status, 'interrupted');assert.match(failed.facts.error, /Individual quota reached/);assert.deepEqual(failed.facts.files, []);assert.match(failed.facts.attempted[0].result, /sem resultado/);
+  assert.equal(failed.completedAt, new Date(now + 1200).toISOString());assert.equal(failed.diagnostics[0].code, 'quota');assert.match(failed.diagnostics[0].detail, /1 hour/);
+  assert.equal(recovered.status, 'completed');assert.equal(recovered.facts.error, null);assert.equal(recovered.facts.nativeErrors[0].recovered, true);assert.equal(recovered.diagnostics[0].recovered, true);assert.match(recovered.diagnostics[0].message, /Ocorrência anterior/);
+  assert.equal(unknown.status, 'interrupted');assert.deepEqual(unknown.facts.files, []);assert.equal(unknown.facts.unknownSteps[0].type, 999);assert.equal(unknown.diagnostics[0].code, 'unknown-step');
+  assert.equal(c.messages.find(m => m.turnId === unknown.id && m.role === 'assistant').text, 'Texto preservado.');
+  assert.equal(normal.finalAnswer, 'Pronto.');assert.deepEqual(normal.diagnostics, []);
+  const snapshot = agy.snapshot().conversations.find(chat => chat.id === c.id);assert.equal(snapshot.turns.find(t => t.id === failed.id).diagnostics[0].code, 'quota');
+  const target = { id: 'codex-1', provider: 'codex', cwd: directory, messages: [], turns: [] };
+  const handoff = buildHandoff({ target, members: [target, { ...c, provider: 'antigravity' }], git: [] }).text;
+  assert.match(handoff, /Individual quota reached/);assert.doesNotMatch(handoff, /Ficheiros alterados \(observados\): (quota|unknown)\.txt/);
+});
+
+test('processos: base aberta reforça bloqueio; outra base ou ausência de descritores mantêm dúvida', async t => {
+  const { directory, terminal, chat } = await setup(t), c = await chat();
+  terminal.processRoot = path.join(directory, 'proc');
+  const pid = process.pid + 100000, proc = path.join(terminal.processRoot, String(pid)), fd = path.join(proc, 'fd');
+  await mkdir(fd, { recursive: true });await writeFile(path.join(proc, 'cmdline'), '/usr/bin/agy\0');await symlink(c.cwd, path.join(proc, 'cwd'));
+  const holders = () => Object.getPrototypeOf(terminal).holders.call(terminal, c);
+  await symlink(terminal.storeFile('other') + '-wal', path.join(fd, '3'));
+  assert.deepEqual(await holders(), { found: [], unsure: [pid] });
+  await symlink(terminal.storeFile(c.threadId) + '-shm', path.join(fd, '4'));
+  assert.deepEqual(await holders(), { found: [pid], unsure: [] });
+  await rm(fd, { recursive: true });assert.deepEqual(await holders(), { found: [], unsure: [pid] });
 });
 
 test('pedido interrompido no terminal não passa a concluído; escrita recusada não passa a ficheiro alterado', async t => {

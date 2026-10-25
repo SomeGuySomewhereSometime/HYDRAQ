@@ -1,11 +1,11 @@
-# ClaudeX
+# ClaudeX, Geminex e Claudini
 
-Modo próprio para Codex + Claude, destinado a análise, pesquisa e planeamento. O Dual conserva o seu funcionamento independente.
+Modo de análise, pesquisa e planeamento com dois participantes distintos entre Codex, Claude e Antigravity. A dupla recebe o nome ClaudeX (Codex + Claude), Geminex (Codex + Gemini via Antigravity) ou Claudini (Claude + Gemini via Antigravity). O Dual conserva o seu funcionamento independente.
 
 ## Utilização
 
-1. Liga Codex e Claude nas Conversas e abre a aba **ClaudeX**.
-2. O par inicial preferido é GPT-6.1 Sol + Claude Opus 5.5, quando disponível no catálogo; os restantes modelos são opcionais. Escolhe o raciocínio, o projeto opcional ou pasta para pesquisa, e o autor que prepara o documento comum.
+1. Liga os dois clientes pretendidos nas Conversas e abre a aba **ClaudeX**. Escolhe os participantes A e B; a ordem não determina quem escreve o documento.
+2. O par inicial preferido é GPT-6.1 Sol + Claude Opus 5.5, quando disponível no catálogo. Para Antigravity, a preferência é Gemini 4 Argon; os restantes modelos são opcionais. Escolhe o raciocínio, o projeto opcional ou pasta para pesquisa, e o autor que prepara o documento comum.
 3. Mantém **Exigir aprovação dos dois** para obter uma única resposta aprovada por ambos. **Síntese do autor** produz um documento sem esse requisito e sem o selo de acordo.
 4. Escolhe as proteções: **30 turnos por participante e 60 minutos ativos** por defeito. **0 desativa** a proteção respetiva. São limites de consumo configuráveis que pausam o trabalho e conservam o progresso.
 5. Envia o pedido. Podes acompanhar os participantes e abrir o diálogo. Um novo requisito na caixa chega aos dois e invalida aprovações anteriores.
@@ -18,14 +18,14 @@ As duas conversas são normais, do mesmo grupo, com as suas sessões nativas. O 
 
 Cada participante regista uma posição independente antes de ler o colega. Depois trabalham sobre o mesmo problema: procuram evidência, confrontam pressupostos e argumentos, respondem às objeções do outro e incorporam correções no documento comum. Uma caixa de mensagens própria da tarefa funciona também sem projeto associado. O envio grava a mensagem e regressa imediatamente; nenhum envio fica bloqueado à espera da resposta do outro.
 
-O participante ativo recebe um aviso para consultar a caixa. O momento da leitura depende do cliente e dos pontos em que aceita informação: não existe interrupção garantida a meio de cada token. Quando necessário, um participante que terminou recebe uma continuação enquanto o outro ainda trabalha, respeitando as proteções configuradas. As mensagens do colega têm autoria explícita e nunca são apresentadas como ordens do utilizador.
+Codex e Claude podem receber um aviso durante o turno para consultar a caixa. O Antigravity não aceita esse aviso no protocolo atual: as instruções pedem leitura após etapas relevantes de investigação e antes de concluir, sem polling repetitivo. O momento da leitura depende do cliente e dos pontos em que aceita informação: não existe interrupção garantida a meio de cada token. Quando necessário, um participante que terminou recebe uma continuação enquanto o outro ainda trabalha, respeitando as proteções configuradas. As mensagens do colega têm autoria explícita e nunca são apresentadas como ordens do utilizador.
 
 Para concluir, ambos declaram prontidão após lerem as mensagens atuais. O autor propõe uma versão. Cada aprovação fica associada ao identificador e hash do documento, à revisão do pedido e à última mensagem considerada. Toda a nova contribuição com conteúdo invalida as aprovações; não existe uma categoria livre de «nota menor» que permita contornar esta regra. O acordo só é publicado depois de ambos terminarem, sem perguntas pendentes. A resposta publicada fica disponível para passagens de contexto como documento comum ClaudeX.
 
 O resultado distingue os casos seguintes:
 
 - **Resposta comum**: ambos aprovam o documento e as suas conclusões.
-- **Acordo sobre as divergências**: ambos aprovam a mesma descrição dos pontos comuns e das diferenças; as posições distintas continuam atribuídas a Codex e Claude. Aprovar essa descrição não significa que tenham passado a defender a mesma posição.
+- **Acordo sobre as divergências**: ambos aprovam a mesma descrição dos pontos comuns e das diferenças; as posições distintas continuam atribuídas aos participantes escolhidos. Aprovar essa descrição não significa que tenham passado a defender a mesma posição.
 - **Sem acordo**: o documento identifica as posições de cada participante e o que ficou por resolver, sem apresentar um consenso inexistente.
 - **Síntese do autor**: opção explícita sem aprovação obrigatória dos dois, identificada como tal.
 
@@ -55,3 +55,13 @@ O ensaio real investiga um contrato de importação e cria uma primeira candidat
 A validação funcional não demonstra que o diálogo supera um modelo sozinho ou duas respostas independentes seguidas de síntese. Essa comparação de qualidade com o mesmo orçamento continua por realizar.
 
 Os cartões dos participantes mostram a última mensagem do diálogo efetivamente lida e a hora dessa leitura. Registos antigos sem hora são identificados como tal. As ferramentas em execução vêm apenas do turno nativo atual; não se infere investigação a partir de um turno aberto. As instruções incentivam a partilha antecipada de descobertas verificadas e úteis, sem mensagens artificiais. Uma leitura anterior à posição independente devolve apenas os pedidos do utilizador e o próximo passo, sem revelar contribuições do colega nem registar uma leitura do diálogo.
+
+## Antigravity nas duplas
+
+Em Linux, o Antigravity usa `bwrap`, uma HOME própria por conversa, estado nativo persistente e uma configuração MCP só com o servidor da tarefa. Não se regista nenhum servidor na configuração global. A pasta de investigação é montada em leitura; a HOME privada e o `/tmp` privado conservam o estado necessário. A autenticação utiliza a identidade e o serviço de credenciais existentes; pode precisar de uma sessão de desktop com esse serviço disponível. Não se promete isolamento de rede: o fornecedor e a caixa de mensagens local continuam acessíveis.
+
+A mudança de credencial na retoma renova o processo agy, mantendo o identificador da conversa e a HOME privada. Chamadas antigas continuam rejeitadas pelo coordenador. Conversas Antigravity criadas pela dupla permanecem em análise; para implementar, inicia uma conversa normal. A passagem deste ambiente privado ao terminal original ainda não está disponível. Conversas Antigravity normais mantêm o funcionamento anterior.
+
+As tarefas antigas sem lista de participantes são interpretadas como Codex + Claude. O trio e duas instâncias do mesmo cliente não estão disponíveis.
+
+Ensaio real dos novos pares: `node validation/claudex-pairs-live.mjs --run` usa Argon + Sol; `CX_PARTNER=claude node validation/claudex-pairs-live.mjs --run` usa Argon + Opus. São sessões temporárias que gastam quota. O teste de montagem sem modelos é `HYDRAQ_TEST_BWRAP=1 node --test test/antigravity-claudex.test.mjs`.

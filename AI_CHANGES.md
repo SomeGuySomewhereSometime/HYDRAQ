@@ -1,8 +1,14 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 96
+Versão atual: 100
 
 ## Resumo atual
+
+- Duplas configuráveis (entrada 99): ClaudeX (Codex + Claude), Geminex (Codex + Gemini via Antigravity) e Claudini (Claude + Gemini). Autor independente, tarefas antigas preservadas e MCP nativo privado do agy com bwrap. Ensaios reais Argon + Sol e Argon + Opus concluídos com pausa/retoma e segunda versão aprovada; 486 testes passaram, um teste kernel opcional passou separadamente, 56 verificações visuais. Ativado na 4318 por reinício autorizado (entrada 100).
+
+- Nota de análise para o Claude sobre Gemini no ClaudeX em `docs/claudex-gemini-analysis.md` (entrada 98): ponte CLI proposta, limitações de avisos durante turnos, isolamento e prova real necessários; sem implementação.
+
+- Regresso do terminal Antigravity corrigido (entrada 97): erros do fornecedor separados das ferramentas, checkpoints preservam respostas concluídas e tipos desconhecidos deixam apenas o pedido afetado por confirmar. Diagnósticos e textos de permissões corrigidos; descritores abertos só reforçam bloqueios. 473/473 testes, 12 verificações visuais e leitura das 500 bases locais aprovados. Ativado na 4318 pelo reinício da entrada 100.
 
 - ClaudeX: última leitura com hora e ferramentas em execução por participante; instruções para partilhar descobertas úteis mais cedo e orientação sem erro antes da posição independente (entrada 95). 39/39 testes, 43/43 verificações visuais e ensaio real Sol + Opus aprovado. Commit 7e031c1, ativado na 4318 por reinício pedido pelo utilizador (entrada 96).
 
@@ -1083,3 +1089,33 @@ Versão atual: 96
 - Revisão da entrada 95 a pedido do utilizador: as ferramentas em execução vêm dos itens pendentes do turno atual nos dois clientes (o `turnId` dos itens coincide com o da conversa no Codex e no Claude); a leitura antes da posição não regista leitura nem permite prontidão. Suite completa sequencial: **470/470**. Commit 7e031c1.
 - Reinício pedido pelo utilizador: PID 1611756 → 1642790, scope `hydraq-cx95-1792963269476701780.scope`. Paragem normal, sem conversas ativas, aprovações, reservas, terminais nem tarefas ClaudeX em curso ou a pausar; mesmo executável, pasta e ambiente, exceto `INVOCATION_ID`.
 - Verificado: 67 conversas preservadas; pareceres, colaboração, projetos e Dual iguais por hash; as 7 tarefas ClaudeX iguais em identificador, estado, membros e resultado. Única diferença: um `agy` inativo fechou com código 0 e acrescentou `processClosed`/`processExit` ao último turno da sua conversa. Cinco clientes ligados e interface servida igual ao disco. Prova em `.hydraq/claudex-2026-10-25/restart-95/verification.json`. Sem push.
+
+### 97 — 2026-10-25 — Codex
+
+- Leitor do agy: `17` é erro do fornecedor (mensagens reconhecidas em `24 → 3 → 1/2`), nunca resultado de ferramenta apesar do estado nativo 3. `23`/`98` passam a contexto. Resultados reconhecidos explicitamente; tipos novos viram `unknown`, conservam texto e impedem conclusão/atribuição de resultados posteriores apenas no pedido afetado. Protobuf corrompido continua a causar regresso parcial.
+- Importação normal e recuperação de pedidos parciais preservam erros, desconhecidos, hora do último passo e diagnósticos classificados pelo módulo existente. Erro seguido de conclusão válida fica identificado como ocorrência anterior; erro final mantém pedido por confirmar, sem afirmar escritas ou execução de ferramentas sem resultado. Mensagens reconhecidas são filtradas/abreviadas, sem importar cabeçalhos HTTP.
+- Processos: uma base da conversa aberta (`.db`, `-wal`, `-shm`) reforça o bloqueio. Ausência de descritores, outra base ou leitura indisponível não dispensam confirmações existentes. Interface usa «Recusada pelo agy», preservando detalhe nativo, e descreve permissões segundo a política configurada. Documentação distingue o adaptador da alteração local `always-proceed` autorizada na entrada 60.
+- Validação: **37/37** testes focados e **473/473** na suite completa sequencial; **12/12** verificações de interface em browser isolado com clientes simulados, quatro aparências, sem erros JavaScript. Sintaxe e `git diff --check` aprovados. Casos sintéticos cobrem erro entre chamada/resultado, recuperação, passo desconhecido antes/depois de resposta, preservação dos outros pedidos e descritores positivos/ausentes.
+- Comparação só em leitura nas **500 bases reais**: 3927 passos descodificados sem erro, 732 eventos de fornecedor e nenhum tipo desconhecido. **132** pedidos antes incompletos passam a concluídos por reconhecer checkpoints. Há pedidos com erro terminal e pedidos com recuperação posterior; falsa execução causada por `17` foi reproduzida em sequência simulada, sem afirmar ocorrência histórica. Evidências em `.hydraq/antigravity-recovery-2026-10-25/`.
+- Sem novas inferências dos modelos, alterações à configuração global, reinício, commit ou push. Backend precisa de reinício para ativar. Históricos já importados não foram reescritos; importação de sessões, diff e MCP ficam fora desta alteração.
+
+### 98 — 2026-10-25 — Codex
+
+- A pedido do utilizador, guardada a análise da proposta do Argon em `docs/claudex-gemini-analysis.md` para posterior revisão pelo Claude: participantes configuráveis, ponte CLI por tarefa, limitações do agy sem steer e validação de permissões/credenciais/retoma.
+- Inclui referências ao código inspecionado e prova pequena recomendada antes de generalizar. Apenas documentação, sem novas chamadas aos modelos, implementação, alteração de configuração, reinício, commit ou push. Alterações da entrada 97 preservadas.
+
+### 99 — 2026-10-25 — Codex
+
+- Implementada escolha de dois clientes distintos entre Codex, Claude e Antigravity, com nomes aprovados ClaudeX, Geminex e Claudini. Autor independente, Argon preferido no catálogo agy, conectividade só dos selecionados e clonagem com o mesmo par. Participantes, reservas, contextos, prontidão/aprovação e pausa/retoma são dinâmicos; tarefas sem `roles` mantêm Codex + Claude. Trio fora desta alteração.
+- Antigravity usa MCP nativo da tarefa numa HOME privada persistente por conversa, com configuração exclusiva e lançamento via bwrap. Projeto em leitura e `/tmp` privado; configuração global e conversas agy normais preservadas. Reutiliza o serviço de autenticação existente. O processo renova na mudança de credencial, conservando a sessão; sem avisos steer no agy, leitura por iniciativa própria após investigação e antes de concluir. Sem ponte CLI.
+- Corrigidos pressupostos descobertos na integração: agy não tem mapa `approvals`; o primeiro participante passa pelo `hub.create` para associar corretamente o projeto em qualquer ordem/par; memória MCP disponível também para agy apenas na dupla e nome anunciado no contexto corresponde ao servidor efetivamente fornecido. Ferramentas MCP agy identificadas pelo servidor/operação reais nos itens de atividade.
+- Sessões agy privadas permanecem em análise mesmo depois de libertadas da tarefa; para implementar deve abrir-se conversa normal. A passagem destas sessões privadas para o terminal original ainda não está disponível e é recusada com explicação. Requer Linux/bwrap e acesso à autenticação nativa. Não se afirma isolamento completo de rede/serviços locais.
+- Verificação final: suite sequencial com **486 aprovados, 0 falhas, 1 teste kernel opcional omitido**; esse ensaio foi executado separadamente com `HYDRAQ_TEST_BWRAP=1`, **4/4** aprovados, incluindo escrita recusada pelo kernel no projeto/lease. Interface isolada: **56/56**, quatro aparências, desktop/móvel, sem erros JavaScript. Sintaxe e `git diff --check` aprovados. Subagentes GPT-6.1 Sol usados na implementação/revisão e testes.
+- Ensaios reais em sessões temporárias: **Geminex Argon/low + Sol/low**, 5 turnos Sol + 4 Argon, 10 mensagens; **Claudini Argon/low + Opus/low**, 5 turnos Opus + 4 Argon, 6 mensagens. Ambos concluídos, duas versões, objeções fundamentadas após novas provas, leitura durante execução, pausa/retoma das mesmas sessões e credenciais antigas revogadas, aprovação do mesmo texto/contexto pelos dois. Cenário controlado, sem medir superioridade de qualidade. Primeiro Geminex encontrou falha de retoma acima corrigida; outro ensaio e suite foram interrompidos e repetidos até conclusão.
+- Evidências em `.hydraq/claudex-2026-10-25/pairs-99/`, detalhes dos cenários em `validation/claudex-pairs-live.mjs` e `docs/claudex.md`. Trabalho anterior da entrada 97 preservado. Sem reinício da instalação ativa, commit ou push; backend precisa de reinício para ativar.
+
+### 100 — 2026-10-25 — Codex
+
+- Reinício e commit pedidos pelo utilizador. Antes da paragem: nenhum turno ativo, aprovação, reserva, terminal ou dupla ativa. PID 1642790 → 1693053, scope `hydraq-pairs99-1792968120193316134.scope`; paragem normal, mesmo executável/pasta/ambiente exceto `INVOCATION_ID`. Disponível em 9,8 s.
+- Confirmadas 69 conversas e os mesmos identificadores; pareceres, colaboração, projetos e Dual iguais. Tarefas ClaudeX preservam identificador, estado, membros e resultado. Protocolo 3 ativo, sem erro e cinco clientes ligados. `index.html`, `app.js`, `claudex.js` e `style.css` servidos iguais ao disco; código sem mudanças durante o reinício. Evidência privada em `.hydraq/claudex-2026-10-25/restart-99/verification.json`.
+- Ativadas as entradas 97–99. Alterações de código, testes e documentação dessas entradas incluídas neste commit; `output/` e dados privados ficam fora. Não foram feitas novas inferências dos modelos nem push.

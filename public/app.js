@@ -190,7 +190,7 @@ function saferSandbox(source, existing, target) {
 const planSupport = { claude: true, cursor: true, antigravity: true, opencode: true, codex: false };
 const permissionOptions = {
   opencode: [['workspace-write','Perguntar antes','OpenCode original: autorizações na conversa; sem aprovação automática nem sandbox do sistema operativo comprovada.']],
-  antigravity: [['workspace-write','Executar','O agy executa com as suas permissões nativas. Em modo headless, ações que exigem confirmação são recusadas pelo CLI.'],['accept-edits','Aceitar edições','O agy aplica edições de ficheiros sem pedir confirmação a cada uma.']],
+  antigravity: [['workspace-write','Executar','O agy usa a política de permissões configurada no cliente original e as restrições da sandbox.'],['accept-edits','Aceitar edições','Pede ao agy o modo accept-edits. O efeito depende também da política de permissões configurada no cliente original.']],
   claude: [['workspace-write','Perguntar antes','O Claude Code pede autorização na conversa antes de editar ficheiros ou executar comandos.'],['accept-edits','Aceitar edições','O Claude Code aplica edições de ficheiros sem perguntar; comandos continuam a pedir autorização.']],
   cursor: [['workspace-write','Executar','O Grok trabalha com as permissões nativas do Cursor; autorizações aparecem na conversa.'],['ask','Só perguntas','Modo Perguntar do Cursor: responde e analisa, sem alterar ficheiros.']],
   codex: [['workspace-write','Leitura e escrita','O Codex pode ler e alterar ficheiros da pasta do projeto. Ações fora da sandbox pedem autorização na conversa.'],['read-only','Só leitura','O Codex só lê ficheiros. Alterações ou comandos com efeitos pedem autorização.']],
@@ -889,7 +889,7 @@ function renderActivity(conversation) {
       details.dataset.status = item.status || 'inProgress';
       details.open = open.has(item.id);
       details.append(element('summary','',`${providerName(item.provider)}${item.parentToolUseId ? ' · Subagente' : ''} · ${itemDescription(item)}`));
-      const statusText = item.permissionDenied ? (item.provider === 'antigravity' ? 'Recusada pela política headless do agy' : 'Recusada') : (statusLabels[item.status] || item.status || 'Em execução');
+      const statusText = item.permissionDenied ? (item.provider === 'antigravity' ? 'Recusada pelo agy' : 'Recusada') : (statusLabels[item.status] || item.status || 'Em execução');
       details.append(element('small','',`${statusText}${item.exitCode !== undefined && item.exitCode !== null ? ` · saída ${item.exitCode}` : ''}`));
       let output = item.aggregatedOutput || item.text || '';
       if (!output && item.changes) output = item.changes.map(change => `${change.path}\n${change.diff || ''}`).join('\n\n');
