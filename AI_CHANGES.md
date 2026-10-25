@@ -1,10 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 93
+Versão atual: 94
 
 ## Resumo atual
 
-- ClaudeX revisto (entrada 93): pausa/retoma da mesma tarefa e sessões, proteções configuráveis 30 turnos/60 minutos (0 desativa), despertares por novidade/ação concreta, impasses com autoria e colaboração com evidência. Par preferido GPT-6.1 Sol + Opus 5.5; ensaio real deste par completou pausa/retoma e segunda versão com objeções fundamentadas e aprovação conjunta. Código integrado, ativação na 4318 depende de reinício.
+- ClaudeX revisto (entrada 93) e ativado na 4318 por reinício pedido pelo utilizador (entrada 94): pausa/retoma da mesma tarefa e sessões, proteções configuráveis 30 turnos/60 minutos (0 desativa), despertares por novidade/ação concreta, impasses com autoria e colaboração com evidência. Par preferido GPT-6.1 Sol + Opus 5.5; ensaio real deste par completou pausa/retoma e segunda versão com objeções fundamentadas e aprovação conjunta. Código integrado e servido pela 4318.
 
 - Reinício pedido para recarregar a autenticação do Codex (entrada 92): HYDRAQ novamente disponível na 4318, 60 conversas preservadas e cinco clientes ligados. Recuperação da autenticação num novo pedido por confirmar.
 
@@ -1061,3 +1061,9 @@ Versão atual: 93
 - Validação focada final: **38/38** testes e **38/38** verificações em browser isolado, sem erros JavaScript, quatro aparências e desktop/móvel. Inclui reservas, corrida de pausa/paragem, falha e confirmação tardia da interrupção, reinício, nova credencial, impasses e limite de documento. Suite completa sequencial após integração final: **469/469**, sem falhas, omissões ou cancelamentos; `git diff --check` aprovado.
 - Ensaio real principal: **GPT-6.1 Sol/low + Claude Opus 5.5/low** (catálogo resolveu `claude-opus-5-5`), dados/sessões temporários. Investigaram um contrato de importação, pausaram, retomaram as mesmas sessões, identificaram colisões em dois ficheiros de teste e aprovaram a segunda candidata com o mesmo hash/contexto. 3 turnos de cada lado, 9 mensagens, duas versões. Execução simultânea e leitura de contributos durante execução observadas. Ensaio adicional Sol+Haiku também completou; cenário controlado, não prova superioridade geral de qualidade.
 - Provas em `.hydraq/claudex-2026-10-25/improvements-93/`, incluindo `opus-evidence.json`. Subagentes GPT-6.1 Sol usados na implementação/validação; revisão e correções integradas nesta tarefa. Trabalho anterior preservado. Sem reinício da instalação ativa, commit ou push.
+
+### 94 — 2026-10-25 — Claude
+
+- Reinício pedido pelo utilizador para ativar a entrada 93: PID 1547074 → 1611756, scope `hydraq-cx93-1792956890929462456.scope`. Paragem normal, sem conversas ativas, aprovações, reservas, terminais nem tarefas ClaudeX em curso; mesmo executável, pasta e ambiente, exceto `INVOCATION_ID`. Servidor de volta em 7,8 s.
+- Verificado: 64 conversas preservadas; pareceres, colaboração, projetos e Dual iguais por hash. As 6 tarefas ClaudeX mantêm identificador, estado, membros e grupo, e `state.json` do ClaudeX não foi reescrito. Diferenças esperadas: o resumo do ClaudeX passa a expor `protocolVersion`, proteções e `result` das tarefas antigas, e o turno local publicado numa tarefa concluída ganhou `facts` vazio ao carregar. Cinco clientes ligados e interface servida igual ao disco, incluindo `claudex.js`.
+- Sem novas inferências reais nem tarefas ClaudeX executadas na 4318. Prova em `.hydraq/claudex-2026-10-25/restart-93/verification.json`. Entradas 86–94 commitadas a pedido do utilizador; `output/` fica fora; sem push.
