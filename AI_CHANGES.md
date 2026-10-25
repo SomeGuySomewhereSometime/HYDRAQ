@@ -1,10 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 95
+Versão atual: 96
 
 ## Resumo atual
 
-- ClaudeX: última leitura com hora e ferramentas em execução por participante; instruções para partilhar descobertas úteis mais cedo e orientação sem erro antes da posição independente (entrada 95). 39/39 testes, 43/43 verificações visuais e ensaio real Sol + Opus aprovado. Backend ainda requer reinício da 4318.
+- ClaudeX: última leitura com hora e ferramentas em execução por participante; instruções para partilhar descobertas úteis mais cedo e orientação sem erro antes da posição independente (entrada 95). 39/39 testes, 43/43 verificações visuais e ensaio real Sol + Opus aprovado. Commit 7e031c1, ativado na 4318 por reinício pedido pelo utilizador (entrada 96).
 
 - ClaudeX revisto (entrada 93) e ativado na 4318 por reinício pedido pelo utilizador (entrada 94): pausa/retoma da mesma tarefa e sessões, proteções configuráveis 30 turnos/60 minutos (0 desativa), despertares por novidade/ação concreta, impasses com autoria e colaboração com evidência. Par preferido GPT-6.1 Sol + Opus 5.5; ensaio real deste par completou pausa/retoma e segunda versão com objeções fundamentadas e aprovação conjunta. Código integrado e servido pela 4318.
 
@@ -1077,3 +1077,9 @@ Versão atual: 95
 - Validação: **39/39** testes ClaudeX; **43/43** verificações em browser isolado, quatro aparências, desktop/móvel, sem erros JavaScript. Corrigida espera do próprio ensaio visual: aguardava contagem de turnos antes de os clientes estarem efetivamente a correr. Sintaxe e `git diff --check` aprovados. Suite completa não repetida.
 - Ensaio real **GPT-6.1 Sol/low + Opus 5.5/low**: concluído com aprovação dos dois, 3 turnos por participante, 10 mensagens e duas versões; pausa/retoma nas mesmas sessões e objeções fundamentadas após novas provas. Claude recebeu a orientação de leitura antecipada e continuou sem erro. Horas das leituras registadas nos dois. Evidências em `.hydraq/claudex-2026-10-25/visibility-95/`; sessões temporárias em `/tmp/hydraq-claudex-live-FGVtV5`.
 - Sem reinício da instalação ativa, commit ou push. Backend precisa de reinício para ativar; instruções novas entram nos próximos turnos preparados pelo coordenador. Trabalho alheio preservado.
+
+### 96 — 2026-10-25 — Claude
+
+- Revisão da entrada 95 a pedido do utilizador: as ferramentas em execução vêm dos itens pendentes do turno atual nos dois clientes (o `turnId` dos itens coincide com o da conversa no Codex e no Claude); a leitura antes da posição não regista leitura nem permite prontidão. Suite completa sequencial: **470/470**. Commit 7e031c1.
+- Reinício pedido pelo utilizador: PID 1611756 → 1642790, scope `hydraq-cx95-1792963269476701780.scope`. Paragem normal, sem conversas ativas, aprovações, reservas, terminais nem tarefas ClaudeX em curso ou a pausar; mesmo executável, pasta e ambiente, exceto `INVOCATION_ID`.
+- Verificado: 67 conversas preservadas; pareceres, colaboração, projetos e Dual iguais por hash; as 7 tarefas ClaudeX iguais em identificador, estado, membros e resultado. Única diferença: um `agy` inativo fechou com código 0 e acrescentou `processClosed`/`processExit` ao último turno da sua conversa. Cinco clientes ligados e interface servida igual ao disco. Prova em `.hydraq/claudex-2026-10-25/restart-95/verification.json`. Sem push.
