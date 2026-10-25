@@ -20,6 +20,16 @@ try{
  await page.locator('#cx-prompt').fill('Planear um organizador offline.');await page.getByRole('button',{name:'Iniciar ClaudeX',exact:true}).click();await page.waitForFunction(()=>document.querySelector('.cx-badge').textContent==='Em diálogo');
  const r=hub.claudex.records[0],call=(role,name,args={})=>hub.claudex.tool([...hub.claudex.leases].find(([,l])=>l.taskId===r.id&&l.role===role)[0],name,args);
  await page.waitForTimeout(200);for(const role of ['codex','claude'])await call(role,'initial_position',{text:'Posição '+role});
+ await call('claude','read_dialogue');
+ const nativeClaude=hub.claudex.native(r,'claude');nativeClaude.items.push({type:'mcpToolCall',tool:'Read',turnId:nativeClaude.turnId,status:'inProgress',at:new Date().toISOString()});
+ await page.locator('.cx-participant[data-client=claude] .cx-tool-activity').waitFor();
+ check('live tool shown',await page.locator('.cx-participant[data-client=claude] .cx-tool-activity').textContent()==='Em execução: Read');
+ check('confirmed dialogue read shown',/Última leitura: mensagem 3 · \d/.test(await page.locator('.cx-participant[data-client=claude] .cx-last-read').textContent()));
+ check('unread participant distinguished',await page.locator('.cx-participant[data-client=codex] .cx-last-read').textContent()==='Ainda não leu o diálogo');
+ nativeClaude.items.at(-1).status='completed';await page.locator('.cx-participant[data-client=claude] .cx-tool-activity').waitFor({state:'detached'});
+ check('completed tool removed',await page.locator('.cx-tool-activity').count()===0);
+ delete r.read.claude.at;await page.getByText('Última leitura: mensagem 3 · hora não registada',{exact:true}).waitFor();
+ check('legacy read has no invented time',true);
  check('disabled guards reach coordinator',r.guards.turns===0&&r.guards.minutes===0);
  check('guards frozen while active',await page.locator('#cx-guardTurns').isDisabled()&&await page.locator('#cx-guardMinutes').isDisabled());
  const snapshot=hub.claudex.snapshot;hub.claudex.snapshot=function(){const value=snapshot.call(this);delete value.protocolVersion;return value;};hub.emit('state',hub.snapshot());
@@ -57,7 +67,7 @@ try{
  for(const refused of [false,true]){
   const title=refused?'Verificar divergência recusada':'Verificar divergências aprovadas';
   const created=await hub.claudex.create({requestId:crypto.randomUUID(),text:title,cwd:root,members:{codex:{model:'test',effort:'low'},claude:{model:'test',effort:'low'}}});const task=hub.claudex.record(created.task.id);
-  while(!task.members.codex.turns||!task.members.claude.turns)await page.waitForTimeout(20);
+  const startedBy=Date.now()+6000;while(!['codex','claude'].every(role=>task.members[role].turns&&hub.claudex.native(task,role).status==='running')){if(Date.now()>startedBy)throw Error('Participantes não iniciaram');await page.waitForTimeout(20);}
   const tool=(role,name,args={})=>hub.claudex.tool([...hub.claudex.leases].find(([,l])=>l.taskId===task.id&&l.role===role)[0],name,args);
   for(const role of ['codex','claude'])await tool(role,'initial_position',{text:role==='codex'?'SQLite oferece transações.':'JSON oferece portabilidade.'});
   await tool('claude','declare_impasse',{...await tool('claude','read_dialogue'),text:'Prioridades diferentes sem opção comum.'});

@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 94
+Versão atual: 95
 
 ## Resumo atual
+
+- ClaudeX: última leitura com hora e ferramentas em execução por participante; instruções para partilhar descobertas úteis mais cedo e orientação sem erro antes da posição independente (entrada 95). 39/39 testes, 43/43 verificações visuais e ensaio real Sol + Opus aprovado. Backend ainda requer reinício da 4318.
 
 - ClaudeX revisto (entrada 93) e ativado na 4318 por reinício pedido pelo utilizador (entrada 94): pausa/retoma da mesma tarefa e sessões, proteções configuráveis 30 turnos/60 minutos (0 desativa), despertares por novidade/ação concreta, impasses com autoria e colaboração com evidência. Par preferido GPT-6.1 Sol + Opus 5.5; ensaio real deste par completou pausa/retoma e segunda versão com objeções fundamentadas e aprovação conjunta. Código integrado e servido pela 4318.
 
@@ -1067,3 +1069,11 @@ Versão atual: 94
 - Reinício pedido pelo utilizador para ativar a entrada 93: PID 1547074 → 1611756, scope `hydraq-cx93-1792956890929462456.scope`. Paragem normal, sem conversas ativas, aprovações, reservas, terminais nem tarefas ClaudeX em curso; mesmo executável, pasta e ambiente, exceto `INVOCATION_ID`. Servidor de volta em 7,8 s.
 - Verificado: 64 conversas preservadas; pareceres, colaboração, projetos e Dual iguais por hash. As 6 tarefas ClaudeX mantêm identificador, estado, membros e grupo, e `state.json` do ClaudeX não foi reescrito. Diferenças esperadas: o resumo do ClaudeX passa a expor `protocolVersion`, proteções e `result` das tarefas antigas, e o turno local publicado numa tarefa concluída ganhou `facts` vazio ao carregar. Cinco clientes ligados e interface servida igual ao disco, incluindo `claudex.js`.
 - Sem novas inferências reais nem tarefas ClaudeX executadas na 4318. Prova em `.hydraq/claudex-2026-10-25/restart-93/verification.json`. Entradas 86–94 commitadas a pedido do utilizador; `output/` fica fora; sem push.
+
+### 95 — 2026-10-25 — Codex
+
+- Cartões ClaudeX mostram última mensagem efetivamente lida e hora persistida; históricos sem hora dizem «hora não registada». Ferramentas em execução vêm apenas de itens pendentes do turno nativo atual, sem inferir investigação ou expor argumentos/comandos. Estados terminados não mostram atividade antiga.
+- Instruções incentivam partilha antecipada de descobertas suficientemente verificadas e úteis, agrupando pontos relacionados sem mensagens artificiais. Esclarecem uso dos nomes completos das ferramentas MCP. `read_dialogue` antes da posição independente devolve apenas pedidos do utilizador e o próximo passo, sem revelar o colega, registar leitura ou permitir aprovação.
+- Validação: **39/39** testes ClaudeX; **43/43** verificações em browser isolado, quatro aparências, desktop/móvel, sem erros JavaScript. Corrigida espera do próprio ensaio visual: aguardava contagem de turnos antes de os clientes estarem efetivamente a correr. Sintaxe e `git diff --check` aprovados. Suite completa não repetida.
+- Ensaio real **GPT-6.1 Sol/low + Opus 5.5/low**: concluído com aprovação dos dois, 3 turnos por participante, 10 mensagens e duas versões; pausa/retoma nas mesmas sessões e objeções fundamentadas após novas provas. Claude recebeu a orientação de leitura antecipada e continuou sem erro. Horas das leituras registadas nos dois. Evidências em `.hydraq/claudex-2026-10-25/visibility-95/`; sessões temporárias em `/tmp/hydraq-claudex-live-FGVtV5`.
+- Sem reinício da instalação ativa, commit ou push. Backend precisa de reinício para ativar; instruções novas entram nos próximos turnos preparados pelo coordenador. Trabalho alheio preservado.

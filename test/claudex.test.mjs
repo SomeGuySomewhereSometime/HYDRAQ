@@ -30,7 +30,8 @@ test('ClaudeX sem projeto inicia dois clientes normais em paralelo; caixa MCP in
  assert.equal(r.projectId,null);assert.equal(r.groupId,cx.native(r,'claude').group);assert.equal(hub.dual.records.length,0);
  assert.equal(clients.codex.logs[0].settings.sandbox,'read-only');assert.equal(clients.claude.logs[0].settings.sandbox,'plan');assert.equal(clients.claude.logs[0].settings.planOnly,true);
  for(const role of ['codex','claude'])assert.ok(clients[role].logs[0].settings.contextMcp.names.includes('send_to_peer'));
- await assert.rejects(call(r,'claude','read_dialogue'),/independente/);
+ await call(r,'codex','initial_position',{text:'CODEX-INDEPENDENTE'});
+ const before=await call(r,'claude','read_dialogue');assert.match(before.nextAction,/independente/);assert.equal(before.request[0].text,ctx.body.text);assert.doesNotMatch(JSON.stringify(before),/CODEX-INDEPENDENTE/);assert.equal(r.read.claude,undefined);assert.equal(before.reviewedThrough,undefined);
  await call(r,'codex','initial_position',{text:'CODEX-INDEPENDENTE'});await call(r,'claude','initial_position',{text:'CLAUDE-INDEPENDENTE'});
  await call(r,'codex','send_to_peer',{messageId:'msg1',type:'discovery',text:'Restrição: tem de funcionar offline.'});
  await wait(()=>clients.claude.notices.length>0);
@@ -359,4 +360,24 @@ test('interrupção assíncrona só é confirmada depois do estado nativo termin
  await ctx.cx.pause(r.id);await drained(ctx,r);assert.equal(r.pause.interruptionPending,true);const before=calls;
  await new Promise(resolve=>setTimeout(resolve,100));assert.equal(calls,before);
  ctx.clients.codex.finish(ctx.cx.native(r,'codex'),'Interrompido');ctx.cx.kick();await wait(()=>!r.pause.interruptionPending);assert.equal(ctx.cx.scopes().length,0);
+});
+
+test('atividade usa apenas ferramentas pendentes do turno atual e leitura guarda hora sem invalidar acordo',async t=>{
+ const ctx=await setup(t),r=await ctx.start(),candidate=await prepared(ctx,r);await approve(ctx,r,'codex',candidate);
+ const protocol=r.protocolVersion,evidence=r.evidenceRevision,approvals=structuredClone(r.approvals);
+ await ctx.call(r,'claude','read_dialogue');const at=r.read.claude.at;
+ assert.ok(Number.isFinite(Date.parse(at)));assert.equal(r.read.claude.seq,r.seq);
+ assert.equal(r.protocolVersion,protocol);assert.equal(r.evidenceRevision,evidence);assert.deepEqual(r.approvals,approvals);
+ const saved=JSON.parse(await readFile(ctx.cx.directory+'/state.json','utf8'));assert.equal(saved.conversations[0].read.claude.at,at);
+ for(const role of ['codex','claude']){
+  const c=ctx.cx.native(r,role);c.items=[
+   {type:'mcpToolCall',tool:'Read',turnId:c.turnId,status:'inProgress',at},
+   {type:'commandExecution',turnId:c.turnId,status:'inProgress',command:'private command',at},
+   {type:'mcpToolCall',tool:'old',turnId:'old-turn',status:'inProgress'},
+   {type:'mcpToolCall',tool:'done',turnId:c.turnId,status:'completed'},
+   {type:'reasoning',turnId:c.turnId,status:'inProgress'}];
+  assert.deepEqual(ctx.cx.detail(r.id).participants[role].activity,[{name:'Read',at},{name:'Terminal',at}]);
+  c.items[0].status='completed';assert.equal(ctx.cx.detail(r.id).participants[role].activity.length,1);
+  c.status='completed';assert.deepEqual(ctx.cx.detail(r.id).participants[role].activity,[]);
+ }
 });
