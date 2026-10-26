@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {request as httpRequest} from 'node:http';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -427,4 +428,24 @@ for(const pair of [['antigravity','claude'],['claude','codex']])test('projeto as
   assert.ok(await ctx.call(r,role,'get_project_memory'));
  }
  await ctx.cx.pause(r.id);await drained(ctx,r);await ctx.cx.resume(r.id);assert.equal(r.status,'discussing');
+});
+
+
+test('MCP Antigravity usa socket privado, limita destino e credencial e revoga na pausa',async t=>{
+ const ctx=await setup(t),r=await ctx.start({roles:['codex','antigravity'],members:{codex:{model:'test',effort:'low'},antigravity:{model:'test',effort:'low'}}});
+ const token=ctx.token(r,'antigravity'),config=ctx.cx.leases.get(token).config,lease=JSON.parse(await readFile(config.file,'utf8'));
+ assert.equal(lease.socketPath,config.socketPath);
+ const send=(destination,credential=token,body={name:'read_dialogue',args:{}})=>new Promise((resolve,reject)=>{const req=httpRequest({socketPath:config.socketPath,path:destination,method:'POST',headers:{'x-hydraq-claudex-token':credential}},res=>{let text='';res.on('data',c=>text+=c);res.on('end',()=>resolve({status:res.statusCode,body:JSON.parse(text)}));});req.on('error',reject);req.end(JSON.stringify(body));});
+ assert.equal((await send('/api/bootstrap')).status,404);assert.equal((await send('/api/state')).status,404);
+ assert.equal((await send('/api/claudex/tools','invalid')).status,403);
+ assert.equal((await send('/api/claudex/tools',ctx.token(r,'codex'))).status,403);
+ assert.equal((await send('/api/claudex/tools',token,{name:'read_dialogue',args:{padding:'x'.repeat(640001)}})).status,413);
+ await ctx.call(r,'antigravity','initial_position',{text:'Posição independente.'});
+ assert.equal((await send('/api/claudex/tools')).body.self.role,'antigravity');
+ const child=spawn(process.execPath,[fileURLToPath(new URL('../lib/claudex-mcp-server.mjs',import.meta.url))],{env:{...process.env,HYDRAQ_CLAUDEX_LEASE:config.file},stdio:['pipe','pipe','pipe']});
+ const lines=createInterface({input:child.stdout});t.after(()=>{lines.close();child.kill();});
+ const reply=await new Promise((resolve,reject)=>{child.once('error',reject);lines.once('line',line=>resolve(JSON.parse(line)));child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'read_dialogue',arguments:{}}})+'\n');});
+ assert.equal(reply.result.isError,false);assert.equal(JSON.parse(reply.result.content[0].text).self.role,'antigravity');
+ await ctx.cx.pause(r.id);await drained(ctx,r);await Promise.allSettled([...ctx.cx.leaseCleanups]);
+ await assert.rejects(send('/api/claudex/tools'));await assert.rejects(ctx.cx.tool(token,'read_dialogue',{}),/expirada/);
 });

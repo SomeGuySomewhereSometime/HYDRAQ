@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 100
+Versão atual: 102
 
 ## Resumo atual
+
+- Isolamento das duplas com agy corrigido (entrada 101): DBus filtrado para credenciais, rede separada com proxy público e MCP Unix exclusivo da tarefa, ambiente mínimo sem chaves herdadas. Acesso à API administrativa e execução via systemd recusados em ensaios; Argon + Sol continuam com autenticação, duas versões aprovadas e pausa/retoma. Ativado na 4318 por reinício autorizado (entrada 102).
 
 - Duplas configuráveis (entrada 99): ClaudeX (Codex + Claude), Geminex (Codex + Gemini via Antigravity) e Claudini (Claude + Gemini). Autor independente, tarefas antigas preservadas e MCP nativo privado do agy com bwrap. Ensaios reais Argon + Sol e Argon + Opus concluídos com pausa/retoma e segunda versão aprovada; 486 testes passaram, um teste kernel opcional passou separadamente, 56 verificações visuais. Ativado na 4318 por reinício autorizado (entrada 100).
 
@@ -1119,3 +1121,18 @@ Versão atual: 100
 - Reinício e commit pedidos pelo utilizador. Antes da paragem: nenhum turno ativo, aprovação, reserva, terminal ou dupla ativa. PID 1642790 → 1693053, scope `hydraq-pairs99-1792968120193316134.scope`; paragem normal, mesmo executável/pasta/ambiente exceto `INVOCATION_ID`. Disponível em 9,8 s.
 - Confirmadas 69 conversas e os mesmos identificadores; pareceres, colaboração, projetos e Dual iguais. Tarefas ClaudeX preservam identificador, estado, membros e resultado. Protocolo 3 ativo, sem erro e cinco clientes ligados. `index.html`, `app.js`, `claudex.js` e `style.css` servidos iguais ao disco; código sem mudanças durante o reinício. Evidência privada em `.hydraq/claudex-2026-10-25/restart-99/verification.json`.
 - Ativadas as entradas 97–99. Alterações de código, testes e documentação dessas entradas incluídas neste commit; `output/` e dados privados ficam fora. Não foram feitas novas inferências dos modelos nem push.
+
+### 101 — 2026-10-26 — Codex
+
+- Corrigidos os caminhos demonstrados pela revisão do Claude: o agy já não recebe o barramento DBus completo; xdg-dbus-proxy expõe só `org.freedesktop.secrets`. Namespace de rede próprio, saída HTTP/HTTPS por proxy Unix que recusa destinos privados/locais/interfaces do anfitrião e portas fora de 80/443, valida todas as respostas DNS e fixa o endereço antes de ligar. Chamadas diretas ao loopback do anfitrião deixam de chegar à 4318; o proxy recusa também aliases/CONNECT para destinos privados.
+- MCP Antigravity por socket Unix exclusivo de cada lease, só com POST da ferramenta e credencial daquele participante; `/api/bootstrap` e `/api/state` não existem nesse canal. Codex e Claude mantêm o transporte anterior. Revogação fecha/remove sockets e ficheiros de credencial; limpeza acompanha paragem e falhas. A ponte interna de internet não expõe o servidor administrativo.
+- Ambiente com lista explícita e `--clearenv`, sem GROQ_API_KEY, proxies herdados, NODE_OPTIONS ou LD_PRELOAD. HOME e configuração global preservadas. No projeto HYDRAQ, os históricos dos outros clientes ficam ocultos na montagem; apenas o estado privado e a credencial MCP selecionada são expostos. Processos auxiliares encerram quando o agy termina; cancelamento durante preparação não inicia o cliente.
+- Validação: suite completa sequencial **493 aprovados, 0 falhas, 1 teste kernel opcional omitido**. Após pequenos ajustes finais de ocultação de estado e limpeza do arranque, testes focados do adaptador com kernel **22/22**. Proxy **6/6**, coordenador/transporte **50/50**. Casos verificam recusa de systemd/ficheiro externo, leitura de bootstrap direta e pelo proxy, ambiente sem chave-sentinela, escrita EROFS, DNS misturado/aliases/CONNECT, destino e identidade do MCP e revogação na pausa. Sintaxe e `git diff --check` aprovados.
+- Ensaio real **Argon/low + GPT-6.1 Sol/low**, mesma configuração corrigida: autenticação existente e MCP Unix funcionais, leitura durante execução, duas versões, objeção fundamentada, pausa/retoma das mesmas sessões e aprovação exata conjunta; 8 turnos Sol + 4 Argon e 10 mensagens. A ferramenta de comandos do agy continua a devolver `fork/exec agy: operation not permitted`; documentado, sem a usar como proteção. Provas em `.hydraq/claudex-2026-10-26/isolation-101/` e sessões temporárias em `/tmp/hydraq-pairs-live-e8xQZW`.
+- Sem alterações à configuração global, reinício da instalação ativa, commit ou push. A 4318 conserva a versão anterior até reinício autorizado. Não se afirma ausência de qualquer canal externo: o serviço de credenciais e destinos públicos continuam disponíveis conforme necessário à sessão.
+
+### 102 — 2026-10-26 — Codex
+
+- Reinício e commit pedidos pelo utilizador para ativar a entrada 101. Confirmado repouso antes da paragem: sem turnos ativos, duplas ativas/a pausar, aprovações, reservas ou terminais. PID 1693053 → 1722811, scope `hydraq-isolation101-1792974858834295740.scope`; paragem normal e regresso em 10,7 s. Mesmo executável, pasta e ambiente, exceto `INVOCATION_ID`.
+- Conteúdo e identificadores das 69 conversas preservados; pareceres, colaboração, projetos e Dual iguais. Duplas mantêm identificador, estado, membros e resultado. Cinco clientes ligados, protocolo 3 sem erro e interface servida igual ao disco. Código sem mudanças durante o reinício. Evidência privada em `.hydraq/claudex-2026-10-26/restart-101/verification.json`.
+- Correções, testes e documentação da entrada 101 incluídos no commit pedido; `output/` e dados privados excluídos. Não se fizeram novas inferências dos modelos ou push. Primeira tentativa não executada por expiração da revisão automática; repetição autorizada pelo sistema concluída.
