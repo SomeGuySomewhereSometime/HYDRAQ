@@ -46,14 +46,14 @@ test('panel widths stay within limits and leave room for the conversation', () =
   assert.equal(clampWidth('inspector', 500, { viewport: 700, other: 264 }), PANEL_LIMITS.inspector.min);
 });
 
-test('appearance preserves existing profiles and accepts Mono; removed themes fall back to the default', async () => {
+test('appearance offers Grafite, Atelier and Mono; removed themes, Linho included, fall back to the default', async () => {
   const { THEMES, APPEARANCES, appearanceOf } = await import('../public/layout.js');
-  assert.deepEqual(THEMES, ['classic', 'atelier', 'linho', 'mono']);
-  assert.deepEqual(APPEARANCES.map(entry => entry.name), ['Grafite', 'Atelier', 'Linho', 'Mono']);
+  assert.deepEqual(THEMES, ['classic', 'atelier', 'mono']);
+  assert.deepEqual(APPEARANCES.map(entry => entry.name), ['Grafite', 'Atelier', 'Mono']);
   assert.equal(defaultLayout().theme, 'atelier');
-  assert.equal(readLayout(JSON.stringify({ theme: 'linho' })).theme, 'linho');
-  assert.equal(readLayout(null, 'linho').theme, 'linho');
-  assert.equal(appearanceOf('linho').name, 'Linho');
+  assert.equal(readLayout(JSON.stringify({ theme: 'linho' })).theme, defaultLayout().theme);
+  assert.equal(readLayout(null, 'linho').theme, defaultLayout().theme);
+  assert.equal(appearanceOf('linho').name, 'Grafite');
   assert.equal(readLayout(JSON.stringify({ theme: 'mono' })).theme, 'mono');
   assert.equal(readLayout(null, 'mono').theme, 'mono');
   assert.equal(appearanceOf('mono').name, 'Mono');

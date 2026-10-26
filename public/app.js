@@ -115,7 +115,10 @@ const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,ref
 const agyUI = new AntigravitySessionsUI({api,state:()=>state,current,toast,refresh:async()=>{accept(await api('/api/state'));render();}});
 // Opens the settings at a section that needs the person: a failed launch's command or a confirmation.
 function revealSettings(target){layout.toggle('inspector',true);$('#inspector-tabs [data-inspector-view=system]')?.click();$('#settings-details').open=true;(target||$('#settings-details')).scrollIntoView({block:'nearest'});}
-const terminalSwitch = new TerminalSwitch({host:$('#terminal-switch'),state:()=>state,current,dual:()=>dualUI,choose,reveal:revealSettings,sections:{codex:nativeUI,claude:claudeUI,opencode:openCodeUI,antigravity:agyUI}});
+const terminalSections = {codex:nativeUI,claude:claudeUI,opencode:openCodeUI,antigravity:agyUI};
+const terminalSwitch = new TerminalSwitch({host:$('#terminal-switch'),state:()=>state,current:terminalConversation,dual:()=>dualUI,choose,reveal:revealSettings,sections:terminalSections});
+// The same control in the Modo panel, next to the client and model it continues.
+const inspectorTerminal = new TerminalSwitch({host:$('#inspector-terminal'),state:()=>state,current:terminalConversation,dual:()=>dualUI,choose,reveal:revealSettings,sections:terminalSections});
 const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
@@ -167,7 +170,17 @@ function settingsKey(conversation = current()) { return `${draftKey(conversation
 function members(conversation = current()) { return conversation ? state.conversations.filter(entry => entry.group === conversation.group) : []; }
 function switching(conversation = current()) { return Boolean(conversation && !dualUI?.record(conversation) && providerId() !== conversation.provider); }
 // A dual conversation never steers a running turn: the next message waits for the round to end.
-function steerTarget(conversation = current()) { return dualUI?.record(conversation) ? null : conversation; }
+function steerTarget(conversation = current()) { return dualUI?.record(conversation) || conversation?.claudexTask ? null : conversation; }
+// Hydra: a ClaudeX, Geminex or Claudini task shown inside the conversation. A new conversation keeps
+// the chosen pair until its first request; afterwards the conversation is the task's group.
+const HYDRA_PAIRS = [['codex', 'claude'], ['codex', 'antigravity'], ['claude', 'antigravity']];
+const hydraDrafts = new Map();
+const pairName = claudexModule?.pairName || (() => 'Hydra');
+function hydraTask(conversation = current()) { return conversation?.claudexTask ? state?.claudex?.records.find(record => record.id === conversation.claudexTask) || { id: conversation.claudexTask } : null; }
+function hydraPair(conversation = current()) { const task = hydraTask(conversation); if (task) return task.roles || HYDRA_PAIRS[0]; return !conversation && claudexUI && state?.claudex ? hydraDrafts.get(composerKey()) || null : null; }
+function hydraOn() { return Boolean(claudexUI && !projectOverview && collaborationUI.view === 'conversations' && hydraPair()); }
+function lastHydraPair() { try { const pair = JSON.parse(localStorage.getItem('hydraq.hydraPair')); return HYDRA_PAIRS.find(entry => entry.join() === pair?.join()) || HYDRA_PAIRS[0]; } catch { return HYDRA_PAIRS[0]; } }
+function terminalConversation() { const conversation = current(); return hydraTask(conversation) ? null : conversation; }
 function targetMember(conversation = current()) { return members(conversation).filter(entry => entry.provider === providerId()).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] || null; }
 function focusConversation(conversation = current()) { return members(conversation).find(entry => activeStatuses.includes(entry.status)) || conversation; }
 function workBlock(){return state?.workLocks?.find(lock=>workConflict(lock,{cwd:current()?.cwd||project()?.root||$('#cwd').value,projectId:project()?.id,resources:['normal-preparation','normal:'+providerId()]}));}
@@ -238,7 +251,6 @@ function saveComposerDraft() {
 }
 function choose(id, projectId=selectedProject, overview=false, internal=false) {
   if(sending&&!internal){toast('Aguarda a confirmação do envio antes de mudar de conversa.');return;}
-  if(!internal&&id){const c=state?.conversations.find(c=>c.id===id);if(c?.claudexTask&&claudexUI){claudexUI.choose(c.claudexTask);return;}}
   saveComposerDraft();
   collaborationUI.show('conversations',false);
   layout.closeDrawers();
@@ -256,7 +268,9 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
 const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{accept(await api('/api/state'));render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id)});
 const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:current,getProject:project,getKey:composerKey,getProvider:providerId,toast,renderImages:(target,images)=>imageAttachments.renderMessage(target,images),changed:()=>render()});
 const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
-claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area:collaborationUI,toast,markdown,openConversation:id=>choose(id,selectedProject,false,true)}):null;
+claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area:collaborationUI,toast,markdown,openConversation:id=>choose(id,selectedProject,false,true),
+  openTask:id=>{const task=state?.claudex?.records.find(record=>record.id===id),member=task&&Object.values(task.members||{}).find(entry=>state.conversations.some(c=>c.id===entry.conversationId));if(member)choose(member.conversationId);else claudexUI.choose(id);},
+  changed:()=>{if(state&&hydraOn()){renderSend();syncModePanel();}}}):null;
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 
 dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
@@ -393,7 +407,7 @@ function renderSettings(conversation) {
   if(provider==='opencode' && state?.providers?.opencode?.connection==='connected')queueMicrotask(()=>checkOpenCodeModels(false).catch(()=>{}));
   renderPermissionTips();
   // The handoff mode lives with the conversation; it only acts when the next request changes client.
-  $('#handoff-box').classList.toggle('hidden', !conversation);
+  $('#handoff-box').classList.toggle('hidden', !conversation || Boolean(conversation.claudexTask));
   $('#handoff-box').classList.toggle('is-active', switching(conversation));
   $('#handoff-mode').disabled = locked;
   if (conversation) {
@@ -756,6 +770,13 @@ function usageHeading(title, tip) {
   heading.append(element('h3', '', title), info);
   return heading;
 }
+/** Wall time of a finished request, from the client's own start and end marks. */
+function turnDuration(turn) {
+  const ms = Date.parse(turn?.completedAt) - Date.parse(turn?.startedAt);
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const seconds = Math.round(ms / 1000), minutes = Math.floor(seconds / 60), hours = Math.floor(minutes / 60);
+  return hours ? `${hours} h ${String(minutes % 60).padStart(2, '0')} min` : minutes ? `${minutes} min ${String(seconds % 60).padStart(2, '0')} s` : `${seconds} s`;
+}
 function usageMetrics(rows) {
   const metrics = element('dl', 'usage-grid');
   for (const [label, value, tip] of rows) {
@@ -773,6 +794,8 @@ function renderTurnUsage(conversation) {
   view.classList.toggle('hidden', !conversation);
   const name = providerName(conversation?.provider);
   view.replaceChildren(usageHeading('Último pedido', conversation?.provider === 'opencode' ? 'Tokens e custo nativos do OpenCode; não equivalem à quota de outras subscrições.' : conversation?.provider === 'claude' ? 'Tokens comunicados pelo Claude Code. Não equivalem diretamente aos limites da subscrição Claude.' : conversation?.provider === 'antigravity' ? 'Contadores nativos do agy, sem conversão para a cache de outros clientes.' : conversation?.provider === 'cursor' ? 'O protocolo ACP do Cursor não comunica contadores de tokens nem de cache.' : 'Tokens comunicados pelo Codex. Não equivalem diretamente à quota ChatGPT.'));
+  const duration = turnDuration(turn);
+  if (duration) { const line = element('p', 'usage-duration'); line.append(element('span', '', 'Duração'), element('strong', '', duration)); line.dataset.tip = 'Tempo entre o início e o fim do pedido no cliente.'; view.append(line); }
   if (conversation?.provider === 'antigravity') {
     const usage = turn?.nativeUsage || conversation.nativeUsage;
     if (!usage) { view.append(element('p','usage-empty','A aguardar os contadores do agy…')); return; }
@@ -1114,6 +1137,27 @@ function renderSend() {
       : !dual || dual.target === 'both' ? 'Enter para enviar aos dois · respondem sem ver a resposta um do outro'
       : `Enter para enviar só ao ${name(dual.target)} · o ${name(dual.target === 'a' ? 'b' : 'a')} recebe esta troca quando voltares a falar com ele`;
   }
+  $('#stop').textContent = '■ Parar';
+  if (hydraOn()) renderHydraSend();
+}
+// In Hydra the composer sends to the task: start, update the request of both, or resume.
+function renderHydraSend() {
+  const view = claudexUI.view || {}, text = $('#prompt').value.trim();
+  $('#send').textContent = sending || claudexUI.sending ? 'A enviar…' : `${claudexUI.send.textContent} ↗`;
+  $('#send').disabled = sending || claudexUI.send.disabled || (!text && !view.canResume) || imageAttachments.list().length > 0;
+  $('#stop').classList.toggle('hidden', !view.running);
+  $('#stop').textContent = `■ ${view.stopLabel || 'Pausar os dois'}`;
+  $('#stop').disabled = Boolean(view.stopDisabled);
+  $('#steer-mode').classList.add('hidden');
+  $('#composer').classList.remove('steering');
+  $('#prompt').placeholder = claudexUI.prompt.placeholder;
+  $('#composer-hint').textContent = claudexUI.hint.textContent;
+  imageAttachments.render(true);
+  // The topbar names the task's state, not the member session's (a paused task leaves both interrupted).
+  if (current()?.claudexTask && claudexUI.badge.textContent) {
+    $('#session-badge').textContent = claudexUI.badge.textContent;
+    $('#session-badge').dataset.status = view.running ? 'running' : ['completed', 'uncertain'].includes(view.status) ? view.status : '';
+  }
 }
 
 function renderUncertainty(conversation) {
@@ -1162,6 +1206,23 @@ function renderHandoffRecovery(conversation) {
   }));
 }
 
+// The task view takes the place of the transcript; the composer and the Modo panel drive it.
+function renderHydra(conversation) {
+  const on = hydraOn(), pair = on ? hydraPair(conversation) : null, task = on ? hydraTask(conversation) : null;
+  if (on) document.body.dataset.hydra = pairName(pair); else delete document.body.dataset.hydra;
+  $('#messages').classList.toggle('hidden', on);
+  $('#hydra-inline').classList.toggle('hidden', !on);
+  $('#hydra-chip').hidden = !on;
+  if (!claudexUI) return;
+  if (!on) { claudexUI.inline(null); return; }
+  // While a request is being sent, the selection it creates must survive the state updates it causes.
+  if (task) { if (!sending && claudexUI.selected !== task.id) claudexUI.choose(task.id, { show: false }); }
+  else if (!sending) { if (claudexUI.selected) claudexUI.choose(null, { show: false }); claudexUI.setPair(pair); }
+  claudexUI.inline($('#hydra-inline'));
+  $('#hydra-chip').textContent = `Hydra · ${pairName(pair)}`;
+  $('#hydra-chip').dataset.tip = task ? 'Tarefa Hydra desta conversa. Os participantes, os modelos e as proteções estão no painel Modo.' : 'Escolher a dupla, os modelos e as proteções no painel Modo.';
+}
+
 function render() {
   if (!state) return;
   if (selected && !state.conversations.some(conversation => conversation.id === selected)) selected = null;
@@ -1175,6 +1236,7 @@ function render() {
   openCodeUI.render();
   agyUI.render();
   terminalSwitch.render();
+  inspectorTerminal.render();
   opinionUI.renderAutomatic();
   const connection = providerState().connection;
   const account = providerState().account;
@@ -1202,6 +1264,7 @@ function render() {
   renderAgentDock();
   renderSidebar();
   renderMessages(conversation);
+  renderHydra(conversation);
   renderProgress(focus);
   renderActivity(focus);
   renderTurnUsage(focus);
@@ -1219,6 +1282,7 @@ function render() {
   if(collaboration&&collaborationUI.view!=='collaboration'){banner.classList.remove('hidden');banner.textContent=`Colaboração · ${collaboration.title} · ${collaboration.pendingDecisions?'Aguarda a tua decisão':'Em curso'} — Abrir`;banner.onclick=()=>{collaborationUI.choose(collaboration.id);collaborationUI.show('collaboration');};}
   collaborationUI.render();
   claudexUI?.render();
+  syncModePanel();
 }
 function renderTopbar(conversation, visibleTitle) {
   const title = conversation ? visibleTitle : projectOverview ? (project()?.name || 'Sem projeto') : 'Nova conversa';
@@ -1404,7 +1468,216 @@ function syncNextRequest() {
   $('#model-label').textContent = [chosen($('#model')), chosen($('#effort')), ...cursorExtras,opinionUI.automaticSummary()].filter(Boolean).join(' · ') || 'Modelo por escolher';
   $('#model-label').dataset.tip = opinionUI.automaticSummary() ? $('#review-toggle').dataset.tip : '';
 }
-$('#composer').addEventListener('change', () => syncNextRequest());
+$('#composer').addEventListener('change', () => { syncNextRequest(); syncModePanel(); });
+
+// Modo: the inspector card chooses how the next request runs (Normal, Dual, Revisor or Hydra) and
+// repeats the client and model as chips. As above, the composer and the Hydra task view stay the
+// source of truth: a chip sets their control and replays its change handling.
+const shortClients = { codex: 'Codex', antigravity: 'Antigravity', claude: 'Claude', cursor: 'Cursor', opencode: 'OpenCode' };
+const hydraClients = { codex: 'Codex', claude: 'Claude', antigravity: 'Gemini' };
+function chipGroup(label, source, { collapse = false, clients = false, text = option => option.textContent, pick, blocked = () => source.disabled } = {}) {
+  const group = element('div', 'mode-field'), caption = element('span', 'mode-field-label', label), list = element('div', 'mode-chips');
+  list.setAttribute('role', 'group'); list.setAttribute('aria-label', label);
+  let open = false;
+  const head = collapse ? element('button', 'mode-chip mode-current') : null;
+  if (head) { head.type = 'button'; head.addEventListener('click', () => { open = !open; sync(); }); }
+  group.append(caption, ...(head ? [head] : []), list);
+  list.addEventListener('click', event => {
+    const chip = event.target.closest('.mode-chip');
+    if (!chip || chip.disabled) return;
+    open = false;
+    if (chip.dataset.value !== source.value) {
+      if (pick) pick(chip.dataset.value);
+      else { source.value = chip.dataset.value; source.dispatchEvent(new Event('change', { bubbles: true })); }
+    }
+    syncModePanel();
+  });
+  function sync() {
+    const options = [...source.options], signature = JSON.stringify(options.map(option => [option.value, text(option)]));
+    if (list.dataset.signature !== signature) {
+      list.dataset.signature = signature;
+      list.replaceChildren(...options.map(option => {
+        const chip = element('button', 'mode-chip');
+        chip.type = 'button'; chip.dataset.value = option.value;
+        if (clients) { chip.dataset.client = option.value; chip.append(element('span', 'mode-dot')); }
+        chip.append(document.createTextNode(text(option)));
+        return chip;
+      }));
+    }
+    const disabled = blocked();
+    for (const chip of list.children) {
+      chip.setAttribute('aria-pressed', String(chip.dataset.value === source.value));
+      chip.disabled = disabled || Boolean(options.find(option => option.value === chip.dataset.value)?.disabled);
+      if (clients) {
+        const connection = state?.providers?.[chip.dataset.value]?.connection || 'disconnected';
+        chip.dataset.connection = connection;
+        chip.dataset.tip = `${providerNames[chip.dataset.value] || chip.dataset.value} · ${connection === 'connected' ? 'ligado' : connection === 'connecting' ? 'a ligar' : 'desligado'}`;
+      }
+    }
+    group.hidden = Boolean(source.closest('.hidden')) || !options.length;
+    if (head) {
+      const chosen = source.selectedOptions[0];
+      head.textContent = chosen ? text(chosen) : 'Escolher';
+      head.disabled = disabled;
+      head.setAttribute('aria-expanded', String(open));
+      head.setAttribute('aria-label', `${label}: ${head.textContent}. Mostrar as opções`);
+      head.dataset.tip = source.dataset.tip || `${label}: mostrar as opções`;
+      list.hidden = !open;
+    }
+  }
+  return { element: group, sync };
+}
+function toggleField(label, chipLabel, source) {
+  const group = element('div', 'mode-field'), chip = element('button', 'mode-chip', chipLabel);
+  chip.type = 'button';
+  chip.addEventListener('click', () => { source.checked = !source.checked; source.dispatchEvent(new Event('change', { bubbles: true })); syncModePanel(); });
+  group.append(element('span', 'mode-field-label', label), chip);
+  return { element: group, sync() {
+    chip.setAttribute('aria-pressed', String(source.checked));
+    chip.disabled = source.disabled;
+    chip.dataset.tip = source.closest('[data-tip]')?.dataset.tip || '';
+    group.hidden = Boolean(source.closest('.hidden'));
+  } };
+}
+function numberField(label, source, unit) {
+  const wrap = element('label', 'mode-number'), input = element('input');
+  input.type = 'number'; input.min = '0'; input.step = '1'; input.inputMode = 'numeric';
+  input.setAttribute('aria-label', label);
+  input.addEventListener('input', () => { source.value = input.value; });
+  wrap.append(input, element('span', '', unit));
+  return { element: wrap, sync() { if (document.activeElement !== input) input.value = source.value; input.disabled = source.disabled; } };
+}
+function setupView(className, entries) {
+  const view = element('div', className);
+  view.append(...entries.map(entry => entry.element));
+  return { element: view, sync: () => { for (const entry of entries) entry.sync(); } };
+}
+const normalSetup = setupView('mode-normal', [
+  chipGroup('Cliente', $('#provider'), { clients: true, text: option => shortClients[option.value] || option.textContent,
+    blocked: () => sending || ($('#provider').disabled && !dualUI?.record(current()) && !dualUI?.pendingFor()),
+    pick: id => { if (dualUI?.dockClick(id)) return; if ($('#provider').disabled) return; $('#provider').value = id; $('#provider').dispatchEvent(new Event('change', { bubbles: true })); } }),
+  chipGroup('Modelo', $('#model'), { collapse: true }),
+  chipGroup('Raciocínio', $('#effort')),
+  chipGroup('Contexto', $('#context')),
+  toggleField('Velocidade', 'Fast', $('#fast')),
+]);
+const hydraSetups = new Map();
+function hydraSetup(pair) {
+  const key = pair.join('+');
+  if (hydraSetups.has(key)) return hydraSetups.get(key);
+  const controls = claudexUI.controls, entries = [];
+  for (const role of pair) {
+    const model = chipGroup('Modelo', controls[`${role}Model`], { collapse: true });
+    const effort = chipGroup('Raciocínio', controls[`${role}Effort`], { text: option => effortLabels[option.value] || option.textContent });
+    const card = element('section', 'mode-participant');
+    card.dataset.client = role;
+    card.setAttribute('aria-label', `Participante ${providerNames[role]}`);
+    const head = element('div', 'mode-participant-head');
+    head.append(element('span', 'mode-dot'), element('strong', '', providerNames[role]));
+    card.append(head, model.element, effort.element);
+    entries.push({ element: card, sync() { model.sync(); effort.sync(); } });
+  }
+  entries.push(chipGroup('Autor da resposta comum', controls.author, { text: option => providerNames[option.value] || option.textContent }));
+  entries.push(chipGroup('Resposta final', controls.consensus, { text: option => option.value === 'true' ? 'Aprovação dos dois' : 'Síntese do autor' }));
+  const guards = element('div', 'mode-field mode-guards'), turns = numberField('Proteção · turnos por participante', controls.guardTurns, 'turnos'), minutes = numberField('Proteção · minutos ativos', controls.guardMinutes, 'min');
+  guards.append(element('span', 'mode-field-label', 'Proteções · 0 desativa'), turns.element, minutes.element);
+  guards.dataset.tip = claudexUI.guardHint.textContent;
+  entries.push({ element: guards, sync() { turns.sync(); minutes.sync(); } });
+  const setup = setupView('mode-hydra', entries);
+  hydraSetups.set(key, setup);
+  return setup;
+}
+// Each tile starts with its subtitle, so its name never equals a topbar tab (the Hydra tab).
+const modeTiles = Object.fromEntries([
+  ['normal', 'Normal', 'Um cliente', 1, 'Um cliente responde. Podes trocar de cliente a meio da conversa, com passagem de contexto.'],
+  ['dual', 'Dual', 'Dois modelos', 2, 'A mesma pergunta a dois modelos de clientes diferentes, sem verem a resposta um do outro. Só o principal implementa.'],
+  ['review', 'Revisor', 'Automático', 2, 'Outros modelos reveem automaticamente a resposta ou o código do principal.'],
+  ['hydra', 'Hydra', 'Em diálogo', 3, 'ClaudeX, Geminex ou Claudini: dois clientes investigam juntos, trocam mensagens e preparam uma resposta comum. Só análise, pesquisa e planeamento.'],
+].map(([mode, label, subtitle, heads, tip]) => {
+  const tile = element('button', 'mode-tile');
+  tile.type = 'button'; tile.dataset.mode = mode; tile.dataset.tip = tip;
+  const glyph = element('span', 'mode-glyph');
+  glyph.setAttribute('aria-hidden', 'true');
+  for (let index = 0; index < heads; index++) glyph.append(element('i'));
+  tile.append(glyph, element('strong', '', label), element('small', '', subtitle));
+  tile.addEventListener('click', () => chooseMode(mode));
+  return [mode, tile];
+}));
+$('#mode-choices').replaceChildren(...Object.values(modeTiles));
+const pairButtons = HYDRA_PAIRS.map(pair => {
+  const button = element('button', 'hydra-pair'), dots = element('span', 'hydra-pair-dots');
+  button.type = 'button'; button.dataset.pair = pair.join('+');
+  dots.setAttribute('aria-hidden', 'true');
+  for (const role of pair) { const dot = element('span', 'mode-dot'); dot.dataset.client = role; dots.append(dot); }
+  button.append(dots, element('strong', '', pairName(pair)), element('small', '', pair.map(role => hydraClients[role]).join(' + ')));
+  button.addEventListener('click', () => {
+    if (hydraTask() || button.getAttribute('aria-pressed') === 'true') return;
+    hydraDrafts.set(composerKey(), pair);
+    try { localStorage.setItem('hydraq.hydraPair', JSON.stringify(pair)); } catch { /* The choice still applies to this conversation. */ }
+    render();
+  });
+  return button;
+});
+$('#hydra-pairs').replaceChildren(...pairButtons);
+/** Leaving a Hydra task, or starting one from a conversation with history, opens a new conversation. */
+function chooseMode(mode) {
+  const conversation = current(), task = hydraTask(conversation), pair = hydraPair(conversation);
+  const dual = !pair && Boolean(dualUI?.record(conversation) || dualUI?.pendingFor()), review = !pair && Boolean(opinionUI.automaticSetting());
+  if (mode === 'hydra') {
+    if (pair) return;
+    if (conversation) { choose(null, selectedProject); toast('O Hydra começa numa conversa nova. A anterior fica guardada.'); }
+    hydraDrafts.set(composerKey(), lastHydraPair());
+    render();
+    return;
+  }
+  if (task) choose(null, selectedProject);
+  else if (pair) hydraDrafts.delete(composerKey());
+  render();
+  if (mode === 'normal') { if (!task && dual) $('#dual-toggle').click(); else if (!task && review) $('#review-toggle').click(); return; }
+  const source = $(mode === 'dual' ? '#dual-toggle' : '#review-toggle');
+  // A pair still working in this folder keeps its clients reserved: say so instead of doing nothing.
+  if (source.disabled) { toast(mode === 'dual' ? `O Dual fica disponível quando terminar o trabalho em curso${workBlock() ? ': ' + workReason(workBlock()) : ''}.` : source.dataset.tip || 'O Revisor não está disponível agora.'); return; }
+  source.click();
+}
+function syncModePanel() {
+  if (!state) return;
+  const conversation = current(), task = hydraTask(conversation), pair = hydraPair(conversation);
+  const record = pair ? null : dualUI?.record(conversation), pending = pair || conversation ? null : dualUI?.pendingFor();
+  const dualPair = record ? [record.members.a.provider, record.members.b.provider] : pending ? [providerId(), pending.provider] : null;
+  const review = !pair && Boolean(opinionUI.automaticSetting());
+  const active = { normal: !pair && !dualPair && !review, dual: Boolean(dualPair), review, hydra: Boolean(pair) };
+  const subtitles = {
+    normal: active.normal ? providerName() : 'Um cliente',
+    dual: dualPair ? dualPair.map(id => shortClients[id] || id).join(' + ') : 'Dois modelos',
+    review: review ? [$('#review-toggle').textContent.replace(/^Revisor · /, ''), opinionUI.automaticSummary().replace(/^Revisores: /, '')].filter(Boolean).join(' · ') : 'Automático',
+    hydra: pair ? pairName(pair) : 'Em diálogo',
+  };
+  for (const [mode, tile] of Object.entries(modeTiles)) {
+    tile.setAttribute('aria-pressed', String(active[mode]));
+    tile.querySelector('small').textContent = subtitles[mode];
+    tile.disabled = sending || (mode === 'dual' && (!dualUI || (!pair && $('#dual-toggle').disabled))) || (mode === 'review' && !pair && $('#review-toggle').disabled) || (mode === 'hydra' && (!claudexUI || !state.claudex));
+    const heads = mode === 'normal' ? [providerId()] : mode === 'dual' ? dualPair : mode === 'hydra' && pair ? [pair[0], null, pair[1]] : null;
+    tile.querySelectorAll('.mode-glyph i').forEach((dot, index) => { if (heads?.[index]) dot.dataset.client = heads[index]; else delete dot.dataset.client; });
+  }
+  $('#mode-panel').dataset.mode = pair ? 'hydra' : dualPair ? 'dual' : review ? 'review' : 'normal';
+  $('#mode-panel-status').textContent = task && claudexUI ? claudexUI.badge.textContent : '';
+  $('#hydra-pairs').hidden = !pair;
+  for (const button of pairButtons) {
+    const on = Boolean(pair) && button.dataset.pair === pair.join('+');
+    button.setAttribute('aria-pressed', String(on));
+    button.disabled = sending || Boolean(task && !on);
+    button.dataset.tip = task ? 'A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.' : `${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
+  }
+  const setup = pair && claudexUI ? hydraSetup(pair) : normalSetup;
+  if ($('#mode-setup').firstElementChild !== setup.element) $('#mode-setup').replaceChildren(setup.element);
+  setup.sync();
+}
+$('#hydra-chip').addEventListener('click', () => {
+  layout.toggle('inspector', true);
+  if (['activity', 'telemetry'].includes($('#inspector').dataset.inspectorTab)) $('#inspector-tabs [data-inspector-view=all]')?.click();
+  $('#mode-panel').scrollIntoView({ block: 'nearest' });
+  $('#hydra-pairs [aria-pressed="true"]')?.focus({ preventScroll: true });
+});
 $('#plan-toggle').addEventListener('click', () => syncNextRequest());
 for (const pill of document.querySelectorAll('#agent-dock [data-agent]')) {
   pill.addEventListener('click', () => {
@@ -1603,8 +1876,30 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
   } catch (error) { toast(error.message); }
   finally { sending = false; try { accept(await api('/api/state')); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
 }
+async function submitHydra() {
+  renderSend();
+  if ($('#send').disabled) return;
+  const text = $('#prompt').value, key = composerKey(), conversationAtSubmit = current();
+  sending = true;
+  renderSend();
+  try {
+    const task = await claudexUI.requestInline(text.trim(), { projectId: selectedProject, cwd: $('#cwd').value });
+    if (!task) return;
+    composerDrafts.clear(key, text);
+    if (composerKey() === key && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
+    // A new task (from a new conversation, or from the progress of a finished one) has its own
+    // conversation per participant, in one group: open it here.
+    if (task.id && task.id !== hydraTask(conversationAtSubmit)?.id) {
+      accept(await api('/api/state'));
+      const member = (task.roles || HYDRA_PAIRS[0]).map(role => task.members?.[role]?.conversationId).find(id => state.conversations.some(c => c.id === id));
+      if (member) choose(member, selectedProject, false, true);
+      hydraDrafts.delete(key);
+    }
+  } finally { sending = false; try { accept(await api('/api/state')); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
+}
 $('#composer').addEventListener('submit',async event=> {
   event.preventDefault();
+  if (hydraOn()) { await submitHydra(); return; }
   composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, steerTarget(), chosenDelivery());
   renderSend();
   if ($('#send').disabled) return;
@@ -1661,6 +1956,7 @@ $('#composer').addEventListener('submit',async event=> {
   finally { sending = false; try { accept(await api('/api/state')); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
 });
 $('#stop').addEventListener('click',async()=> {
+  if (hydraOn()) { claudexUI.stop.click(); return; }
   $('#stop').disabled = true;
   try { const dual = dualUI?.record(current()); if (dual) await api(`/api/dual/${dual.id}/interrupt`,{}); else await api(`/api/conversations/${focusConversation()?.id || selected}/interrupt`,{}); }
   catch (error) { toast(error.message); }

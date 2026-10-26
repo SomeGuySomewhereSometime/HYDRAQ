@@ -66,7 +66,7 @@ try {
     check(name + ': no horizontal overflow', m.scroll <= m.w, m);
     check(name + ': composer fully inside viewport', m.rect.x >= 0 && m.rect.right <= m.w + 1 && m.rect.y >= 0 && m.rect.bottom <= m.h + 1, m);
   };
-  for (const theme of ['classic', 'atelier', 'linho']) {
+  for (const theme of ['classic', 'atelier']) {
     const page = await open(theme, 1440, 1000);
     await shot(page, 'preserved-' + theme);
     const before = await styles(page);

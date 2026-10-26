@@ -13,7 +13,7 @@ try{
  await hub.load();server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  browser=await chromium.launch({headless:true,executablePath:'/usr/bin/google-chrome',args:['--no-sandbox']});
  const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));page.on('console',m=>{if(m.type()==='error')errors.push(m.text());});
- await page.goto('http://127.0.0.1:'+server.address().port);await page.getByRole('button',{name:'ClaudeX',exact:true}).click();check('preferred pair selected',await page.locator('#cx-codexModel').inputValue()==='gpt-6.1-sol'&&await page.locator('#cx-claudeModel').inputValue()==='opus');await page.locator('#cx-codexModel').selectOption('test');await page.locator('#cx-claudeModel').selectOption('test');
+ await page.goto('http://127.0.0.1:'+server.address().port);await page.getByRole('button',{name:'Hydra',exact:true}).click();check('preferred pair selected',await page.locator('#cx-codexModel').inputValue()==='gpt-6.1-sol'&&await page.locator('#cx-claudeModel').inputValue()==='opus');await page.locator('#cx-codexModel').selectOption('test');await page.locator('#cx-claudeModel').selectOption('test');
  check('separate workspace visible',await page.locator('#claudex-view').isVisible()&&!await page.locator('#chat-workspace').isVisible());
  check('default guard values',await page.locator('#cx-guardTurns').inputValue()==='30'&&await page.locator('#cx-guardMinutes').inputValue()==='60');
  await page.locator('#cx-guardTurns').fill('0');await page.locator('#cx-guardMinutes').fill('0');
@@ -60,7 +60,7 @@ try{
  const v=await call('codex','read_dialogue');const c=(await call('codex','propose_final',{...v,text:'Plano comum: funcionar offline, exportar e importar JSON.\n\nValidar a recuperação e a portabilidade.'})).candidate;
  for(const role of ['codex','claude']){const v=await call(role,'read_dialogue');await call(role,'review_final',{candidateId:c.id,hash:c.hash,revision:v.revision,reviewedThrough:v.reviewedThrough,decision:'approve'});clients[role].finish(hub.claudex.native(r,role),'Contribuição terminada.');}
  await page.getByRole('heading',{name:/^(Resposta comum · aprovada pelos dois|Acordo confirmado)$/}).waitFor();check('single published artifact',await page.locator('.cx-result').getByText('Plano comum:',{exact:false}).count()===1);
- for(const theme of ['classic','atelier','linho','mono']){await page.evaluate(theme=>{localStorage.setItem('hydraq.theme',theme);},theme);await page.reload();await page.getByRole('heading',{name:/^(Resposta comum · aprovada pelos dois|Acordo confirmado)$/}).waitFor();check(theme+' applied',await page.locator('body').getAttribute('data-theme')===theme);for(const width of [1440,390]){await page.setViewportSize({width,height:900});await page.waitForTimeout(100);check(theme+' '+width+' no horizontal overflow',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:out+'/'+theme+'-'+width+'.png',fullPage:true});}}
+ for(const theme of ['classic','atelier','mono']){await page.evaluate(theme=>{localStorage.setItem('hydraq.theme',theme);},theme);await page.reload();await page.getByRole('heading',{name:/^(Resposta comum · aprovada pelos dois|Acordo confirmado)$/}).waitFor();check(theme+' applied',await page.locator('body').getAttribute('data-theme')===theme);for(const width of [1440,390]){await page.setViewportSize({width,height:900});await page.waitForTimeout(100);check(theme+' '+width+' no horizontal overflow',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:out+'/'+theme+'-'+width+'.png',fullPage:true});}}
  await page.locator('.cx-result').scrollIntoViewIfNeeded();check('mobile result reachable',await page.locator('.cx-result').evaluate(el=>{const r=el.getBoundingClientRect();return r.top<innerHeight&&r.bottom>0;}));await page.screenshot({path:out+'/mono-mobile-result.png'});
  await page.locator('#cx-prompt').scrollIntoViewIfNeeded();check('mobile composer reachable',await page.locator('#cx-prompt').evaluate(el=>{const r=el.getBoundingClientRect();return r.top<innerHeight&&r.bottom>0;}));
  await page.setViewportSize({width:1440,height:1000});
@@ -81,7 +81,7 @@ try{
   if(refused)check('refused positions remain attributed',await page.locator('.cx-result').textContent().then(text=>text.includes('SQLite')&&text.includes('JSON')));
  }
  // A new pair uses provider identities throughout creation, display and cloning.
- await page.getByRole('button',{name:'＋ Novo ClaudeX',exact:true}).click();
+ await page.getByRole('button',{name:'＋ Nova tarefa Hydra',exact:true}).click();
  check('default participants retain legacy pair',await page.locator('#cx-participant0').inputValue()==='codex'&&await page.locator('#cx-participant1').inputValue()==='claude');
  await page.locator('#cx-participant1').selectOption('antigravity');
  check('Argon preferred for Antigravity',await page.locator('#cx-antigravityModel').inputValue()==='argon');
@@ -109,7 +109,7 @@ try{
  const clone=hub.claudex.records.at(-1);
  check('clone retains selected pair and author',clone.id!==pair.id&&JSON.stringify(clone.roles)===JSON.stringify(pair.roles)&&clone.author==='antigravity');
  clients.claude.connection='connected';hub.emit('state',hub.snapshot());
- await page.getByRole('button',{name:'＋ Novo ClaudeX',exact:true}).click();
+ await page.getByRole('button',{name:'＋ Nova tarefa Hydra',exact:true}).click();
  await page.locator('#cx-participant0').selectOption('claude');await page.locator('#cx-participant1').selectOption('antigravity');
  check('Claude and Antigravity pair is Claudini',await page.locator('.cx-heading h1').textContent()==='Claudini'&&await page.getByRole('button',{name:'Iniciar Claudini',exact:true}).count()===1);
  await page.screenshot({path:out+'/claudini-1440.png',fullPage:true});await page.setViewportSize({width:390,height:900});check('pair selectors fit mobile',await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));await page.screenshot({path:out+'/claudini-390.png',fullPage:true});await page.setViewportSize({width:1440,height:1000});

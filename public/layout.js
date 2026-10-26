@@ -5,11 +5,11 @@ export const PANEL_LIMITS = {
   inspector: { min: 260, max: 600, initial: 340 },
 };
 export const MIN_CONVERSATION = 460;
-export const THEMES = ['classic', 'atelier', 'linho', 'mono'];
+// Linho was retired: a stored 'linho' preference is no longer valid and falls back to the default.
+export const THEMES = ['classic', 'atelier', 'mono'];
 export const APPEARANCES = [
   { theme: 'classic', swatch: 'grafite', name: 'Grafite', description: 'Escuro neutro e sóbrio, com a cor de cada cliente.', meta: '#0e0f12' },
   { theme: 'atelier', swatch: 'atelier', name: 'Atelier', description: 'Ilhas de vidro sobre obsidiana, com barra de clientes.', meta: '#08090d' },
-  { theme: 'linho', swatch: 'linho', name: 'Linho', description: 'Papel quente, verde profundo e espaço para pensar.', meta: '#f6f4ed' },
   { theme: 'mono', swatch: 'mono', name: 'Mono', description: 'Preto e branco, com a cor de cada cliente.', meta: '#171717' },
 ];
 export function appearanceOf(theme) {

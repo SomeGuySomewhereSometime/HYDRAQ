@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 102
+Versão atual: 103
 
 ## Resumo atual
+
+- Painel direito reorganizado e Hydra nas Conversas (entrada 103): o último pedido mostra também a duração. Por baixo fica o cartão **Modo**, com Normal, Dual, Revisor e **Hydra** (novo nome do conjunto ClaudeX/Geminex/Claudini, também na aba). O cartão inclui cliente, modelo e raciocínio em botões, e o terminal. A atividade desce. O Hydra funciona dentro da conversa normal, com a caixa habitual; o Linho foi retirado (preferência guardada abre no Atelier). 494 testes aprovados, 1 omitido; ensaios de browser 64/64 e 53/53. Servido pela 4318 sem reinício; commit pedido pelo utilizador, sem push.
 
 - Isolamento das duplas com agy corrigido (entrada 101): DBus filtrado para credenciais, rede separada com proxy público e MCP Unix exclusivo da tarefa, ambiente mínimo sem chaves herdadas. Acesso à API administrativa e execução via systemd recusados em ensaios; Argon + Sol continuam com autenticação, duas versões aprovadas e pausa/retoma. Ativado na 4318 por reinício autorizado (entrada 102).
 
@@ -1136,3 +1138,41 @@ Versão atual: 102
 - Reinício e commit pedidos pelo utilizador para ativar a entrada 101. Confirmado repouso antes da paragem: sem turnos ativos, duplas ativas/a pausar, aprovações, reservas ou terminais. PID 1693053 → 1722811, scope `hydraq-isolation101-1792974858834295740.scope`; paragem normal e regresso em 10,7 s. Mesmo executável, pasta e ambiente, exceto `INVOCATION_ID`.
 - Conteúdo e identificadores das 69 conversas preservados; pareceres, colaboração, projetos e Dual iguais. Duplas mantêm identificador, estado, membros e resultado. Cinco clientes ligados, protocolo 3 sem erro e interface servida igual ao disco. Código sem mudanças durante o reinício. Evidência privada em `.hydraq/claudex-2026-10-26/restart-101/verification.json`.
 - Correções, testes e documentação da entrada 101 incluídos no commit pedido; `output/` e dados privados excluídos. Não se fizeram novas inferências dos modelos ou push. Primeira tentativa não executada por expiração da revisão automática; repetição autorizada pelo sistema concluída.
+
+### 103 — 2026-10-26 — Claude
+
+- Pedido do utilizador (ditado; aspeto e painel direito):
+  - O cartão «Último pedido» mantém-se, agora também com a duração.
+  - Por baixo dele, o novo cartão **Modo**, sempre visível. Escolhe Normal, Dual, Revisor ou **Hydra**. Dual e Revisor abrem os diálogos atuais da caixa.
+  - O cartão repete o cliente, o modelo (lista ao tocar), o raciocínio, o contexto/Fast e **Abrir no terminal**, em botões em vez de listas. O compositor continua a ser a fonte das escolhas.
+  - A **Atividade** fica abaixo do cartão.
+  - Aplica-se a Grafite, Atelier e Mono. **Linho retirado**: CSS, aparência, validação própria e README. Uma preferência `linho` guardada abre no Atelier.
+- **Hydra** é o nome do modo ClaudeX/Geminex/Claudini, a pedido do utilizador: aba, botão de nova tarefa e mensagens do coordenador. Os nomes das duplas mantêm-se.
+- **Hydra dentro da conversa normal:**
+  - No cartão escolhem-se a dupla, o modelo e o raciocínio de cada participante, o autor, a resposta final e as proteções (espelham os campos da vista Hydra).
+  - A conversa mostra participantes, diálogo, versões e resposta comum no lugar do histórico.
+  - A caixa habitual inicia, atualiza o pedido dos dois ou retoma. Parar passa a «Pausar os dois».
+  - Uma tarefa começa sempre numa conversa nova, no projeto/pasta escolhidos, e fica na lista. Abri-la na lista mostra-a ali, sem mudar de aba.
+  - Um pedido numa tarefa concluída abre a nova tarefa a partir do progresso.
+  - O terminal não é oferecido a membros Hydra (o coordenador conduz essas sessões).
+  - Um Dual bloqueado por uma dupla ativa na mesma pasta é explicado num aviso.
+- **Correções encontradas nos ensaios:**
+  - Uma atualização de estado durante a criação já não desfaz a seleção da tarefa nova.
+  - Uma tarefa aberta depois de recarregar a página mostra logo o diálogo, sem esperar um ciclo.
+  - O aviso de pausa já não aparece em duplicado.
+  - Os botões do cartão têm sempre subtítulo, para o nome não coincidir com a aba Hydra.
+- **Ficheiros:**
+  - `public/index.html`, `public/app.js`, `public/claudex.js` (vista também embutida, `pairName` exportado), `public/style.css`, `public/layout.js`;
+  - `test/layout.test.mjs`; `validation/hydra-mode-ui.mjs` (novo); `validation/claudex-ui.mjs` e `validation/mono-ui.mjs` (nomes e aparências); `validation/linho-ui.mjs` removido; README.
+- **Verificação:**
+  - Suite sequencial **495 testes: 494 aprovados, 0 falhas, 1 omitido** (o teste kernel opcional).
+  - `validation/hydra-mode-ui.mjs` **64/64** três vezes seguidas, com clientes simulados: duplas, modelos/autor/proteções pelo cartão, criação, diálogo, atualização, pausa/retoma, conclusão, nova tarefa a partir do progresso, Dual/Revisor, terminal, três aparências a 1440/1024 px e 390 px sem scroll horizontal, sem erros JS. Provas em `.hydraq/hydra-mode-2026-10-26/`.
+  - `validation/claudex-ui.mjs` **53/53** em 7 corridas seguidas depois da correção dos nomes. Antes dela falhava em 2 de 4 corridas; uma cópia do commit anterior passava 4/4.
+  - `git diff --check` aprovado.
+  - Na 4318, os ficheiros servidos são iguais ao disco.
+  - Ensaio só de leitura na 4318, com todos os pedidos não-GET bloqueados (nenhum tentado): 71 conversas e 7 tarefas sem erros JS; duas tarefas reais abertas na conversa com diálogo e resposta.
+- **Limitações e pendentes:**
+  - Sem reinício: não há ficheiros públicos novos nem mudanças no servidor; atualizar a página.
+  - Commit pedido pelo utilizador; sem push.
+  - Ainda não houve um pedido Hydra com modelos reais a partir da conversa: os ensaios usam clientes simulados e as tarefas reais vistas já existiam.
+  - Imagens e importação de contexto não seguem no Hydra.

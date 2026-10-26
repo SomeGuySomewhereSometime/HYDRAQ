@@ -49,7 +49,7 @@
           <select id="handoff-mode" data-tip=""><option value="quick" selected>Rápida</option><option value="model">Completa · resumo</option></select>
           <span id="handoff-hint" class="sr-only"></span>
         </div>
-        <nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true" data-tip="Conversas com um cliente de cada vez, com passagem de contexto entre clientes.">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false" data-tip="Equipa: o Codex planeia, o Grok executa e o Claude pode rever.">Colaboração</button><button id="tab-claudex" type="button" aria-controls="claudex-view" aria-selected="false" data-tip="Codex e Claude investigam juntos, trocam mensagens e preparam uma resposta comum." hidden>ClaudeX</button></nav>
+        <nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true" data-tip="Conversas com um cliente de cada vez, com passagem de contexto entre clientes.">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false" data-tip="Equipa: o Codex planeia, o Grok executa e o Claude pode rever.">Colaboração</button><button id="tab-claudex" type="button" aria-controls="claudex-view" aria-selected="false" data-tip="Hydra: dois clientes investigam juntos, trocam mensagens e preparam uma resposta comum (ClaudeX, Geminex ou Claudini). Também disponível nas Conversas, no painel Modo." hidden>Hydra</button></nav>
         <button id="command-palette-trigger" class="command-trigger atelier-only" type="button" data-tip="Abrir paleta rápida de comandos, conversas, projetos e clientes (Ctrl+K)"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Comandos</span><kbd>⌃K</kbd></button>
         <button id="theme-toggle" class="theme-switch" type="button" data-tip="Escolher a aparência"><span class="appearance-swatch" data-swatch="atelier" aria-hidden="true"></span><span id="theme-label">Atelier</span><svg class="ui-icon theme-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="connection-state" id="connection-state" data-tip="Estado da ligação ao cliente escolhido.">A ligar ao Codex…</div>
@@ -64,6 +64,7 @@
           <section id="uncertainty-panel" class="uncertainty-panel hidden" aria-label="Resultado por confirmar"></section>
           <section id="handoff-recovery-panel" class="handoff-recovery-panel hidden" aria-label="Rever contexto da passagem"></section>
           <section id="progress-panel" class="progress-panel hidden" aria-label="Progresso da tarefa" aria-live="polite"></section>
+          <section id="hydra-inline" class="hydra-inline hidden" aria-label="Hydra · tarefa conjunta"></section>
           <div id="messages" class="messages" aria-live="polite">
             <div class="welcome" id="welcome">
               <div class="welcome-mark"><svg class="mono-logo-symbol" viewBox="0 0 460 436" aria-hidden="true" focusable="false" display="none" hidden><use href="#mono-logo-symbol" width="460" height="436"/></svg><svg class="hydra-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="hydra-necks" d="M16 28V13M16 28c0-6.2-8.4-6.6-8.4-13.4M16 28c0-6.2 8.4-6.6 8.4-13.4"/><circle class="hydra-head" cx="7.6" cy="11.6" r="3.3"/><circle class="hydra-head hydra-head-main" cx="16" cy="8.2" r="3.5"/><circle class="hydra-head" cx="24.4" cy="11.6" r="3.3"/></svg></div>
@@ -158,6 +159,7 @@
               <div class="composer-footer">
                 <div class="composer-controls" role="group" aria-label="Opções do próximo pedido">
                   <div id="dual-targets" class="dual-targets" role="group" aria-label="Destinatário do pedido" hidden></div>
+                  <button type="button" id="hydra-chip" class="pill-toggle hydra-chip" aria-pressed="true" aria-controls="mode-panel" hidden>Hydra · ClaudeX</button>
                   <label class="sr-only" for="provider">Cliente</label>
                   <select id="provider" class="pill-select provider-select" data-tip=""><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="claude">Claude Code</option><option value="cursor">Cursor</option><option value="opencode">OpenCode · gratuitos</option></select>
                   <label class="sr-only" for="model">Modelo</label>
@@ -189,6 +191,13 @@
           </div>
           <div id="inspector-content" class="inspector-content" tabindex="0" role="region" aria-label="Conteúdo do painel lateral">
           <section id="turn-usage" class="turn-usage hidden" aria-label="Consumo do último pedido"></section>
+          <section id="mode-panel" class="mode-panel" aria-labelledby="mode-panel-title">
+            <div class="mode-panel-head"><h3 id="mode-panel-title">Modo</h3><span id="mode-panel-status" class="mode-panel-status"></span></div>
+            <div id="mode-choices" class="mode-choices" role="group" aria-label="Modo do próximo pedido"></div>
+            <div id="hydra-pairs" class="hydra-pairs" role="radiogroup" aria-label="Dupla Hydra" hidden></div>
+            <div id="mode-setup" class="mode-setup"></div>
+            <span id="inspector-terminal" class="terminal-switch inspector-terminal" role="group" aria-label="Terminal original" hidden></span>
+          </section>
           <div class="inspector-heading activity-heading"><h2>Atividade</h2><span id="activity-count">00</span></div>
           <div id="activity-filter" class="activity-filter" role="group" aria-label="Filtrar atividade"></div>
           <div id="activity" class="activity"><div class="empty-activity"><span><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h4l3-7 4 14 3-7h4"/></svg></span><p>O trabalho aparece aqui.</p><small>Comandos, ferramentas e alterações,<br>à medida que acontecem.</small></div></div>
@@ -230,7 +239,7 @@
         </aside>
         <button id="inspector-scrim" class="inspector-scrim hidden" aria-label="Fechar painel de atividade"></button>
       </div>
-      <section id="claudex-view" class="claudex-view hidden" aria-label="ClaudeX · análise conjunta"></section>
+      <section id="claudex-view" class="claudex-view hidden" aria-label="Hydra · análise conjunta"></section>
       <section id="collaboration-view" class="collaboration-view hidden" aria-label="Colaboração entre modelos"></section>
     </main>
   </div>
