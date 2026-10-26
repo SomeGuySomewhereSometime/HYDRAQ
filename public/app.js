@@ -102,6 +102,7 @@ let diffSignature;
 let approvalsSignature = '';
 let modelsSignature = '';
 let progressSignature = '';
+const progressPanel = $('#progress-panel');
 let composerIntent = null;
 const deliveryPreferences = {};
 const chosenDelivery = () => composerIntent?.deliveryMode || $('#followup-mode')?.value || followupOptions(current())[0];
@@ -710,6 +711,13 @@ function wireSuggestions() {
   syncWelcomeFleet();
 }
 
+// The progress card follows the request of its turn, also one HYDRAQ made itself and shows as a note.
+function markTurn(node, message, owner) {
+  node.dataset.ownerId = owner.id;
+  node.dataset.turnId = message.turnId || owner.turns?.find(turn => turn.requestId === message.requestId)?.id || '';
+  if (message.role === 'user' && !message.kind) node.dataset.request = 'true';
+}
+
 function internalMessage(message, owner) {
   const name = providerName(owner.provider);
   if (message.role === 'user') return element('p', 'handoff-note', `HYDRAQ pediu ao ${name} ${message.internal==='memory-proposal'?'uma proposta de memória':'um resumo de passagem'} · ${new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}`);
@@ -758,12 +766,13 @@ function renderMessages(conversation) {
   timeline.forEach((entry,index)=>{const at=anchors[index];if(!resultsAt.has(at))resultsAt.set(at,[]);resultsAt.get(at).push(entry);});
   let previousOwner = null;
   for (const [index,{ message, owner }] of timeline.entries()) {
-    if (message.internal) { view.append(internalMessage(message, owner)); continue; }
+    if (message.internal) { const note = internalMessage(message, owner); markTurn(note, message, owner); view.append(note); continue; }
     if (previousOwner && previousOwner !== owner.id && !dualUI?.anyRecord(conversation)) view.append(element('div', 'provider-divider', `Continuação no ${providerName(owner.provider)}`));
     previousOwner = owner.id;
     const article = element('article', `message ${message.role}${message.kind === 'steer' ? ' steering-message' : ''}`);
     article.dataset.provider = owner.provider;
     article.dataset.timelineIndex=index;
+    markTurn(article, message, owner);
     const header = element('div', 'message-header');
     const automaticReturn=Boolean(opinionUI.submission(message,owner));
     const avatar = element('span', 'avatar', message.role === 'user' ? (automaticReturn?'H':'TU') : '');
@@ -832,19 +841,25 @@ function renderMessages(conversation) {
     if (previousOwner && previousOwner !== entry.id) view.append(element('div', 'provider-divider', `Continuação no ${providerName(entry.provider)}`));
     view.append(pendingHandoff(entry));
   }
+  renderProgress(focusConversation(conversation));
   view.scrollTop = nearBottom ? view.scrollHeight : oldScroll;
 }
 
 function renderProgress(conversation) {
   const progress = conversation?.progress;
-  const view = $('#progress-panel');
+  const view = progressPanel, transcript = $('#messages');
+  const anchor = progress && [...transcript.querySelectorAll('[data-request]')].find(article=>article.dataset.ownerId===conversation.id&&article.dataset.turnId===progress.turnId||JSON.parse(article.dataset.progressRequests||'[]').some(([owner,turn])=>owner===conversation.id&&turn===progress.turnId));
   view.classList.toggle('hidden', !progress);
-  const signature = JSON.stringify(progress);
+  // A request missing from the transcript (still in a handoff, say) leaves the card in its old place above it.
+  const home = $('#hydra-inline');
+  if(anchor){if(anchor.nextElementSibling!==view)anchor.after(view);}else if(view.nextElementSibling!==home)home.before(view);
+  const signature = JSON.stringify([conversation?.id,progress]);
   if (signature === progressSignature) return;
   progressSignature = signature;
   const expanded = Boolean(view.querySelector('details')?.open);
   view.replaceChildren();
   if (!progress) return;
+  const nearBottom=transcript.scrollHeight-transcript.scrollTop-transcript.clientHeight<120;
   view.dataset.status = progress.status;
   const heading = element('div', 'progress-heading');
   const symbol = { completed:'✓', failed:'!', interrupted:'■', uncertain:'?' }[progress.status] || '◌';
@@ -885,6 +900,7 @@ function renderProgress(conversation) {
     }
     view.append(details);
   }
+  if(nearBottom)transcript.scrollTop=transcript.scrollHeight;
 }
 
 function formatTokens(value) { return new Intl.NumberFormat('pt-PT').format(value); }

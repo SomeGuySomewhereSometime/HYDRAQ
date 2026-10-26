@@ -1,8 +1,12 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 105
+Versão atual: 107
 
 ## Resumo atual
+
+- Correção da entrada 106 pela revisão do Claude (entrada 107): nos pedidos que a HYDRAQ faz sozinha (proposta de memória, resumo de passagem), o cartão de progresso deixava de aparecer; agora segue a nota do pedido, e um pedido ausente do histórico deixa o cartão no lugar antigo em vez de o esconder. Ensaio de progresso 46/46; restantes ensaios e suite sem falhas. Sem reinício; commit pedido pelo utilizador, sem push.
+
+- Progresso abaixo do pedido correspondente (entrada 106): cartão de trabalho/ações dentro do histórico para os cinco clientes; orientações não mudam a âncora e o Dual mantém o cartão no pedido comum. 44 verificações novas, mensagens/terminal 73/73 e Hydra 65/65. Comentários públicos do Claude/agy já eram recebidos e mostrados quando emitidos; não foi alterado o protocolo. Sem reinício; commit pedido pelo utilizador (com a entrada 107), sem push.
 
 - Correções da revisão do GPT-5.6 Sol à entrada 104 (entrada 105): «A abrir…»/«A voltar…» aparecem nos dois controlos do terminal desde o clique, venha o pedido de onde vier; um bloco de código aberto já não recolhe sozinho enquanto a resposta chega. 494 testes aprovados (1 omitido); ensaios 73/73, 65/65, 53/53 e 62/62. Servido pela 4318 sem reinício; commit pedido pelo utilizador, sem push.
 
@@ -1227,3 +1231,27 @@ Versão atual: 105
   - Outros ensaios: `hydra-mode-ui` **65/65**, `claudex-ui` **53/53**, `mono-ui` **62/62**.
   - Na 4318, os ficheiros servidos são iguais ao disco. `git diff --check` aprovado.
 - **Limitações:** sem reinício; atualizar a página. Commit pedido pelo utilizador, sem push. Continua ensaiado só com respostas simuladas, não com terminais reais.
+
+### 106 — 2026-10-26 — Codex
+
+- A pedido do utilizador, o cartão de trabalho e ações deixa o topo fixo da conversa e passa para imediatamente abaixo do pedido correspondente no histórico, antes das respostas. Usa identidade da conversa/turno, preserva a expansão das ações em atualizações e não se ancora numa orientação posterior. No Dual, o pedido comum conserva as referências dos dois participantes quando a interface junta os pedidos; o cartão continua ancorado ao mesmo pedido quando o outro modelo fica a trabalhar.
+- Alterados apenas `public/app.js`, `public/dual.js` e `public/style.css`; novo ensaio isolado `validation/progress-timeline-ui.mjs`. O cartão original é reutilizado durante o redesenho do histórico, mantendo os controlos e a posição de leitura. Sem alterações de backend ou de histórico.
+- Verificado no código: Claude e Antigravity já transformam texto público intermédio em mensagens `commentary`; o resumo de progresso e a interface já as apresentam quando o cliente as envia. No pedido real «plantas inteligentes?» do Antigravity foram observadas três ações e uma resposta final, sem mensagem intermédia pública. Não se infere texto nem se expõe raciocínio privado para preencher a ausência.
+- Validação com clientes simulados: **44/44** verificações em browser (cinco clientes, âncora após o pedido atual, atualizações/expansão, orientação posterior, conclusão e Dual; Grafite/Atelier/Mono em desktop/móvel, sem erros JS). Regressões: mensagens/terminal **73/73**, Hydra no modo **65/65**. Sintaxe e `git diff --check` aprovados. Não repetida a suite completa por serem alterações só de interface. Provas em `.hydraq/progress-timeline-2026-10-26/`.
+- Sem chamadas novas aos modelos, reinício, commit ou push. Os ficheiros públicos são recarregados pela instalação ativa; atualizar a página para obter a alteração. Commit feito depois a pedido do utilizador, com a entrada 107, sem push.
+
+### 107 — 2026-10-26 — Claude
+
+- Pedido do utilizador: verificar a entrada 106 do Codex e corrigir o que foi encontrado.
+- **Regressão encontrada:** nos pedidos que a HYDRAQ faz sozinha (proposta de memória, resumo de passagem), a mensagem do pedido é interna e aparece só como nota. A nota não servia de âncora e o cartão era retirado da página, embora antes aparecesse com as ações em curso. O mesmo acontecia sempre que o pedido do turno não estava no histórico.
+- **Correção** (`public/app.js`):
+  - `markTurn` marca a conversa, o turno e o pedido tanto nos artigos como nas notas internas, e o cartão procura qualquer `[data-request]`.
+  - Sem pedido onde ancorar, o cartão fica no lugar anterior à entrada 106 (acima do histórico) em vez de desaparecer.
+- **Ficheiros:** `public/app.js`; dois casos acrescentados a `validation/progress-timeline-ui.mjs` (pedido interno; pedido ausente do histórico).
+- **Verificação:**
+  - `validation/progress-timeline-ui.mjs` **46/46**. Numa cópia com a versão anterior desta correção, o ensaio para no pedido interno porque o cartão nunca aparece no histórico.
+  - Reprodução isolada de um pedido interno com uma ferramenta em curso: o cartão volta a mostrar «A usar uma ferramenta · 1 em curso», como antes da entrada 106.
+  - Outros ensaios: mensagens/terminal **73/73**, `hydra-mode-ui` **65/65**, `claudex-ui` **53/53**, `mono-ui` **62/62**.
+  - Suite sequencial sozinha: **495 testes: 494 aprovados, 0 falhas, 1 omitido**. Uma corrida anterior, feita ao mesmo tempo que os ensaios em browser, teve 1 falha; não ficou registado qual era o teste, e não voltou a acontecer a correr sozinha.
+  - Na 4318, `app.js` servido é igual ao disco. `git diff --check` aprovado.
+- **Limitações:** sem reinício; atualizar a página. Commit pedido pelo utilizador (com a entrada 106), sem push. Ensaiado com clientes simulados; não houve proposta de memória nem passagem com modelos reais.

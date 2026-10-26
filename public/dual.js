@@ -300,6 +300,7 @@ export class DualUI{
     continue;
    }
    const shared=articles.get(present[0].user);if(!shared)continue;
+   shared.dataset.progressRequests=JSON.stringify(present.map(part=>articles.get(part.user)).filter(Boolean).map(article=>[article.dataset.ownerId,article.dataset.turnId]));
    const contexts=new Map();
    for(const part of present){
     const article=articles.get(part.user);if(!article)continue;

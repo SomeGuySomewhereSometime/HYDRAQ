@@ -4796,3 +4796,6 @@ body .terminal-switch-button[data-terminal="release"]::after { content: '↩'; m
 .inspector-terminal[hidden] { display: none; }
 .terminal-switch-caption { flex-basis: 100%; color: var(--text-secondary); font-size: 11.5px; line-height: 1.45; }
 @media (prefers-reduced-motion: reduce) { .terminal-switch[data-live="true"] .terminal-switch-status::before { animation: none; } }
+
+/* The current request owns its progress, inside the transcript rather than above it. */
+.messages .progress-panel { margin: -12px 0 24px; }
