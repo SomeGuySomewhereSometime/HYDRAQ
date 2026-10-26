@@ -105,6 +105,7 @@ try {
   await call('claude', 'send_to_peer', { messageId: 'x1', type: 'discovery', text: 'O sistema tem de funcionar offline e exportar JSON.' });
   await page.locator('#hydra-inline .cx-message', { hasText: 'exportar JSON' }).waitFor();
   check('dialogue shown inline', await page.locator('#hydra-inline .cx-message[data-client="claude"]').count() >= 1);
+  check('common request has Copiar pedido', await page.locator('#hydra-inline .cx-goal button', { hasText: 'Copiar pedido' }).count() === 1);
   check('terminal not offered for a hydra member', !await page.locator('#inspector-terminal').isVisible() && !await page.locator('#terminal-switch').isVisible());
   await page.screenshot({ path: out + '/hydra-running-atelier.png' });
   // Update request through the composer.

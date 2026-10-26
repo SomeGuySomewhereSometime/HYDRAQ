@@ -4755,3 +4755,44 @@ body[data-theme="mono"] .mode-tile[aria-pressed="true"], body[data-theme="mono"]
 body[data-theme="mono"] .mode-chip[aria-pressed="true"]:not([data-client]) { border-color: #737373; background: #303030; }
 body[data-theme="mono"] .mode-participant { border-color: color-mix(in srgb, var(--accent) 30%, #393939); }
 body[data-theme="mono"] .mode-glyph { background: #2c2c2c; }
+
+/* Reply formatting: subheadings, quotes, rules, tables, task items and long code that folds. */
+.message-content :is(h4, h5) { margin: 18px 0 6px; color: var(--text-primary); font-weight: 650; line-height: 1.4; }
+.message-content h5 { color: var(--text-secondary); }
+body[data-theme] :is(.messages,.col-thread) .message-content h4 { font-size: 1.05em; }
+body[data-theme] :is(.messages,.col-thread) .message-content h5 { font-size: 1em; }
+.message-content li > p { margin: 6px 0; }
+.message-content li > :is(ul, ol) { margin: 4px 0; }
+.message-content li.task { list-style: none; }
+.message-content .task-box { display: inline-block; width: 1.3em; margin-left: -1.3em; color: var(--accent); }
+.message-content blockquote { margin: 12px 0; padding: 2px 0 2px 14px; border-left: 3px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle)); color: var(--text-secondary); }
+.message-content blockquote > :last-child { margin-bottom: 0; }
+.message-content hr { height: 0; margin: 20px 0; border: 0; border-top: 1px solid var(--border-subtle); }
+.message-content .table-wrap { max-width: 100%; margin: 12px 0 16px; overflow-x: auto; border: 1px solid var(--border-subtle); border-radius: 10px; }
+.message-content .table-wrap table { width: 100%; border-collapse: collapse; font-size: .92em; line-height: 1.55; }
+.message-content :is(th, td) { min-width: 5.5em; padding: 7px 12px; border-bottom: 1px solid var(--border-subtle); text-align: left; vertical-align: top; overflow-wrap: normal; word-break: normal; }
+.message-content th { background: var(--bg-surface); color: var(--text-primary); font-weight: 650; }
+.message-content tr:last-child td { border-bottom: 0; }
+.message-content :is(th, td) + :is(th, td) { border-left: 1px solid var(--border-subtle); }
+.message-content [data-align="right"] { text-align: right; font-variant-numeric: tabular-nums; }
+.message-content [data-align="center"] { text-align: center; }
+.code-actions { display: inline-flex; align-items: center; gap: 6px; }
+.code-block.code-folded pre { max-height: 26em; overflow-y: hidden; -webkit-mask-image: linear-gradient(#000 72%, transparent); mask-image: linear-gradient(#000 72%, transparent); }
+/* Copiar on the person's own messages stays quiet until the message is hovered or focused. */
+.message.user .copy-message { opacity: 0; transition: opacity 140ms ease; }
+.message.user:hover .copy-message, .message.user .copy-message:focus-visible { opacity: 1; }
+@media (hover: none) { .message.user .copy-message { opacity: .78; } }
+
+/* Terminal hand-over: the command at hand, and the way back written out in the Modo panel. */
+.terminal-switch { flex-wrap: wrap; }
+.terminal-switch-status { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.terminal-switch[data-live="false"] .terminal-switch-status::before { border: 1.5px solid var(--accent); background: transparent; box-shadow: none; }
+.terminal-switch[data-live="true"] .terminal-switch-status::before { animation: terminal-live 1.6s ease-in-out infinite; }
+@keyframes terminal-live { 50% { opacity: .35; } }
+body .terminal-switch[data-state="held"] .terminal-switch-button[data-terminal="command"] { border-color: color-mix(in srgb, var(--accent) 45%, var(--border-subtle)); background: transparent; color: var(--accent); }
+body .terminal-switch[data-state="held"] .terminal-switch-button[data-terminal="command"]:hover:not(:disabled) { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); }
+body .terminal-switch-button[data-terminal="release"]::after { content: '↩'; margin-left: 6px; }
+.inspector-terminal { display: flex; justify-self: stretch; }
+.inspector-terminal[hidden] { display: none; }
+.terminal-switch-caption { flex-basis: 100%; color: var(--text-secondary); font-size: 11.5px; line-height: 1.45; }
+@media (prefers-reduced-motion: reduce) { .terminal-switch[data-live="true"] .terminal-switch-status::before { animation: none; } }

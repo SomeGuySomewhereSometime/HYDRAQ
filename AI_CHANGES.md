@@ -1,8 +1,16 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 103
+Versão atual: 105
 
 ## Resumo atual
+
+- Correções da revisão do GPT-5.6 Sol à entrada 104 (entrada 105): «A abrir…»/«A voltar…» aparecem nos dois controlos do terminal desde o clique, venha o pedido de onde vier; um bloco de código aberto já não recolhe sozinho enquanto a resposta chega. 494 testes aprovados (1 omitido); ensaios 73/73, 65/65, 53/53 e 62/62. Servido pela 4318 sem reinício; commit pedido pelo utilizador, sem push.
+
+- Respostas, cópia e terminal (entrada 104):
+  - As respostas passam a ter tabelas, citações, separadores, subtítulos, listas encaixadas e de tarefas, ênfase/riscado e ligações soltas; o código com mais de 24 linhas recolhe.
+  - Copiar também nas mensagens do utilizador e no pedido comum do Hydra.
+  - O botão do terminal mostra desde quando a conversa lá está (e, no Codex, se o terminal está ligado), copia o comando e, no cartão Modo, explica como voltar ou porque não abre.
+  - 494 testes aprovados (1 omitido); ensaios de browser 59/59, 65/65, 53/53 e 62/62; 76 conversas reais renderizadas só em leitura sem erros. Servido pela 4318 sem reinício; commit pedido pelo utilizador, sem push.
 
 - Painel direito reorganizado e Hydra nas Conversas (entrada 103): o último pedido mostra também a duração. Por baixo fica o cartão **Modo**, com Normal, Dual, Revisor e **Hydra** (novo nome do conjunto ClaudeX/Geminex/Claudini, também na aba). O cartão inclui cliente, modelo e raciocínio em botões, e o terminal. A atividade desce. O Hydra funciona dentro da conversa normal, com a caixa habitual; o Linho foi retirado (preferência guardada abre no Atelier). 494 testes aprovados, 1 omitido; ensaios de browser 64/64 e 53/53. Servido pela 4318 sem reinício; commit pedido pelo utilizador, sem push.
 
@@ -1176,3 +1184,46 @@ Versão atual: 103
   - Commit pedido pelo utilizador; sem push.
   - Ainda não houve um pedido Hydra com modelos reais a partir da conversa: os ensaios usam clientes simulados e as tarefas reais vistas já existiam.
   - Imagens e importação de contexto não seguem no Hydra.
+
+### 104 — 2026-10-26 — Claude
+
+- Pedido do utilizador (pontos 1–3 da lista combinada): Copiar nas mensagens enviadas, melhorar a passagem para o terminal e o regresso à HYDRAQ, e melhorar a apresentação das respostas.
+- **Respostas:** o renderizador de `public/app.js` passa a ler o texto linha a linha.
+  - Novos elementos: tabelas com alinhamento (deslizam em ecrãs estreitos), citações, separadores, `##` → h3 e `###` → h4, listas encaixadas, listas numeradas que mantêm o número inicial mesmo com linhas em branco, tarefas `[ ]`/`[x]`, itálico, riscado, escapes e ligações soltas/`<…>`.
+  - Um título ou uma lista logo a seguir a uma linha de texto já não fica colado ao parágrafo. Os blocos de código podem estar indentados dentro de listas.
+  - Código com mais de 24 linhas aparece recolhido, com «Mostrar as N linhas»; a escolha mantém-se enquanto a resposta chega.
+  - O mesmo renderizador serve pareceres, Hydra, Colaboração e planos do Cursor.
+- **Copiar:** nas mensagens do utilizador e nas orientações (discreto até passar o rato; sempre visível em ecrãs táteis), e «Copiar pedido» no pedido comum do Hydra.
+- **Terminal** (`TerminalSwitch`, junto à caixa e no cartão Modo):
+  - Com a conversa no terminal, mostra «desde as HH:MM» (Claude, Antigravity, OpenCode) ou se o terminal do Codex está ligado.
+  - Novo botão «Copiar comando» (Codex, Claude, Antigravity). O comando fica também visível nas configurações; se o browser recusar a cópia, as configurações abrem nesse ponto.
+  - Estados «A abrir…»/«A voltar…».
+  - No cartão Modo, o motivo de não poder abrir e os passos para voltar aparecem por escrito; junto à caixa ficam na dica.
+  - Sem mudanças no servidor: a deteção automática de um terminal fechado (exceto a ligação do Codex, que já era conhecida) fica por fazer.
+- **Ficheiros:** `public/app.js`, `public/native-sessions.js`, `public/claude-sessions.js`, `public/claudex.js`, `public/style.css`; `validation/messages-terminal-ui.mjs` (novo); um verificador acrescentado a `validation/hydra-mode-ui.mjs`.
+- **Verificação:**
+  - Suite sequencial **495 testes: 494 aprovados, 0 falhas, 1 omitido** (o teste kernel opcional).
+  - `validation/messages-terminal-ui.mjs` **59/59**, com clientes simulados e respostas do terminal simuladas pelo browser. Cobre a formatação, as cópias (lidas da área de transferência), o terminal ligado/desligado/Claude e Grafite/Atelier/Mono a 1440 e 390 px sem scroll horizontal. Provas em `.hydraq/messages-terminal-2026-10-26/`.
+  - Outros ensaios: `hydra-mode-ui` **65/65**, `claudex-ui` **53/53**, `mono-ui` **62/62**.
+  - Na 4318, os ficheiros servidos são iguais ao disco.
+  - Ensaio só de leitura na 4318, com todos os pedidos não-GET bloqueados (dois automáticos de modelos OpenCode foram bloqueados): **76 conversas e 355 respostas reais** sem erros JS nem scroll horizontal (12 tabelas, 3 citações, 128 subtítulos).
+  - `git diff --check` aprovado.
+- **Limitações:** sem reinício; atualizar a página. Commit pedido pelo utilizador (com a entrada 105), sem push. O «Copiar comando» e o regresso foram ensaiados com respostas simuladas, não com um terminal real.
+
+### 105 — 2026-10-26 — Claude
+
+- Pedido do utilizador: corrigir as duas falhas que o GPT-5.6 Sol reproduziu na revisão da entrada 104.
+- **«A abrir…»/«A voltar…» nos controlos do terminal:**
+  - Antes, só a secção das configurações mostrava a operação pendente. Os controlos junto à caixa e no cartão Modo só eram redesenhados depois da resposta, e só o que tinha sido clicado.
+  - Agora as quatro secções (Codex, Claude, OpenCode, Antigravity) avisam ao começar e depois de obter o estado (`changed`). A `public/app.js` redesenha os dois controlos (`renderTerminal`), venha o pedido do botão junto à caixa, do cartão Modo ou das configurações.
+- **Bloco de código aberto que voltava a recolher:**
+  - A identidade usava os primeiros 200 caracteres, que mudavam enquanto chegavam linhas curtas.
+  - Passa a usar a mensagem e as primeiras 24 linhas do bloco, que já estão completas quando ele recolhe. Os outros usos do renderizador, sem mensagem, ficam só com as linhas.
+- **Ficheiros:** `public/app.js`, `public/native-sessions.js`, `public/claude-sessions.js`; `validation/messages-terminal-ui.mjs` (14 verificações novas).
+- **Verificação:**
+  - Suite sequencial **495 testes: 494 aprovados, 0 falhas, 1 omitido** (o teste kernel opcional).
+  - `validation/messages-terminal-ui.mjs` **73/73**. Pedidos de abrir e voltar retidos até o ensaio os soltar: os dois controlos mostram o estado pendente e desativados, a partir dos três botões, e regressam no fim. Bloco de 30 linhas curtas (menos de 200 caracteres) aberto continua aberto às 31 e 32 linhas; recolhido de novo, fica recolhido.
+  - Numa cópia com o código anterior, o mesmo ensaio falha em 5 verificações, exatamente as das duas falhas. No caso das configurações, a cópia antiga já passava.
+  - Outros ensaios: `hydra-mode-ui` **65/65**, `claudex-ui` **53/53**, `mono-ui` **62/62**.
+  - Na 4318, os ficheiros servidos são iguais ao disco. `git diff --check` aprovado.
+- **Limitações:** sem reinício; atualizar a página. Commit pedido pelo utilizador, sem push. Continua ensaiado só com respostas simuladas, não com terminais reais.

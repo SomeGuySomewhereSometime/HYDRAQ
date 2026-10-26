@@ -109,16 +109,18 @@ const settingDrafts = new Map();
 const recoveryDrafts = new Map();
 let settingsOwner;
 let settingsBaseline;
-const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{accept(await api('/api/state'));render();}});
-const claudeUI = new ClaudeSessionsUI({api, state:()=>state, current, project, choose, toast, refresh:async()=>{accept(await api('/api/state'));render();}});
-const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,refresh:async()=>{accept(await api('/api/state'));render();}});
-const agyUI = new AntigravitySessionsUI({api,state:()=>state,current,toast,refresh:async()=>{accept(await api('/api/state'));render();}});
+const nativeUI = new NativeSessionsUI({api, state:()=>state, current, project, choose, toast, changed:renderTerminal, refresh:async()=>{accept(await api('/api/state'));render();}});
+const claudeUI = new ClaudeSessionsUI({api, state:()=>state, current, project, choose, toast, changed:renderTerminal, refresh:async()=>{accept(await api('/api/state'));render();}});
+const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,changed:renderTerminal,refresh:async()=>{accept(await api('/api/state'));render();}});
+const agyUI = new AntigravitySessionsUI({api,state:()=>state,current,toast,changed:renderTerminal,refresh:async()=>{accept(await api('/api/state'));render();}});
 // Opens the settings at a section that needs the person: a failed launch's command or a confirmation.
 function revealSettings(target){layout.toggle('inspector',true);$('#inspector-tabs [data-inspector-view=system]')?.click();$('#settings-details').open=true;(target||$('#settings-details')).scrollIntoView({block:'nearest'});}
 const terminalSections = {codex:nativeUI,claude:claudeUI,opencode:openCodeUI,antigravity:agyUI};
-const terminalSwitch = new TerminalSwitch({host:$('#terminal-switch'),state:()=>state,current:terminalConversation,dual:()=>dualUI,choose,reveal:revealSettings,sections:terminalSections});
-// The same control in the Modo panel, next to the client and model it continues.
-const inspectorTerminal = new TerminalSwitch({host:$('#inspector-terminal'),state:()=>state,current:terminalConversation,dual:()=>dualUI,choose,reveal:revealSettings,sections:terminalSections});
+const terminalSwitch = new TerminalSwitch({host:$('#terminal-switch'),state:()=>state,current:terminalConversation,dual:()=>dualUI,choose,reveal:revealSettings,sections:terminalSections,toast});
+// The same control in the Modo panel, next to the client and model it continues, with room for the steps.
+const inspectorTerminal = new TerminalSwitch({host:$('#inspector-terminal'),state:()=>state,current:terminalConversation,dual:()=>dualUI,choose,reveal:revealSettings,sections:terminalSections,toast,detail:true});
+// Both controls follow a section's request from its start, wherever it was asked.
+function renderTerminal(){terminalSwitch.render();inspectorTerminal.render();}
 const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
@@ -449,74 +451,201 @@ function renderSidebar() {
   projectUI.render({projectId:selectedProject,group:current()?.group,overview:projectOverview});
 }
 
-function inlineText(parent, text) {
-  const pattern = /(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\(https?:\/\/[^\s)]+\))/g;
+// Inline marks replies use; links open only http(s) and mailto addresses.
+const inlinePattern = /\\([\\`*_{}\[\]()#+\-.!~|>])|(`+)([\s\S]*?[^`])\2(?!`)|\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__(?!\w)|~~(?=\S)([\s\S]*?\S)~~|(?<![\w*\\])\*(?=[^\s*])([^*\n]*?[^\s*\\])\*(?![\w*])|(?<![\w_\\])_(?=[^\s_])([^_\n]*?[^\s_])_(?![\w_])|\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s<>"'`]*[^\s<>"'`.,;:!?)\]}»])/g;
+function link(parent, href, label) {
+  const anchor = element('a');
+  inlineText(anchor, label, false);
+  anchor.href = href;
+  anchor.target = '_blank';
+  anchor.rel = 'noopener noreferrer';
+  parent.append(anchor);
+}
+// Inside a link's label, addresses stay text: a link never holds another.
+function inlineText(parent, text, links = true) {
   let cursor = 0;
-  for (const match of text.matchAll(pattern)) {
+  for (const match of text.matchAll(inlinePattern)) {
+    const [part, escaped, ticks, code, strong, strongAlt, struck, em, emAlt, label, href, angled, bare] = match;
     parent.append(document.createTextNode(text.slice(cursor, match.index)));
-    const part = match[0];
-    if (part.startsWith('`')) parent.append(element('code','',part.slice(1,-1)));
-    else if (part.startsWith('**')) parent.append(element('strong','',part.slice(2,-2)));
-    else {
-      const link = /^\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)$/.exec(part);
-      const anchor = element('a','',link[1]);
-      anchor.href = link[2];
-      anchor.target = '_blank';
-      anchor.rel = 'noopener noreferrer';
-      parent.append(anchor);
-    }
     cursor = match.index + part.length;
+    if (escaped) parent.append(document.createTextNode(escaped));
+    else if (ticks) parent.append(element('code', '', /^ [\s\S]* $/.test(code) && code.trim() ? code.slice(1, -1) : code));
+    else if (!links && (label || angled || bare)) parent.append(document.createTextNode(part));
+    else if (label) link(parent, href, label);
+    else if (angled || bare) link(parent, angled || bare, angled || bare);
+    else {
+      const node = element(strong || strongAlt ? 'strong' : struck ? 'del' : 'em');
+      inlineText(node, strong || strongAlt || struck || em || emAlt, links);
+      parent.append(node);
+    }
   }
   parent.append(document.createTextNode(text.slice(cursor)));
 }
 
-function markdown(text) {
-  const container = element('div','message-content');
-  const languages = [...text.matchAll(/```([^\n]*)\n[\s\S]*?(?:```|$)/g)].map(match => match[1].trim());
-  const blocks = text.split(/```[^\n]*\n([\s\S]*?)(?:```|$)/g);
-  blocks.forEach((block, index) => {
-    if (index % 2) {
-      const pre = element('pre');
-      const code = block.replace(/\n$/, '');
-      const language = languages[(index - 1) / 2] || 'Texto';
-      const wrapper = element('div', 'code-block');
-      const heading = element('div', 'code-heading');
-      const copy = element('button', 'copy-code', 'Copiar');
-      copy.type = 'button';
-      copy.setAttribute('aria-label', `Copiar código · ${language}`);
-      copy.addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText(code); copy.textContent = 'Copiado'; }
-        catch { toast('Não foi possível copiar. Seleciona o código para o copiar.'); }
-      });
-      heading.append(element('span', '', language), copy);
-      const content = element('code', '', code);
-      if (/^(diff|patch)$/i.test(language)) diffContent(content, code);
-      pre.append(content);
-      wrapper.append(heading, pre);
-      container.append(wrapper);
-    } else {
-      for (const paragraph of block.split(/\n\s*\n/)) {
-        if (!paragraph.trim()) continue;
-        if (/^#{1,6} /.test(paragraph)) {
-          const heading = element('h3');
-          inlineText(heading, paragraph.replace(/^#{1,6} /,''));
-          container.append(heading);
-        } else if (paragraph.split('\n').every(line => /^\s*(?:[-*]|\d+\.) /.test(line))) {
-          const list = element(/^\s*\d+\./.test(paragraph) ? 'ol' : 'ul');
-          for (const line of paragraph.split('\n')) {
-            const item = element('li');
-            inlineText(item,line.replace(/^\s*(?:[-*]|\d+\.) /,''));
-            list.append(item);
-          }
-          container.append(list);
-        } else {
-          const node = element('p');
-          inlineText(node,paragraph);
-          container.append(node);
-        }
-      }
-    }
+const fencePattern = /^(\s*)(`{3,}|~{3,})\s*([^`\s]*)[^`]*$/;
+const headingPattern = /^\s{0,3}(#{1,6})\s+(.*?)(?:\s+#+)?\s*$/;
+const rulePattern = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/;
+const quotePattern = /^\s{0,3}>\s?(.*)$/;
+const itemPattern = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
+const tableRule = /^\s*\|?\s*:?-+:?\s*(?:\|\s*:?-+:?\s*)*\|?\s*$/;
+const longCode = 24; // lines a code block shows before it folds
+// Unfolded blocks stay open while a reply streams and re-renders. A block is known by its reply and its first
+// lines, already complete when it folds, since the lines that keep arriving come after them.
+const expandedCode = new Set();
+let codeScope = ''; // the reply markdown() is rendering
+const indentOf = line => line.length - line.trimStart().length;
+const cells = line => line.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map(cell => cell.trim().replace(/\\\|/g, '|'));
+const isTable = (lines, i) => lines[i].includes('|') && i + 1 < lines.length && lines[i + 1].includes('|') && tableRule.test(lines[i + 1]) && cells(lines[i]).length === cells(lines[i + 1]).length;
+const startsBlock = (lines, i) => fencePattern.test(lines[i]) || headingPattern.test(lines[i]) || rulePattern.test(lines[i]) || quotePattern.test(lines[i]) || itemPattern.test(lines[i]) || isTable(lines, i);
+
+function codeView(code, info) {
+  const language = info || 'Texto';
+  const wrapper = element('div', 'code-block');
+  const heading = element('div', 'code-heading');
+  const actions = element('span', 'code-actions');
+  const copy = element('button', 'copy-code', 'Copiar');
+  copy.type = 'button';
+  copy.setAttribute('aria-label', `Copiar código · ${language}`);
+  copy.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(code); copy.textContent = 'Copiado'; }
+    catch { toast('Não foi possível copiar. Seleciona o código para o copiar.'); }
   });
+  const count = code.split('\n').length;
+  if (count > longCode) {
+    const key = [codeScope, language, ...code.split('\n', longCode)].join('\n');
+    const toggle = element('button', 'copy-code code-toggle');
+    toggle.type = 'button';
+    const show = open => { wrapper.classList.toggle('code-folded', !open); toggle.textContent = open ? 'Recolher' : `Mostrar as ${count} linhas`; toggle.setAttribute('aria-expanded', String(open)); };
+    show(expandedCode.has(key));
+    toggle.addEventListener('click', () => { const open = wrapper.classList.contains('code-folded'); if (open) expandedCode.add(key); else expandedCode.delete(key); show(open); });
+    actions.append(toggle);
+  }
+  actions.append(copy);
+  heading.append(element('span', '', language), actions);
+  const pre = element('pre');
+  const content = element('code', '', code);
+  if (/^(diff|patch)$/i.test(language)) diffContent(content, code);
+  pre.append(content);
+  wrapper.append(heading, pre);
+  return wrapper;
+}
+
+// A fence may be indented inside a list item; an unclosed one runs to the end while a reply streams.
+function codeBlock(parent, lines, start, [, indent, fence, info]) {
+  const body = [];
+  let i = start + 1;
+  for (; i < lines.length; i++) {
+    const close = /^\s*(`{3,}|~{3,})\s*$/.exec(lines[i]);
+    if (close && close[1][0] === fence[0] && close[1].length >= fence.length) { i++; break; }
+    body.push(lines[i].slice(Math.min(indent.length, indentOf(lines[i]))));
+  }
+  parent.append(codeView(body.join('\n'), info));
+  return i;
+}
+
+function table(parent, lines, start) {
+  const head = cells(lines[start]);
+  const align = cells(lines[start + 1]).map(cell => cell.startsWith(':') && cell.endsWith(':') ? 'center' : cell.endsWith(':') ? 'right' : '');
+  const row = (values, tag) => {
+    const tr = element('tr');
+    head.forEach((_, index) => { const cell = element(tag); if (align[index]) cell.dataset.align = align[index]; inlineText(cell, values[index] || ''); tr.append(cell); });
+    return tr;
+  };
+  const node = element('table'), thead = element('thead'), tbody = element('tbody');
+  thead.append(row(head, 'th'));
+  let i = start + 2;
+  for (; i < lines.length && lines[i].trim() && lines[i].includes('|') && !fencePattern.test(lines[i]); i++) tbody.append(row(cells(lines[i]), 'td'));
+  node.append(thead);
+  if (tbody.childElementCount) node.append(tbody);
+  const wrap = element('div', 'table-wrap');
+  wrap.append(node);
+  parent.append(wrap);
+  return i;
+}
+
+// Items of one level; deeper lines, continuations and blocks after a blank line belong to the item above.
+function list(parent, lines, start) {
+  const first = itemPattern.exec(lines[start]), indent = first[1].length, ordered = /\d/.test(first[2]);
+  const node = element(ordered ? 'ol' : 'ul');
+  if (ordered && parseInt(first[2], 10) !== 1) node.start = parseInt(first[2], 10);
+  const sibling = line => { const match = itemPattern.exec(line); return match && Math.abs(match[1].length - indent) <= 1 && /\d/.test(match[2]) === ordered ? match : null; };
+  let i = start;
+  while (i < lines.length) {
+    if (!lines[i].trim()) {
+      let next = i + 1;
+      while (next < lines.length && !lines[next].trim()) next++;
+      if (next < lines.length && sibling(lines[next])) { i = next; continue; }
+      break;
+    }
+    const match = sibling(lines[i]);
+    if (!match) break;
+    const column = match[0].length - match[3].length, body = [];
+    i++;
+    while (i < lines.length) {
+      const line = lines[i];
+      if (!line.trim()) {
+        let next = i + 1;
+        while (next < lines.length && !lines[next].trim()) next++;
+        if (next < lines.length && indentOf(lines[next]) > indent && !(itemPattern.test(lines[next]) && Math.abs(indentOf(lines[next]) - indent) <= 1)) { body.push(...lines.slice(i, next)); i = next; continue; }
+        break;
+      }
+      if (indentOf(line) > indent + 1) { body.push(line); i++; continue; }
+      if (body.length && !body.at(-1).trim()) break;
+      if (startsBlock(lines, i)) break;
+      body.push(line); i++;
+    }
+    const item = element('li');
+    let text = match[3];
+    const task = /^\[([ xX])\]\s+/.exec(text);
+    if (task) { item.classList.add('task'); item.append(element('span', 'task-box', task[1] === ' ' ? '☐' : '☑')); text = text.slice(task[0].length); }
+    const nested = body.map(line => line.slice(Math.min(column, indentOf(line))));
+    const lead = [text];
+    let k = 0;
+    while (k < nested.length && nested[k].trim() && !startsBlock(nested, k)) lead.push(nested[k++].trim());
+    inlineText(item, lead.join('\n'));
+    if (k < nested.length) renderBlocks(item, nested.slice(k));
+    node.append(item);
+  }
+  parent.append(node);
+  return i;
+}
+
+function renderBlocks(parent, lines) {
+  let i = 0, match;
+  while (i < lines.length) {
+    const line = lines[i];
+    if (!line.trim()) { i++; continue; }
+    if ((match = fencePattern.exec(line))) { i = codeBlock(parent, lines, i, match); continue; }
+    if ((match = headingPattern.exec(line))) {
+      const heading = element(match[1].length <= 2 ? 'h3' : match[1].length === 3 ? 'h4' : 'h5');
+      inlineText(heading, match[2]);
+      parent.append(heading);
+      i++; continue;
+    }
+    if (rulePattern.test(line)) { parent.append(element('hr')); i++; continue; }
+    if (quotePattern.test(line)) {
+      const body = [];
+      while (i < lines.length && lines[i].trim() && (match = quotePattern.exec(lines[i]))) { body.push(match[1]); i++; }
+      const quote = element('blockquote');
+      renderBlocks(quote, body);
+      parent.append(quote);
+      continue;
+    }
+    if (isTable(lines, i)) { i = table(parent, lines, i); continue; }
+    if (itemPattern.test(line)) { i = list(parent, lines, i); continue; }
+    const paragraph = [line.trim()];
+    for (i++; i < lines.length && lines[i].trim() && !startsBlock(lines, i); i++) paragraph.push(lines[i].trim());
+    const node = element('p');
+    inlineText(node, paragraph.join('\n'));
+    parent.append(node);
+  }
+}
+
+function markdown(text, scope = '') {
+  const container = element('div','message-content');
+  codeScope = scope;
+  try { renderBlocks(container, String(text || '').replace(/\r\n?/g, '\n').split('\n').map(line => line.replace(/^\t+/, tabs => '    '.repeat(tabs.length)))); }
+  finally { codeScope = ''; }
   return container;
 }
 
@@ -585,7 +714,7 @@ function internalMessage(message, owner) {
   const name = providerName(owner.provider);
   if (message.role === 'user') return element('p', 'handoff-note', `HYDRAQ pediu ao ${name} ${message.internal==='memory-proposal'?'uma proposta de memória':'um resumo de passagem'} · ${new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}`);
   const details = element('details', 'handoff-summary');
-  details.append(element('summary', '', `${message.internal==='memory-proposal'?'Proposta de memória':'Resumo de passagem'} · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text));
+  details.append(element('summary', '', `${message.internal==='memory-proposal'?'Proposta de memória':'Resumo de passagem'} · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text, message.id));
   return details;
 }
 
@@ -648,13 +777,14 @@ function renderMessages(conversation) {
     const time = element('time','',new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}));
     time.dateTime = message.at;
     header.append(time);
-    if (message.role !== 'user' && message.text) {
+    if (message.text) {
+      const user = message.role === 'user';
       const copyMsg = element('button', 'copy-message', 'Copiar');
       copyMsg.type = 'button';
-      copyMsg.dataset.tip = 'Copiar resposta completa';
+      copyMsg.dataset.tip = user ? (message.kind === 'steer' ? 'Copiar a orientação' : 'Copiar o pedido') : 'Copiar resposta completa';
       copyMsg.addEventListener('click', async () => {
         try { await navigator.clipboard.writeText(message.text); copyMsg.textContent = 'Copiado ✓'; setTimeout(() => { copyMsg.textContent = 'Copiar'; }, 1800); }
-        catch { toast('Não foi possível copiar a resposta.'); }
+        catch { toast(user ? 'Não foi possível copiar o pedido.' : 'Não foi possível copiar a resposta.'); }
       });
       header.append(copyMsg);
     }
@@ -673,7 +803,7 @@ function renderMessages(conversation) {
         article.append(details);
       }
     } else {
-      article.append(markdown(message.text));
+      article.append(markdown(message.text, message.id));
       if (message.streaming) article.lastElementChild.append(element('span','streaming-indicator'));
       const turn = owner.turns?.find(turn => turn.requestId === message.requestId || turn.id === message.turnId);
       const finalMessage = !owner.messages.slice(owner.messages.indexOf(message) + 1).some(next => next.role === 'assistant' && (next.requestId === message.requestId || next.turnId === message.turnId));
@@ -1235,8 +1365,7 @@ function render() {
   claudeUI.render();
   openCodeUI.render();
   agyUI.render();
-  terminalSwitch.render();
-  inspectorTerminal.render();
+  renderTerminal();
   opinionUI.renderAutomatic();
   const connection = providerState().connection;
   const account = providerState().account;

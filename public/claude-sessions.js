@@ -1,7 +1,7 @@
 // The original Claude TUI runs outside HYDRAQ: the group stays reserved until the person returns.
 export class ClaudeSessionsUI {
-  constructor({api, state, current, project, choose, refresh, toast}) {
-    Object.assign(this, {api, state, current, project, choose, refresh, toast});
+  constructor({api, state, current, project, choose, refresh, toast, changed}) {
+    Object.assign(this, {api, state, current, project, choose, refresh, toast, changed});
     this.host = document.querySelector('#claude-sessions');
     this.host.innerHTML = `<p class="settings-title">Claude original</p>
       <p data-claude-status class="reading-hint"></p>
@@ -55,16 +55,27 @@ export class ClaudeSessionsUI {
     return this.state()?.conversations.find(item => item.provider === 'claude' && item.terminal && (item.group || item.id) === group) || null;
   }
   releasable() { return !this.query('[data-claude-release]').disabled; }
+  /** The command of the Claude that holds this conversation; it also stays visible in this section. */
+  async command() {
+    const session = this.session();
+    if (!session) return '';
+    const result = await this.api(`/api/conversations/${session.id}/claude-open`, {});
+    this.commandId = result.conversationId;
+    this.query('textarea').value = result.command || '';
+    this.query('[data-claude-command]').hidden = !result.command;
+    return result.command || '';
+  }
   /** A confirmation, or a launch that failed, waits in this section. */
   attention() { const command = this.query('[data-claude-command]'); return Boolean(this.confirmation) || (!command.hidden && command.open); }
-  // The state is fetched once the action settled, so everything that shows this section's progress follows it.
+  // The terminal controls hear when the action starts and once the state is fetched after it, so they show its progress too.
   async run(action) {
     if (this.pending) return;
-    this.pending = true; this.render();
+    this.pending = true; this.render(); this.changed?.();
     try { await action(); }
     catch (error) { this.toast(error.message); }
     finally { this.pending = false; this.render(); }
     await this.refresh().catch(error => this.toast(error.message));
+    this.changed?.();
   }
   list(more) {
     return this.run(async () => {
