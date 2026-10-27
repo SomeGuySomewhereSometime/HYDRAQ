@@ -26,8 +26,8 @@ test('só leitura: leitura, comandos simples e artefactos do agy passam; escrita
   assert.equal(decide(call('call_mcp_tool', { ServerName: 'other', ToolName: 'send_to_peer' }), { ...policy, mcp: { hydraq: ['send_to_peer'] } }).decision, 'deny');
   assert.match(decide(call('write_file', { Path: '/p' }), policy).reason, /Planear\/Só leitura/);
 
-  for (const line of ['ls -la', 'grep -rn "ensaio" .', 'cat README.md', 'find . -name "*.mjs"', 'rg -n guard lib', 'git status', 'git log --oneline -5', 'git diff HEAD~1', 'sort -u notas.txt', 'head -n 20 lib/x.mjs']) assert.ok(readOnlyCommand(line), line);
-  for (const line of ['touch y.txt', 'rm -rf .', 'ls; rm x', 'cat a | sh', 'ls && touch x', 'echo x > f', 'cat $(which sh)', 'ls `id`', 'find . -delete', 'find . -exec rm {} +', 'rg --pre=sh x', 'sort -o out in', 'sort -uo out in', 'tree -o out', 'git commit -m x', 'git -c core.pager=sh log', 'git diff --output=x', 'git diff --ext-diff', 'git grep -O x', 'python3 -c 1', 'node x', 'sed -i s/a/b/ f', 'ls\nrm x', '', 'ls ' + 'a'.repeat(2001)]) assert.ok(!readOnlyCommand(line), line);
+  for (const line of ['ls -la', 'grep -rn "ensaio" .', 'cat README.md', 'find . -name "*.mjs"', 'rg -n guard lib', 'git status', 'git log --oneline -5', 'git diff HEAD~1', 'head -n 20 lib/x.mjs', 'nl -ba lib/x.mjs', 'du -sh lib']) assert.ok(readOnlyCommand(line), line);
+  for (const line of ['touch y.txt', 'rm -rf .', 'ls; rm x', 'cat a | sh', 'ls && touch x', 'echo x > f', 'cat $(which sh)', 'ls `id`', 'find . -delete', 'find . -exec rm {} +', 'rg --pre=sh x', 'sort -o out in', 'sort -uo out in', 'tree -o out', 'git commit -m x', 'git -c core.pager=sh log', 'git diff --output=x', 'git diff --ext-diff', 'git grep -O x', 'git cat-file --filters HEAD:x', 'file -C -m probe.magic', 'file x', 'tree -R', 'sort -u notas.txt', 'sort --compress-program=sh x', 'date -s 2020-01-01', 'python3 -c 1', 'node x', 'sed -i s/a/b/ f', 'ls\nrm x', '', 'ls ' + 'a'.repeat(2001)]) assert.ok(!readOnlyCommand(line), line);
   assert.equal(answer('run_command', { CommandLine: 'ls -la' }), 'ask');
   assert.equal(answer('run_command', { CommandLine: 'touch y.txt' }), 'deny');
 
@@ -66,6 +66,8 @@ test('instalação junta só a entrada da HYDRAQ, guarda o original uma vez e n�
   assert.equal(await ensureGuard({ hooksFile, directory: guard }), true);
   assert.deepEqual(Object.keys(JSON.parse(await readFile(hooksFile, 'utf8'))), [GUARD_HOOK]);
   assert.equal(await exists(hooksFile + '.before-hydraq'), false, 'sem ficheiro anterior não há cópia');
+  assert.equal(await ensureGuard({ hooksFile, directory: guard, node: '/outro/node' }), true);
+  assert.equal(await exists(hooksFile + '.before-hydraq'), false, 'um ficheiro só com a entrada da HYDRAQ não precisa de cópia');
   const other = { PreToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }] };
   await writeFile(hooksFile, JSON.stringify({ lint: other }));
   assert.equal(await ensureGuard({ hooksFile, directory: guard }), true);
@@ -112,6 +114,20 @@ test('Planear no agy: regra ativa antes do primeiro pedido, escrita e comandos r
   await client.send(c.id, 'guard-tools', 'g3', { sandbox: 'workspace-write' }); await waitFor(() => c.turns.length === 3 && c.status === 'completed');
   assert.equal(c.messages.at(-1).text, 'read_file:ok run_command:ok write_file:ok write_file:ok run_command:ok');
   assert.equal(c.turns[2].readOnlyGuard, undefined);
+});
+
+test('o modo do processo segue o pedido, também quando a conversa volta de Planear com o modo anterior', async t => {
+  const { client, directory } = await setup(t);
+  const c = await client.create({ cwd: directory, model: 'gemini-4-argon', effort: 'low', sandbox: 'accept-edits' });
+  await client.send(c.id, 'olá', 'm1'); await waitFor(() => c.status === 'completed');
+  assert.match(c.messages.at(-1).text, /modo accept-edits/);
+  await client.send(c.id, 'olá', 'm2', { sandbox: 'plan' }); await waitFor(() => c.turns.length === 2 && c.status === 'completed');
+  assert.match(c.messages.at(-1).text, /modo request-review/);
+  const planPid = client.session.child.pid;
+  c.sandbox = 'accept-edits'; // what the Hydra gives back, while the warm process still runs Planear
+  await client.send(c.id, 'olá', 'm3'); await waitFor(() => c.turns.length === 3 && c.status === 'completed');
+  assert.match(c.messages.at(-1).text, /modo accept-edits/);
+  assert.notEqual(client.session.child.pid, planPid, 'novo processo com o modo pedido');
 });
 
 test('uma ferramenta que a proteção não viu para o pedido, sem o repetir', async t => {

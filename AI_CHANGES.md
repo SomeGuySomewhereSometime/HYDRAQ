@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 111
+Versão atual: 113
 
 ## Resumo atual
+
+- Correções da revisão do Codex às entradas 108 e 110 (entrada 112): o hook do agy deixava passar comandos com opções que escrevem ou correm programas (`file -C`, `tree -R`, `sort --compress-program`); ao voltar de Planear, o agy reutilizava o processo no modo errado; uma tarefa Hydra devolvida oferecia «Retomar». 507 testes aprovados (1 omitido); Hydra na conversa 26/26, modo Hydra 66/66, `claudex-ui` 53/53. Ativado na 4318 por reinício autorizado e commit sem push (entrada 113).
 
 - Hydra na mesma conversa (entrada 110): numa conversa com histórico, o Hydra usa as sessões do grupo (as do Dual primeiro), dá o histórico a quem entra de novo e, no fim ou ao escolher outro modo, devolve a conversa com as definições anteriores e uma nota para o pedido seguinte. O agy entra pela sua conversa normal, com o servidor fixo `hydraq` e o hook só de leitura, sem bwrap. Ensaio real Codex Sol + agy Flash 14/14 (Normal → Dual → Geminex → Normal na mesma conversa); 506 testes aprovados (1 omitido); validações da página 25/25, 66/66 e 53/53. Ativado na 4318 por reinício autorizado e commit sem push (entrada 111).
 
@@ -1342,3 +1344,31 @@ Versão atual: 111
 - Só o PID 224007 (scope `hydraq-20261027T000504Z`) recebeu SIGTERM. Parou em 0,4 s e os 3 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; ambiente só em memória) no scope `hydraq-20261027T005732Z`, PID 253603. Disponível em 1 s.
 - Depois: cinco clientes ligados, 87 conversas; impressões de conversas, pareceres, automático, colaboração, projetos, Dual e Hydra iguais às de antes. Ficheiros de `public/` servidos iguais ao disco. Os registos do Hydra já trazem `inPlace`, o que confirma o código da entrada 110 ativo.
 - Ativa a entrada 110. Commit com as entradas 110 e 111; `output/` fica fora. Sem push.
+
+### 112 — 2026-10-27 — Claude
+
+- O utilizador trouxe a revisão do Codex aos commits `edb05ac` e `20e401a`, com três problemas reproduzidos. Os três confirmaram-se antes da correção.
+- **Hook do agy** (`lib/antigravity-guard.mjs`): a lista validava só o nome do programa. `file -C -m x` recebia `ask` e escrevia `x.mgc`; também passavam `tree -R` e `tree -o` (escrevem), `sort --compress-program` (corre um programa), `date -s` e `git cat-file --filters` (corre filtros). Saem da lista `file`, `tree`, `sort` e `date`, e o `git` passa a recusar `--filters`. Ficam só programas sem opções de escrita ou execução, além das exceções já recusadas por opção (`find -exec/-delete/-fprint…`, `rg --pre`, `git --output/--ext-diff/--textconv/-O`).
+- **Modo do processo agy** (`lib/antigravity.mjs`): a decisão de relançar comparava o modo registado na conversa e não o modo com que o processo foi lançado. Depois do Hydra (ou de qualquer reposição), uma conversa de volta a Aceitar edições reutilizava o processo de Planear. A sessão passa a guardar o modo de lançamento e é com esse que se compara.
+- **Página** (`public/claudex.js`): uma tarefa que já devolveu a conversa deixa de oferecer «Retomar a mesma tarefa», que o servidor recusava; oferece «Nova tarefa a partir deste progresso», na mesma conversa.
+- **Testes:**
+  - `test/antigravity-guard.test.mjs`: novos casos recusados e um teste do modo do processo (Aceitar edições → Planear → reposição). Com a comparação antiga, o teste novo falha.
+  - `validation/hydra-inplace-ui.mjs`: verificação da tarefa devolvida. Falha com o `claudex.js` anterior e passa com a correção.
+- **Verificação:** suite sequencial **508 testes: 507 aprovados, 0 falhas, 1 omitido**. Hydra na conversa **26/26**, modo Hydra **66/66**, `claudex-ui` **53/53**, sem erros de JavaScript. `git diff --check` aprovado. Sem novos pedidos aos modelos reais.
+- **Limitações:**
+  - A 4318 ainda corre o código anterior.
+  - O hook instalado em `~/.gemini/config/hooks.json` traz a lista antiga dentro do comando. É reescrito no primeiro pedido Planear depois do reinício; até lá, a proteção da instância ativa usa a lista antiga.
+  - Continua a ser uma lista de programas mantida à mão, não uma barreira do sistema operativo. Sem commit nem push.
+
+### 113 — 2026-10-27 — Claude
+
+- Reinício e commit pedidos pelo utilizador.
+- Antes da paragem: nenhum pedido em curso, autorização, reserva, terminal, passagem, sessão nativa, colaboração, parecer pendente ou tarefa Hydra ativa.
+- Só o PID 253603 (scope `hydraq-20261027T005732Z`) recebeu SIGTERM. Parou em 0,6 s e os 3 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; ambiente só em memória) no scope `hydraq-20261027T012316Z`, PID 271333. Disponível em 2 s. Cinco clientes ligados e 87 conversas; impressões do estado iguais às de antes e `public/` servido igual ao disco.
+- **Hook do agy:** atualizado logo a seguir no `~/.gemini/config/hooks.json` real, em vez de esperar pelo primeiro pedido Planear. Pelo comando instalado, `file -C -m …` passa a `deny` e `ls -la` continua `ask`.
+- **Cópias de segurança:** a atualização revelou que a cópia `hooks.json.before-hydraq` era feita mesmo quando o ficheiro só tinha a entrada da própria HYDRAQ (o `hooks.json` não existia antes da entrada 108). Passa a fazer-se só quando o ficheiro tem conteúdo do utilizador (`lib/antigravity-guard.mjs`, com um teste novo).
+  - A cópia criada por engano, só com a entrada `hydraq`, foi apagada.
+  - `mcp_config.json.before-hydraq` (vazia, datada de 8 de junho, como o original vazio) ficou intacta.
+  - Esta alteração só decide se se faz cópia; a 4318 ativa usa-a no próximo reinício.
+- **Verificação:** suite sequencial **508 testes: 507 aprovados, 0 falhas, 1 omitido**; `git diff --check` aprovado.
+- Commit com as entradas 112 e 113; `output/` fica fora. Sem push.

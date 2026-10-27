@@ -100,6 +100,12 @@ try {
   await until(() => clients.codex.logs.at(-1)?.text.includes('Continua sem o Hydra.'));
   check('next request tells the model the task ended', /\[HYDRAQ\] A tarefa ClaudeX desta conversa terminou \(parada pelo utilizador\)/.test(clients.codex.logs.at(-1).text));
   clients.codex.finish(normal, 'Resposta normal.');
+  // A task that gave its conversation back offers a new task from its progress, never a resume.
+  await page.locator('#tab-claudex').click();
+  await page.locator('#claudex-view .cx-history nav button', { hasText: 'Segunda tarefa' }).click();
+  await page.waitForFunction(() => /Nova tarefa a partir deste progresso/.test(document.querySelector('#claudex-view .cx-composer button.primary')?.textContent), null, { timeout: 6000 }).catch(() => {});
+  check('given-back task offers a new task, not a resume', /Nova tarefa a partir deste progresso/.test(await page.locator('#claudex-view .cx-composer button.primary').textContent()) && await page.locator('#claudex-view .cx-composer', { hasText: 'Retomar' }).count() === 0);
+  await page.locator('#tab-conversations').click();
   for (const theme of ['classic', 'mono', 'atelier']) {
     await page.evaluate(t => localStorage.setItem('hydraq.theme', t), theme); await page.reload(); await page.waitForFunction(() => document.querySelector('#model').value);
     for (const width of [1440, 390]) {
