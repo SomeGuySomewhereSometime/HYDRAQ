@@ -1,0 +1,136 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile, readFile, mkdir, access } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import path from 'node:path';
+import os from 'node:os';
+import { fileURLToPath } from 'node:url';
+import { Antigravity } from '../lib/antigravity.mjs';
+import { GUARD_HOOK, guardPaths, readOnlyPolicy, readOnlyCommand, publicUrl, decide, guardCommand, ensureGuard, openGuard, closeGuard, guardDecisions } from '../lib/antigravity-guard.mjs';
+
+const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+const waitFor = async predicate => { const deadline = Date.now() + 4000; while (!predicate()) { if (Date.now() > deadline) throw new Error('Tempo excedido.'); await new Promise(r => setTimeout(r, 10)); } };
+const exists = file => access(file).then(() => true, () => false);
+const temporary = async t => { const directory = await mkdtemp(path.join(os.tmpdir(), 'hydraq-agy-guard-')); t.after(() => rm(directory, { recursive: true, force: true })); return directory; };
+const call = (name, args, stepIdx = 1, conversationId = 'conv-1234') => ({ conversationId, stepIdx, toolCall: { name, args }, artifactDirectoryPath: '/home/x/.gemini/antigravity-cli/brain/' + conversationId });
+
+test('só leitura: leitura, comandos simples e artefactos do agy passam; escrita, comandos que alteram, MCP e endereços locais não', () => {
+  const policy = readOnlyPolicy(), answer = (name, args) => decide(call(name, args), policy).decision;
+  for (const name of ['read_file', 'view_file', 'list_dir', 'grep_search', 'search_web']) assert.equal(answer(name, {}), 'ask', name);
+  assert.equal(answer('write_file', { Path: '/home/x/.gemini/antigravity-cli/brain/conv-1234/task.md' }), 'ask');
+  for (const target of ['/projeto/x.txt', '/home/x/.gemini/antigravity-cli/brain/conv-1234/../../settings.json', '/home/x/.gemini/antigravity-cli/brain/conv-12345/x', 'relativo.txt']) assert.equal(answer('write_file', { Path: target }), 'deny', target);
+  for (const name of ['write_to_file', 'replace_file_content', 'multi_replace_file_content']) assert.equal(answer(name, { TargetFile: '/projeto/x' }), 'deny', name);
+  for (const name of ['invoke_subagent', 'define_subagent', 'browser_subagent', 'execute_browser_javascript', 'schedule', 'send_command_input', 'unknown_tool']) assert.equal(answer(name, {}), 'deny', name);
+  assert.equal(answer('call_mcp_tool', { ServerName: 'hydraq', ToolName: 'send_to_peer' }), 'deny');
+  assert.equal(decide(call('call_mcp_tool', { ServerName: 'hydraq', ToolName: 'send_to_peer' }), { ...policy, mcp: { hydraq: ['send_to_peer'] } }).decision, 'ask');
+  assert.equal(decide(call('call_mcp_tool', { ServerName: 'other', ToolName: 'send_to_peer' }), { ...policy, mcp: { hydraq: ['send_to_peer'] } }).decision, 'deny');
+  assert.match(decide(call('write_file', { Path: '/p' }), policy).reason, /Planear\/Só leitura/);
+
+  for (const line of ['ls -la', 'grep -rn "ensaio" .', 'cat README.md', 'find . -name "*.mjs"', 'rg -n guard lib', 'git status', 'git log --oneline -5', 'git diff HEAD~1', 'sort -u notas.txt', 'head -n 20 lib/x.mjs']) assert.ok(readOnlyCommand(line), line);
+  for (const line of ['touch y.txt', 'rm -rf .', 'ls; rm x', 'cat a | sh', 'ls && touch x', 'echo x > f', 'cat $(which sh)', 'ls `id`', 'find . -delete', 'find . -exec rm {} +', 'rg --pre=sh x', 'sort -o out in', 'sort -uo out in', 'tree -o out', 'git commit -m x', 'git -c core.pager=sh log', 'git diff --output=x', 'git diff --ext-diff', 'git grep -O x', 'python3 -c 1', 'node x', 'sed -i s/a/b/ f', 'ls\nrm x', '', 'ls ' + 'a'.repeat(2001)]) assert.ok(!readOnlyCommand(line), line);
+  assert.equal(answer('run_command', { CommandLine: 'ls -la' }), 'ask');
+  assert.equal(answer('run_command', { CommandLine: 'touch y.txt' }), 'deny');
+
+  for (const url of ['https://antigravity.google/docs', 'http://example.com/a?b=1']) assert.ok(publicUrl(url), url);
+  for (const url of ['http://127.0.0.1:4318/api/bootstrap', 'http://localhost:4318', 'http://[::1]:4318', 'http://10.0.0.1', 'http://192.168.1.2', 'http://172.20.0.1', 'http://169.254.169.254', 'http://2130706433', 'http://0x7f000001', 'http://printer.local', 'http://router', 'file:///etc/passwd', 'http://user:pw@example.com', 'ftp://example.com', 'nope']) assert.ok(!publicUrl(url), url);
+  assert.equal(answer('read_url_content', { Url: 'http://127.0.0.1:4318/api/bootstrap' }), 'deny');
+  assert.equal(answer('read_url_content', { Url: 'https://antigravity.google/docs' }), 'ask');
+});
+
+test('o hook corre pelo shell, regista cada passo e só falha fechado nas conversas protegidas', async t => {
+  const directory = await temporary(t), command = guardCommand({ directory });
+  const run = (input, line = command) => JSON.parse(execFileSync('sh', ['-c', line], { input: typeof input === 'string' ? input : JSON.stringify(input) }).toString());
+  assert.equal(run(call('write_file', { Path: '/p/x' })).decision, 'ask', 'sem regra: fluxo normal do agy');
+  assert.equal(run('não é JSON').decision, 'ask');
+  await openGuard(directory, 'conv-1234');
+  assert.equal(run(call('read_file', { Path: '/p/README.md' }, 2)).decision, 'ask');
+  assert.equal(run(call('write_file', { Path: '/p/x.txt' }, 4)).decision, 'deny');
+  assert.equal(run(call('run_command', { CommandLine: 'ls -la' }, 6)).decision, 'ask');
+  assert.equal(run(call('run_command', { CommandLine: 'touch y.txt' }, 8)).decision, 'deny');
+  assert.equal(run(call('write_file', { Path: '/p/x' }, 9, 'other-5678')).decision, 'ask', 'outra conversa não é afetada');
+  assert.deepEqual([...guardDecisions(directory, 'conv-1234')], [[2, 'ask'], [4, 'deny'], [6, 'ask'], [8, 'deny']]);
+  const missing = guardCommand({ directory, node: path.join(directory, 'no-node') });
+  assert.equal(run(call('read_file', {}), missing).decision, 'deny', 'sem Node, a conversa protegida recusa');
+  assert.equal(run(call('read_file', {}, 1, 'other-5678'), missing).decision, 'ask', 'sem Node, as restantes seguem normalmente');
+  await writeFile(path.join(directory, 'conv-1234.json'), '{incompleto');
+  assert.equal(run(call('read_file', {})).decision, 'deny', 'regra ilegível recusa');
+  await openGuard(directory, 'conv-1234');
+  assert.equal(guardDecisions(directory, 'conv-1234').size, 0, 'cada pedido começa sem decisões anteriores');
+  closeGuard(directory, 'conv-1234');
+  assert.equal(run(call('write_file', { Path: '/p/x' })).decision, 'ask');
+  await assert.rejects(openGuard(directory, '../escape'), /inesperado/);
+});
+
+test('instalação junta só a entrada da HYDRAQ, guarda o original uma vez e não toca num ficheiro inválido', async t => {
+  const directory = await temporary(t), hooksFile = path.join(directory, 'config', 'hooks.json'), guard = path.join(directory, 'guard');
+  assert.equal(await ensureGuard({ hooksFile, directory: guard }), true);
+  assert.deepEqual(Object.keys(JSON.parse(await readFile(hooksFile, 'utf8'))), [GUARD_HOOK]);
+  assert.equal(await exists(hooksFile + '.before-hydraq'), false, 'sem ficheiro anterior não há cópia');
+  const other = { PreToolUse: [{ matcher: 'run_command', hooks: [{ command: './lint.sh' }] }] };
+  await writeFile(hooksFile, JSON.stringify({ lint: other }));
+  assert.equal(await ensureGuard({ hooksFile, directory: guard }), true);
+  const merged = JSON.parse(await readFile(hooksFile, 'utf8'));
+  assert.deepEqual(merged.lint, other);assert.equal(merged[GUARD_HOOK].PreToolUse[0].matcher, '*');
+  assert.equal(merged[GUARD_HOOK].PreToolUse[0].hooks[0].command, guardCommand({ directory: guard }));
+  assert.deepEqual(JSON.parse(await readFile(hooksFile + '.before-hydraq', 'utf8')), { lint: other });
+  assert.equal(await ensureGuard({ hooksFile, directory: guard }), false, 'já instalada: não reescreve');
+  assert.equal(await ensureGuard({ hooksFile, directory: guard, node: '/outro/node' }), true, 'atualiza uma entrada desatualizada');
+  assert.deepEqual(JSON.parse(await readFile(hooksFile + '.before-hydraq', 'utf8')), { lint: other }, 'a cópia do original não é substituída');
+  await writeFile(hooksFile, '{inválido');
+  await assert.rejects(ensureGuard({ hooksFile, directory: guard }), /não é JSON válido/);
+  assert.equal(await readFile(hooksFile, 'utf8'), '{inválido');
+});
+
+test('o agy real usa a configuração da HOME com que corre; o simulado só com ficheiro indicado', () => {
+  const real = new Antigravity({ dataDir: '/tmp/x', defaultCwd: '/tmp', env: { HOME: '/home/teste', PATH: '/usr/bin' } });
+  assert.deepEqual({ hooksFile: real.hooksFile, directory: real.guardDirectory }, guardPaths('/home/teste'));
+  const simulated = new Antigravity({ dataDir: '/tmp/x', defaultCwd: '/tmp', prefixArgs: ['fake.mjs'], env: { HOME: '/home/teste' } });
+  assert.equal(simulated.hooksFile, null);assert.equal(simulated.guardDirectory, null);
+});
+
+async function setup(t, env = {}) {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'hydraq-agy-guard-')), hooksFile = path.join(directory, 'agy-config', 'hooks.json'), guardDirectory = path.join(directory, 'guard');
+  await writeFile(path.join(directory, 'README.md'), 'Projeto de teste.\n');
+  const options = { dataDir: path.join(directory, 'state'), defaultCwd: directory, settingsFile: path.join(directory, 'settings.json'), executable: process.execPath, prefixArgs: [path.join(root, 'test/fixtures/fake-agy.mjs')], env: { ...process.env, FAKE_AGY_HOOKS: hooksFile, ...env }, hooksFile, guardDirectory };
+  const client = new Antigravity(options), clients = [client];
+  t.after(async () => { for (const instance of clients) await instance.close(); await rm(directory, { recursive: true, force: true }); });
+  await client.load(); await client.connect();
+  return { client, clients, directory, hooksFile, guardDirectory, options };
+}
+
+test('Planear no agy: regra ativa antes do primeiro pedido, escrita e comandos recusados, regra retirada no fim e sem --mode plan', async t => {
+  const { client, directory, hooksFile, guardDirectory } = await setup(t);
+  const c = await client.create({ cwd: directory, model: 'gemini-4-argon', effort: 'low', sandbox: 'plan' });
+  await client.send(c.id, 'guard-tools', 'g1'); await waitFor(() => c.status === 'completed');
+  assert.equal(c.messages.at(-1).text, 'read_file:ok run_command:ok write_file:recusada write_file:ok run_command:recusada');
+  assert.equal(c.turns[0].readOnlyGuard, true);
+  assert.ok(JSON.parse(await readFile(hooksFile, 'utf8'))[GUARD_HOOK]);
+  assert.equal(await exists(path.join(guardDirectory, c.threadId + '.json')), false, 'a regra só existe durante o pedido');
+  await client.send(c.id, 'olá', 'g2'); await waitFor(() => c.turns.length === 2 && c.status === 'completed');
+  assert.match(c.messages.at(-1).text, /modo request-review/);
+  await client.send(c.id, 'guard-tools', 'g3', { sandbox: 'workspace-write' }); await waitFor(() => c.turns.length === 3 && c.status === 'completed');
+  assert.equal(c.messages.at(-1).text, 'read_file:ok run_command:ok write_file:ok write_file:ok run_command:ok');
+  assert.equal(c.turns[2].readOnlyGuard, undefined);
+});
+
+test('uma ferramenta que a proteção não viu para o pedido, sem o repetir', async t => {
+  const { client, directory, guardDirectory } = await setup(t, { FAKE_AGY_SKIP_HOOKS: 'write_file' });
+  const c = await client.create({ cwd: directory, model: 'gemini-4-argon', effort: 'low', sandbox: 'plan' });
+  await client.send(c.id, 'guard-hold-write', 'skip'); await waitFor(() => c.status === 'failed');
+  assert.match(c.error, /não confirmou write_file/);assert.equal(c.turns.length, 1);assert.equal(c.turns[0].status, 'failed');
+  await waitFor(() => !client.session);
+  assert.equal(await exists(path.join(guardDirectory, c.threadId + '.json')), false);
+});
+
+test('sem a proteção instalável, o pedido Planear não começa; uma regra antiga sai ao carregar', async t => {
+  const { client, clients, directory, hooksFile, guardDirectory, options } = await setup(t);
+  await mkdir(path.dirname(hooksFile), { recursive: true }); await writeFile(hooksFile, '{inválido');
+  const c = await client.create({ cwd: directory, model: 'gemini-4-argon', effort: 'low', sandbox: 'plan' });
+  await assert.rejects(client.send(c.id, 'guard-tools', 'blocked'), /proteção só de leitura do agy/);
+  assert.equal(c.turns.length, 0);assert.equal(await readFile(hooksFile, 'utf8'), '{inválido');
+  await writeFile(hooksFile, '{}');
+  await client.send(c.id, 'olá', 'ok'); await waitFor(() => c.status === 'completed');
+  await openGuard(guardDirectory, c.threadId); await client.close();
+  const reopened = new Antigravity(options); clients.push(reopened); await reopened.load();
+  assert.equal(await exists(path.join(guardDirectory, c.threadId + '.json')), false);
+});

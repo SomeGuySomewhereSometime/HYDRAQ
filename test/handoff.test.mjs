@@ -201,7 +201,8 @@ test('retoma os três clientes com acesso mais restrito e mantém os IDs nativos
   const agChat=antigravity.conversation(ag.id);
   await hub.send(ag.id,'primeiro','a5');await waitFor(idle(hub));const agId=agChat.threadId, agPid=antigravity.session.child.pid;
   await hub.send(ag.id,'planeia','a6',{sandbox:'plan'});await waitFor(idle(hub));
-  assert.equal(agChat.threadId,agId);assert.notEqual(antigravity.session.child.pid,agPid);assert.equal(agChat.permissionMode,'plan');
+  // agy ignores --mode plan with slash commands disabled: Planear relaunches with the guard instead of that flag.
+  assert.equal(agChat.threadId,agId);assert.notEqual(antigravity.session.child.pid,agPid);assert.equal(agChat.turns.at(-1).sandbox,'plan');assert.notEqual(agChat.permissionMode,'plan');
   assert.equal(await lastAgy(agChat),'planeia');
   await assert.rejects(hub.send(ag.id,'inválido','bad',{sandbox:'read-only'}),/Modo de acesso inválido/);
   assert.equal(agChat.sandbox,'plan');assert.equal(agChat.turns.length,2);

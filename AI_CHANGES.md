@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 107
+Versão atual: 109
 
 ## Resumo atual
+
+- Planear/Só leitura do agy passa a ser real (entrada 108): com os comandos de barra desligados o agy ignorava `--mode plan`, por isso o Planear do agy nunca foi só de leitura fora do Hydra. Passa a valer um hook da HYDRAQ em `~/.gemini/config/hooks.json`, com regra por conversa e vigilância por passo. 501 testes aprovados (1 omitido); validação real 9/9 com o Flash; hook instalado com autorização e sessão normal do agy confirmada pelo utilizador no terminal. Ativado na 4318 por reinício autorizado (entrada 109); commit sem push.
 
 - Correção da entrada 106 pela revisão do Claude (entrada 107): nos pedidos que a HYDRAQ faz sozinha (proposta de memória, resumo de passagem), o cartão de progresso deixava de aparecer; agora segue a nota do pedido, e um pedido ausente do histórico deixa o cartão no lugar antigo em vez de o esconder. Ensaio de progresso 46/46; restantes ensaios e suite sem falhas. Sem reinício; commit pedido pelo utilizador, sem push.
 
@@ -1255,3 +1257,36 @@ Versão atual: 107
   - Suite sequencial sozinha: **495 testes: 494 aprovados, 0 falhas, 1 omitido**. Uma corrida anterior, feita ao mesmo tempo que os ensaios em browser, teve 1 falha; não ficou registado qual era o teste, e não voltou a acontecer a correr sozinha.
   - Na 4318, `app.js` servido é igual ao disco. `git diff --check` aprovado.
 - **Limitações:** sem reinício; atualizar a página. Commit pedido pelo utilizador (com a entrada 106), sem push. Ensaiado com clientes simulados; não houve proposta de memória nem passagem com modelos reais.
+
+### 108 — 2026-10-27 — Claude
+
+- Pedido do utilizador: Fase 0 do plano Normal → Dual → Hydra (pontos 4 e 8): tornar real o Planear/Só leitura do agy. A instalação do hook global foi autorizada pelo utilizador; o plano foi revisto pelo Codex.
+- **Descoberta** (ensaios reais com o agy 1.4.7 numa pasta pessoal temporária):
+  - Com `--disable-slash-commands`, o agy ignora `--mode plan` («has no effect while slash command expansion is disabled»). O Planear do agy na HYDRAQ (Dual, revisões, pareceres) nunca foi só de leitura; no Hydra protegia o bwrap.
+  - O modo de planeamento verdadeiro não usa MCP: responde com um plano à espera de aprovação. Um agente próprio com lista de ferramentas fica fixo na conversa quando é criada.
+  - Matriz de hooks (Flash), sem terminal: sem hook, `ask` e `allow` dão o mesmo resultado com `always-proceed` e com `request-review`. Um `deny` de qualquer hook ganha. Hook com erro, resposta inválida, tempo esgotado ou comando inexistente faz o agy recusar todas as ferramentas. O número do passo do hook é o do evento da conversa.
+- **Implementação:**
+  - `lib/antigravity-guard.mjs` (novo): entrada `hydraq` em `~/.gemini/config/hooks.json`, preservando os outros hooks (primeira alteração guarda `hooks.json.before-hydraq`; JSON inválido não é tocado e impede o Planear). Regra por conversa em `~/.local/state/hydraq/agy-guard/`.
+  - Lista do que é permitido: leitura, pesquisa, comandos simples de leitura e as notas do agy na pasta de artefactos da conversa. O resto é recusado: escrita no projeto, outros comandos, subagentes, browser, MCP, endereços locais ou privados.
+  - A lógica vai dentro do próprio comando do hook. Sem Node, a conversa protegida recusa e as restantes seguem com `ask`.
+  - `lib/antigravity.mjs`: em Planear, a regra é escrita antes do pedido (numa conversa nova, depois do `init`) e retirada no fim, ao fechar o processo e ao carregar. Deixa de passar `--mode plan`. Vigilância por passo: uma ferramenta sem decisão registada, ou recusada que mesmo assim correu, para o pedido como falhado, sem o repetir. As conversas privadas do Hydra (bwrap) não mudam.
+  - `lib/opinion-clients.mjs` passa a mesma proteção aos pareceres. O agy simulado dos testes corre os hooks como o real.
+- **Ficheiros:** `lib/antigravity-guard.mjs`, `lib/antigravity.mjs`, `lib/opinion-clients.mjs`, `test/antigravity-guard.test.mjs` (7 testes), `test/fixtures/fake-agy.mjs`, `test/handoff.test.mjs` (deixa de esperar `--mode plan`), `README.md`.
+- **Verificação:**
+  - Suite sequencial: **502 testes: 501 aprovados, 0 falhas, 1 omitido**. A primeira corrida teve 1 falha esperada (o teste de passagem verificava `--mode plan`), ajustada.
+  - Adaptador da HYDRAQ com o agy real (Flash, pasta pessoal temporária): **9/9**. Em Planear leu, listou e pesquisou; escrita e `touch` recusados pelo hook; sem paragem indevida da vigilância; regra retirada no fim. Em Executar, a mesma conversa voltou a escrever.
+  - Instalação real: `~/.gemini/config/hooks.json` não existia e foi criado só com a entrada `hydraq`. `agy -p "/hooks"` lista-a ao lado dos hooks de plugin que já existiam (`dak-setup-sync`, `dak-telemetry`).
+  - Sintaxe e `git diff --check` aprovados.
+- **Limitações:**
+  - A 4318 não foi reiniciada: até lá não escreve regras, o hook responde sempre `ask` e o Planear do agy continua sem proteção.
+  - Terminal interativo por validar: numa pasta pessoal nova, o ecrã inicial pede aceitação dos Termos, o que não foi feito; o utilizador vai testar no terminal dele.
+  - É uma regra do agy, não do sistema operativo. Um repositório com `diff.external` configurado pode correr um programa em `git diff/log/show`; nomes públicos que resolvam para endereços locais não são detetados.
+  - Cerca de 70 pedidos curtos ao Flash e 11 ao Argon low nos ensaios. Sem commit nem push.
+
+### 109 — 2026-10-27 — Claude
+
+- Reinício e commit pedidos pelo utilizador, depois de confirmar no terminal que uma sessão normal do agy, com o hook instalado, lê, corre `ls -la` e cria ficheiros como antes.
+- Antes da paragem: nenhum pedido em curso, autorização, reserva, terminal, passagem, sessão nativa, colaboração ou tarefa Hydra ativa; pareceres e ciclos automáticos concluídos ou falhados.
+- O servidor corria no grupo de um terminal partilhado com outros processos do utilizador. Só o PID 10911 recebeu SIGTERM; parou em 1 s e os 43 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; o ambiente ficou só em memória) no scope `hydraq-20261027T000504Z`, PID 224007, registo em `.hydraq/server.log`. Disponível em 1 s.
+- Depois: cinco clientes ligados e 87 conversas. Impressões de conversas, pareceres, automático, colaboração, projetos, Dual e Hydra iguais às de antes. Ficheiros de `public/` servidos iguais ao disco.
+- Ativa a entrada 108. Commit com as entradas 108 e 109; `output/` fica fora. Sem push.
