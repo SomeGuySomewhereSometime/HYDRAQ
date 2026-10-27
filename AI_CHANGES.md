@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 121
+Versão atual: 124
 
 ## Resumo atual
+
+- Síntese no Dual e passagem rápida ao Hydra (entrada 122): «Sintetizar…» por baixo das duas respostas, por um dos dois ou outro modelo, numa sessão à parte, com as duas respostas inteiras. Por omissão não entra na ronda seguinte; ligada, entra uma vez em cada um. Pode ser automática no fim de cada ronda, sem repetição depois de reinício. Se faltar uma resposta, só síntese parcial explícita. O botão «⇢ ClaudeX» junto ao Dual passa ao Hydra com a mesma dupla e modelos. Três falhas da revisão do Codex corrigidas (entrada 123). 510 testes; página 36/36; ensaio real 10/10 (Sol + Haiku, síntese pelo Flash). Ativado na 4318 por reinício autorizado e commit sem push (entrada 124).
 
 - Claudini na mesma conversa com clientes reais (entrada 121): Claude Sonnet 5.5 + Gemini 3.8 Flash, Normal → Dual → Claudini → Dual → Normal, 18/18. As três duplas já foram testadas com modelos reais na mesma conversa. O ensaio escolhe a dupla com `CX_PAIR`. Commit sem push.
 
@@ -1569,3 +1571,80 @@ Versão atual: 121
   - Foram 7 pedidos ao Sonnet e 4 ao Flash. Provas em `.hydraq/hydra-inplace-live-2026-10-27-claudini/`.
 - **Documentação:** `docs/claudex.md` (como escolher a dupla do ensaio).
 - **Verificação:** sintaxe do script e `git diff --check` aprovados. O ensaio só usa a HYDRAQ isolada, sem tocar na 4318. Commit sem push; `output/` fica fora.
+
+### 122 — 2026-10-27 — Claude
+
+- Pedido do utilizador (ponto 5 da lista): no Dual, depois das duas respostas, um modelo escreve uma síntese. Pode ser um dos dois do Dual ou um terceiro, à mão ou automática. Por omissão não entra no contexto da ronda seguinte, mas pode entrar. Pediu também uma passagem rápida do Dual ao Hydra com a mesma dupla, como trocar de modelo. A animação de fusão e as cores ficam para depois. O plano foi revisto pelo Codex e os seus pontos foram incorporados.
+- **Servidor:**
+  - `lib/opinions.mjs`: `synthesize`, sobre a execução da Segunda opinião, numa sessão à parte, só de leitura.
+    - Recebe a pergunta da ronda e as duas respostas inteiras, até 90 000 caracteres no total; acima disso, recusa antes de enviar e diz porquê. Recebe também excertos do histórico e a memória do projeto, se couber.
+    - A instrução pede para resolver as divergências com fundamento e manter a incerteza sem ele.
+    - A síntese guarda-se até 200 000 caracteres, e não 24 000.
+    - Reserva só a si própria: o Dual pode continuar enquanto ela corre.
+    - Falta de uma resposta: só síntese parcial pedida explicitamente, que diz qual falta.
+  - `lib/dual.mjs`: opções da síntese no registo do Dual e marca da síntese automática na ronda.
+  - `lib/providers.mjs`:
+    - A síntese automática corre só na última ronda aos dois enviada depois de a ligar, quando os dois turnos estão confirmados. A ronda fica marcada antes de a síntese arrancar e nunca se repete.
+    - A entrega à ronda seguinte é registada por participante: só a síntese mais recente marcada para a ronda seguinte, uma vez cada. Uma entrega falhada repete-se só a esse participante, e uma por confirmar conta como entregue.
+    - O bloco citado vai no pedido e em «Contexto da passagem», com um máximo de 30 000 caracteres, assinalado quando cortado.
+    - Desligada, a síntese não entra por nenhum caminho: fica fora das sessões do Dual e da passagem de contexto.
+  - `lib/http.mjs`: rotas `/api/dual/:id/synthesis` e `/synthesis-settings`.
+- **Página:**
+  - `public/dual.js`:
+    - Por baixo das duas respostas aparece «Sintetizar…», ou «Síntese parcial · sem o X…» quando falta uma resposta, ao lado do «Reenviar» que já existia.
+    - A caixa de diálogo tem: quem sintetiza (um dos dois ou outro modelo de qualquer cliente), instruções opcionais, «Entra no contexto da ronda seguinte» desligado por omissão e «Fazer automaticamente».
+    - O painel da síntese tem o estado, Copiar e Parar, e diz se a síntese segue para a próxima ronda ou se já foi entregue. As sínteses anteriores da mesma ronda ficam recolhidas, e o texto em escrita atualiza-se sem reconstruir a conversa.
+  - `public/app.js`:
+    - Painel Modo, «Síntese do Dual»: manual ou automática, com o modelo.
+    - Antes do envio, a caixa avisa se a síntese para a ronda seguinte ainda está a ser escrita.
+    - O botão «⇢ ClaudeX/Geminex/Claudini» junto ao Dual e o mosaico Hydra usam a mesma dupla e os mesmos modelos e raciocínio do Dual, e esperam pelo fim da ronda. Com o Cursor ou o OpenCode, o botão fica desativado e explica porquê.
+  - `public/claudex.js`: `preset` dos modelos para a tarefa seguinte; uma escolha feita depois no painel prevalece.
+  - `public/style.css`: estilos novos depois da secção Mono.
+- **Testes:**
+  - `test/dual-synthesis.test.mjs` (7 testes): síntese manual com respostas e síntese longas; recusa acima do limite; contexto desligado e ligado (uma vez cada); síntese tardia e entrega falhada só a um participante; síntese parcial; síntese automática sem repetição depois de reinício nem com uma resposta em falta; rotas HTTP.
+  - `validation/dual-synthesis-ui.mjs` (34 verificações): síntese manual, outra síntese, automática, aviso da síntese tardia, texto em escrita, síntese parcial, Dual → Hydra pelo botão e pelo mosaico com os modelos do Dual, regresso com as escolhas, Cursor sem Hydra, sem transbordo horizontal nas três aparências.
+- **Verificação:**
+  - Suite sequencial **508 testes: 508 aprovados**.
+    - Numa corrida anterior falhou 1 teste da Colaboração por tempo («Estado não chegou»).
+    - O mesmo teste também falha às vezes no último commit (1 em 10) e passou 5/5 sozinho com este código.
+  - Página: síntese **34/34**, Hydra na conversa **46/46**, modo Hydra **67/67**, `claudex-ui` **56/56**, mensagens/terminal **73/73**, Mono **62/62**, progresso **46/46**, sem erros de JavaScript.
+  - `git diff --check` aprovado.
+- **Ensaio real** (`validation/dual-synthesis-live.mjs`, Dual Codex GPT-6.1 Sol low + Claude Haiku 5.5 low, síntese pelo Gemini 3.8 Flash low, pasta temporária): **10/10**.
+  - Síntese desligada: a ronda seguinte foi sem ela.
+  - Síntese ligada: os dois receberam-na uma vez e responderam com a palavra-código que só ela tinha. Na ronda seguinte não se repetiu.
+  - Síntese automática: uma síntese depois da ronda, marcada na ronda.
+  - As sessões do Dual nunca receberam o pedido de síntese e o projeto ficou sem alterações.
+  - Foram 5 pedidos a cada modelo do Dual e 3 ao Flash. Provas em `.hydraq/dual-synthesis-live-2026-10-27/`.
+- **Limitações:**
+  - As sínteses contam no limite dos pareceres guardados (40). As mais antigas passam ao arquivo e voltam a aparecer ao carregar os pareceres anteriores da conversa.
+  - Uma síntese automática marcada antes de um reinício, sem registo, não se repete: o bloco diz isso e oferece o botão.
+  - A animação de fusão e as cores do Hydra e do Dual ficam por fazer.
+  - Precisa de reiniciar a 4318. Sem commit nem push.
+
+### 123 — 2026-10-27 — Claude
+
+- O utilizador trouxe a revisão do Codex à entrada 122: três falhas reproduzíveis, que escapavam aos testes. As três confirmaram-se no código antes da correção.
+- **Síntese desligada anulava uma entrega pendente** (`lib/providers.mjs`): a entrega olhava só para a síntese concluída mais recente. Uma síntese desligada pedida depois fazia perder a que ia para a ronda seguinte. Passa a contar a síntese mais recente marcada para a ronda seguinte.
+- **Síntese por entregar podia ir para o arquivo** (`lib/opinions.mjs`, `lib/providers.mjs`): com mais de 40 pareceres, a síntese ia para o arquivo antes de chegar aos dois e deixava de ser entregue. `pendingSyntheses()` passa a manter fora do arquivo as sínteses ainda devidas a um participante de um Dual ativo. Depois de entregues aos dois, seguem o arquivo como os outros pareceres.
+- **Segunda passagem ao Hydra com o raciocínio antigo** (`public/claudex.js`): com uma tarefa anterior ainda selecionada, o `preset` não limpava o modelo nem o raciocínio. O raciocínio da tarefa anterior ficava no lugar do que o Dual usa agora. O `preset` passa a aplicar-se sempre.
+- **Testes:**
+  - `test/dual-synthesis.test.mjs` tem 2 testes novos: síntese desligada depois de uma ligada, e síntese por entregar com 45 pareceres a mais.
+  - A espera pela síntese passa a incluir o fecho do processo. Antes, o teste do arquivo passava por acaso: a síntese ainda estava a fechar.
+  - `validation/dual-synthesis-ui.mjs` tem 2 verificações novas: uma tarefa Hydra a partir do Dual e, depois de mudar o raciocínio no Dual, uma segunda passagem.
+  - As três verificações novas falham com o código anterior e passam com a correção.
+- **Verificação:**
+  - Suite sequencial **510 testes: 510 aprovados**.
+  - Página: síntese **36/36**, modo Hydra **67/67**, Hydra na conversa **46/46**, sem erros de JavaScript.
+  - `git diff --check` aprovado.
+  - Sem pedidos aos modelos reais. O ensaio real da entrada 122 não foi repetido, porque estas correções não mudam o caminho que ele percorreu.
+- **Falta:** reiniciar a 4318 e fazer o commit (entradas 122 e 123).
+
+### 124 — 2026-10-27 — Claude
+
+- Reinício e commit pedidos pelo utilizador.
+- Antes da paragem: nenhum pedido em curso, autorização, reserva, terminal, passagem, sessão nativa, colaboração, parecer ou tarefa Hydra ativa (91 conversas).
+- Só o PID 536196 recebeu SIGTERM. Parou em 0,8 s e os 5 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; ambiente só em memória) no scope `hydraq-20261027T221310Z`, PID 654474.
+- Com os cinco clientes ligados, a impressão do estado ficou igual à de antes. Os 19 ficheiros que a página serve são iguais aos do disco. O Dual e os pareceres carregaram sem erro (9 registos do Dual).
+- A rota nova `/api/dual/:id/synthesis-settings` responde: um identificador inexistente dá «Conversa dual não encontrada», sem alterar nada.
+- Commit com as entradas 122, 123 e 124; `output/` fica fora. Sem push.
+- **Falta:** recarregar os separadores da HYDRAQ abertos antes do reinício.

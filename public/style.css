@@ -4814,3 +4814,25 @@ body .terminal-switch-button[data-terminal="release"]::after { content: '↩'; m
 
 /* The current request owns its progress, inside the transcript rather than above it. */
 .messages .progress-panel { margin: -12px 0 24px; }
+
+/* The round's synthesis, under the two answers: one panel at full width, earlier ones folded. */
+.dual-synthesis { display:grid; gap:10px; margin-top:var(--stage-gap,12px); }
+.dual-synthesis-head { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; }
+.dual-synthesis-head:empty { display:none; }
+.dual-synthesis-note { margin:0; color:var(--text-secondary); font-size:12px; }
+body .dual-synthesis-ask { padding:6px 12px; border:1px solid color-mix(in srgb,var(--accent) 45%,var(--border-subtle)); border-radius:8px; background:color-mix(in srgb,var(--accent) 8%,transparent); box-shadow:none; color:var(--accent); font-size:12.5px; font-weight:600; cursor:pointer; }
+body .dual-synthesis-ask:hover:not(:disabled) { border-color:var(--accent); background:color-mix(in srgb,var(--accent) 14%,transparent); }
+body .dual-synthesis-ask:disabled { cursor:default; opacity:.5; }
+.dual-synthesis .review-panel { border-top-color:color-mix(in srgb,var(--accent) 70%,var(--text-secondary)); }
+.dual-stage .dual-synthesis .review-panel-body { height:auto; min-height:80px; max-height:clamp(260px,50vh,560px); }
+.dual-synthesis .review-panel-foot { display:flex; flex-wrap:wrap; align-items:center; gap:6px 12px; }
+.dual-synthesis-detail { color:var(--text-secondary); font-size:11.5px; }
+.dual-synthesis-older > summary { cursor:pointer; color:var(--text-secondary); font-size:12px; }
+.dual-synthesis-older > .review-panel { margin-top:8px; }
+.dual-synthesis-option { display:flex; align-items:center; gap:8px; margin:6px 0; color:var(--text-primary); font-size:13px; }
+.mode-synthesis { grid-template-columns:minmax(0,1fr) auto; align-items:center; column-gap:8px; }
+.mode-synthesis .mode-field-label { grid-column:1 / -1; }
+.mode-synthesis-value { min-width:0; color:var(--text-primary); font-size:12px; line-height:1.4; }
+.dual-hydra[hidden] { display:none; }
+#composer[data-dual] .dual-hydra { color:var(--text-secondary); }
+#composer[data-dual] .dual-hydra:hover:not(:disabled) { color:var(--accent); }

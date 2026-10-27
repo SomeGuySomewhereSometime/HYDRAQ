@@ -5,6 +5,8 @@ const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',cursor
 const shortNames={codex:'Codex',claude:'Claude',antigravity:'Antigravity',cursor:'Cursor',opencode:'OpenCode'};
 const effortLabels={default:'Automático',none:'Sem raciocínio',minimal:'Mínimo',low:'Leve',medium:'Médio',high:'Alto',xhigh:'Muito alto',max:'Máximo',ultra:'Ultra'};
 const busy=new Set(['starting','running','waiting','inProgress']);
+const synthesizing=job=>['queued','starting','running','stopping'].includes(job?.status);
+const synthesisStates={queued:['Na fila','active'],starting:['A iniciar','active'],running:['A sintetizar','active'],stopping:['A parar','active'],completed:['Pronta','done'],failed:['Falhou','failed'],interrupted:['Parada','failed'],uncertain:['Por confirmar','failed']};
 const coverageLabels={complete:'completo',excerpt:'em excerto',summary:'resumido',partial:'parcial: respostas do terminal não importadas',none:'sem nada novo'};
 export const DUAL_KEYS=['a','b'];
 export const isReadMode=sandbox=>['read-only','plan','ask'].includes(sandbox);
@@ -44,9 +46,9 @@ export function dualPanelState(delivery,turn){
 }
 
 export class DualUI{
- constructor({api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels}){
-  Object.assign(this,{api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels});
-  this.panels=new PanelKit({toast});this.pending=new Map();this.sequence=0;
+ constructor({api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses=()=>[],markdown}){
+  Object.assign(this,{api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses,markdown});
+  this.panels=new PanelKit({toast});this.pending=new Map();this.sequence=0;this.synthesisViews=new Map();
   this.dialog=node('dialog','opinion-dialog dual-dialog');this.dialog.setAttribute('aria-labelledby','dual-dialog-title');document.body.append(this.dialog);
   document.getElementById('dual-toggle')?.addEventListener('click',()=>this.configure());
  }
@@ -73,7 +75,11 @@ export class DualUI{
   const recipients=record?(record.target==='both'?DUAL_KEYS:[record.target]).map(key=>[record.members[key].provider,this.memberSettings(record,key)?.model]):pending?[[pending.provider,pending.model]]:[];
   return recipients.some(([provider,model])=>this.getState()?.providers?.[provider]?.capabilities?.images===false||this.getModels(provider).find(m=>m.id===model)?.images===false);
  }
- signature(conversation){const record=this.anyRecord(conversation);return record?[record.id,record.active,record.target,record.principal,DUAL_KEYS.map(key=>record.members[key].conversationId),record.changes?.length||0,this.running(conversation),record.rounds.map(r=>[r.id,r.targets,r.write,Object.values(r.deliveries).map(d=>[d.requestId,d.status,d.coverage,d.error])])]:null;}
+ // A synthesis's text is refreshed in place (refreshSyntheses); only its state rebuilds the transcript.
+ signature(conversation){const record=this.anyRecord(conversation);return record?[record.id,record.active,record.target,record.principal,DUAL_KEYS.map(key=>record.members[key].conversationId),record.changes?.length||0,this.running(conversation),record.rounds.map(r=>[r.id,r.targets,r.write,r.synthesis,Object.values(r.deliveries).map(d=>[d.requestId,d.status,d.coverage,d.error,d.synthesis])]),this.syntheses(record).map(b=>[b.id,b.context,b.jobs[0]?.status,b.jobs[0]?.error,Boolean(b.jobs[0]?.text)])]:null;}
+ syntheses(record){return this.getSyntheses().filter(b=>b.dualId===record?.id).sort((x,y)=>String(x.createdAt).localeCompare(String(y.createdAt)));}
+ /** A synthesis meant for the next round is still being written: a round sent now goes without it. */
+ pendingSynthesis(conversation){const record=this.record(conversation);return this.syntheses(record).some(b=>b.context&&synthesizing(b.jobs[0]));}
  async setTarget(target){
   const record=this.record();if(!record||record.target===target)return;
   this.beforeChange();const previous=record.target;record.target=target;this.changed();
@@ -313,7 +319,7 @@ export class DualUI{
    const head=node('header','review-stage-head'),heading=node('div','review-stage-heading'),tools=node('div','review-stage-tools'),state=node('span','review-stage-state');state.setAttribute('role','status');
    heading.append(node('strong','review-stage-title','Duas respostas independentes'),state);head.append(heading,tools);
    stage.grid=node('div','review-grid');stage.append(head,stage.grid);
-   const labels=[];let running=false;
+   const labels=[],outcomes=[];let running=false;
    for(const part of parts){
     const {delivery}=part,owner=this.conversation(delivery.conversationId),turn=owner?.turns?.find(t=>t.requestId===delivery.requestId),status=dualPanelState(delivery,turn);
     const panel=this.panels.panel({key:'dual:'+round.id+':'+part.key,client:delivery.provider,title:names[delivery.provider]||delivery.provider,role:'dual'});
@@ -343,8 +349,10 @@ export class DualUI{
     if(status.live&&owner){const stop=node('button','review-panel-stop','Parar');stop.type='button';stop.dataset.tip=`Parar só o ${shortName(delivery.provider)}. O outro continua.`;stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api(`/api/conversations/${owner.id}/interrupt`,{});}catch(e){this.toast(e.message);stop.disabled=false;}});panel.foot.append(stop);}
     panel.foot.hidden=!panel.foot.childElementCount;
     stage.grid.append(panel.panel);live.push(panel.body);
+    outcomes.push({key:part.key,provider:delivery.provider,done:turn?.status==='completed'&&!status.live,live:status.live});
    }
    state.textContent=labels.join(' · ');
+   const synthesis=this.synthesisSection(record,round,outcomes);if(synthesis)stage.append(synthesis);
    if(running&&record.active){const stop=node('button','review-stage-stop');stop.type='button';stop.append(glyph('stop','review-icon'),node('span','','Parar os dois'));stop.dataset.tip='Parar os dois modelos. O que já responderam fica guardado.';stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api('/api/dual/'+record.id+'/interrupt',{});}catch(e){this.toast(e.message);stop.disabled=false;}});tools.append(stop);}
    shared.after(stage);this.panels.applyFocus(stage);
   }
@@ -356,5 +364,96 @@ export class DualUI{
    if(next)next.before(marker);else view.append(marker);
   }
   for(const body of live)this.panels.restore(body);
+ }
+
+ /**
+  * Under the two answers of a round: its newest synthesis, the earlier ones folded, and the button to ask for one.
+  * With one answer missing, the button asks for a partial synthesis, named as such; the retry stays in the failed panel.
+  */
+ synthesisSection(record,round,outcomes){
+  const batches=this.syntheses(record).filter(b=>b.roundId===round.id),done=outcomes.filter(o=>o.done),missing=outcomes.find(o=>!o.done);
+  const section=node('section','dual-synthesis');section.dataset.round=round.id;
+  const head=node('div','dual-synthesis-head');section.append(head);
+  if(!outcomes.some(o=>o.live)&&done.length){
+   const partial=done.length===1,running=batches.some(b=>synthesizing(b.jobs[0]));
+   const ask=node('button','secondary-button dual-synthesis-ask',partial?`Síntese parcial · sem o ${shortName(missing.provider)}…`:batches.length?'Outra síntese…':'Sintetizar…');ask.type='button';
+   ask.disabled=running;
+   ask.dataset.tip=running?'Aguarda a síntese em curso ou para-a.':partial?`A resposta do ${shortName(missing.provider)} falta. A síntese parcial diz qual falta; também podes reenviar-lhe a pergunta.`:'Um modelo à tua escolha escreve uma resposta final a partir das duas, numa sessão à parte.';
+   ask.addEventListener('click',()=>this.synthesisDialog(record,round,partial));
+   head.append(ask);
+  }
+  // An automatic synthesis marked on its round but with no record: a restart came in between; nothing is started again.
+  if(round.synthesis&&!batches.some(b=>b.requestId===round.synthesis.requestId))head.append(node('p','dual-synthesis-note',round.synthesis.error?`A síntese automática não arrancou: ${round.synthesis.error}`:'A síntese automática desta ronda não ficou confirmada e não foi repetida. Podes pedi-la aqui.'));
+  const latest=batches.at(-1);
+  if(latest)section.append(this.synthesisPanel(record,latest));
+  if(batches.length>1){const older=node('details','dual-synthesis-older');older.append(node('summary','',`Sínteses anteriores desta ronda · ${batches.length-1}`));for(const batch of batches.slice(0,-1).reverse())older.append(this.synthesisPanel(record,batch));section.append(older);}
+  return head.childElementCount||batches.length?section:null;
+ }
+ synthesisPanel(record,batch){
+  const job=batch.jobs[0],[label,tone]=synthesisStates[job.status]||[job.status,'failed'];
+  const view=this.panels.panel({key:'synthesis:'+batch.id,client:job.provider,title:'Síntese · '+(shortNames[job.provider]||job.provider),role:'synthesis'});
+  view.panel.dataset.synthesis=batch.id;view.panel.dataset.live=String(synthesizing(job));view.expand.hidden=true;
+  view.meta.textContent=[this.modelLabel(job.provider,job),batch.automatic?'automática':null].filter(Boolean).join(' · ');
+  this.panels.status(view,label,tone);
+  this.fillSynthesis(view,batch);
+  const delivered=record.rounds.flatMap(r=>Object.values(r.deliveries)).filter(d=>d.synthesis===batch.id&&['sent','uncertain'].includes(d.status)).length;
+  const notes=[...(batch.missing?.length?[`Parcial: falta a resposta do ${shortName(batch.sources?.find(s=>s.key===batch.missing[0])?.provider)}.`]:[]),
+   batch.context?(delivered>=2?'Entregue aos dois na ronda seguinte.':delivered?'Entregue a um dos dois; o outro recebe-a na próxima ronda.':'Segue para os dois na próxima ronda.'):'Não entra no contexto dos dois.',...(batch.warnings||[])];
+  for(const text of notes)view.foot.append(node('span','dual-synthesis-detail',text));
+  if(job.error&&!synthesizing(job))view.foot.append(node('p','dual-error',job.error));
+  if(synthesizing(job)){const stop=node('button','review-panel-stop','Parar');stop.type='button';stop.dataset.tip='Parar a síntese. As respostas dos dois não mudam.';stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api('/api/opinions/'+job.id+'/stop',{});}catch(e){this.toast(e.message);stop.disabled=false;}});view.foot.append(stop);}
+  view.foot.hidden=false;
+  this.synthesisViews.set(batch.id,view);
+  return view.panel;
+ }
+ fillSynthesis(view,batch){
+  const job=batch.jobs[0];view.text=job.text||'';view.copy.hidden=!view.text;view.shown=view.text;
+  view.body.replaceChildren(view.text?this.markdown(view.text):this.panels.placeholder(job.error||(synthesizing(job)?'A preparar a síntese…':'Sem texto.')));
+  view.body.setAttribute('aria-label','Síntese');this.panels.restore(view.body);
+ }
+ /** New text of a synthesis being written, without rebuilding the conversation. */
+ refreshSyntheses(){
+  for(const [id,view] of this.synthesisViews){
+   if(!view.panel.isConnected){this.synthesisViews.delete(id);continue;}
+   const batch=this.getSyntheses().find(b=>b.id===id);if(batch&&(batch.jobs[0].text||'')!==view.shown)this.fillSynthesis(view,batch);
+  }
+ }
+ /**
+  * Who writes the synthesis, instructions, whether it goes to the next round, and automatic for the rounds to come.
+  * Without a round it only saves the choices.
+  */
+ synthesisDialog(record,round=null,partial=false){
+  const saved=record.synthesis||{},member=key=>({provider:record.members[key].provider,...this.memberSettings(record,key)});
+  this.header(round?(partial?'Síntese parcial':'Sintetizar as duas respostas'):'Síntese do Dual');
+  this.dialog.append(node('p','opinion-caption',(round?'Um modelo escreve uma resposta final a partir das duas, numa sessão à parte. As sessões do Dual não a veem, a não ser que a mandes para a próxima ronda.':'Quem sintetiza, e se a síntese corre sozinha no fim de cada ronda enviada aos dois.')+(partial?' Só há uma resposta nesta ronda: a síntese começa por dizer qual falta.':'')));
+  const error=node('p','opinion-error');error.hidden=true;error.setAttribute('role','alert');
+  const grid=node('div','dual-choice');this.dialog.append(grid);
+  const who=this.field(grid,'Quem sintetiza'),providerSelect=this.field(grid,'Cliente'),modelSelect=this.field(grid,'Modelo'),effortSelect=this.field(grid,'Raciocínio');
+  const same=key=>saved.provider===record.members[key].provider&&saved.model===member(key).model;
+  this.fill(who,[...DUAL_KEYS.map(key=>({value:key,label:`${shortName(record.members[key].provider)} · ${this.modelLabel(record.members[key].provider,member(key))}`})),{value:'other',label:'Outro modelo…'}],DUAL_KEYS.find(same)||(saved.provider?'other':record.principal));
+  const available=Object.keys(names).filter(id=>this.offered(id));
+  this.fill(providerSelect,available.map(id=>({value:id,label:names[id]})),available.includes(saved.provider)?saved.provider:available[0]);
+  const models=()=>this.getModels(providerSelect.value);
+  const efforts=()=>{const model=models().find(m=>m.id===modelSelect.value);this.fill(effortSelect,(model?.efforts||[]).map(e=>({value:e,label:effortLabels[e]||e})),saved.provider===providerSelect.value&&saved.model===modelSelect.value?saved.effort:model?.defaultEffort);};
+  const modelsChanged=()=>{const list=models();this.fill(modelSelect,list.map(m=>({value:m.id,label:m.name||m.id})),saved.provider===providerSelect.value?saved.model:(list.find(m=>m.isDefault)||list[0])?.id);efforts();this.whenLoaded(providerSelect,list,modelsChanged);};
+  providerSelect.addEventListener('change',modelsChanged);modelSelect.addEventListener('change',efforts);modelsChanged();
+  const other=()=>{for(const select of [providerSelect,modelSelect,effortSelect])select.parentElement.hidden=who.value!=='other';};who.addEventListener('change',other);other();
+  const instructions=this.field(this.dialog,'Instruções opcionais','textarea');instructions.rows=2;instructions.maxLength=3000;instructions.placeholder='Ex.: junta tudo sem descartar nada; foca a segurança.';instructions.value=saved.instructions||'';
+  const check=(text,value,tip)=>{const label=node('label','dual-synthesis-option'),input=node('input');input.type='checkbox';input.checked=Boolean(value);label.append(input,document.createTextNode(text));label.dataset.tip=tip;this.dialog.append(label);return input;};
+  const context=check('Entra no contexto da ronda seguinte',saved.context,'Desligado: só tu vês a síntese. Ligado: na próxima ronda, cada um dos dois recebe-a uma vez, como contexto citado.');
+  const auto=check('Fazer automaticamente no fim de cada ronda aos dois',saved.auto,'Corre sozinha quando as duas respostas terminam, com estas escolhas. Não corre se faltar uma resposta.');
+  const actions=node('div','opinion-actions'),submit=node('button','primary-button',round?(partial?'Pedir síntese parcial':'Sintetizar'):'Guardar'),cancel=node('button','secondary-button','Cancelar');
+  submit.type=cancel.type='button';cancel.addEventListener('click',()=>this.dialog.close());
+  const requestId=crypto.randomUUID();
+  submit.addEventListener('click',async()=>{
+   submit.disabled=true;
+   const choice=who.value==='other'?{provider:providerSelect.value,model:modelSelect.value,effort:effortSelect.value}:(({provider,model,effort})=>({provider,model,effort}))(member(who.value));
+   try{
+    await this.api('/api/dual/'+record.id+'/synthesis-settings',{auto:auto.checked,context:context.checked,...choice,instructions:instructions.value});
+    if(round)await this.api('/api/dual/'+record.id+'/synthesis',{roundId:round.id,requestId,...choice,instructions:instructions.value,context:context.checked,partial});
+    await this.refresh();this.dialog.close();
+   }catch(e){error.textContent=e.message;error.hidden=false;submit.disabled=false;}
+  });
+  actions.append(submit,cancel);this.dialog.append(error,actions);this.dialog.showModal();
  }
 }

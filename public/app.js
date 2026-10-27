@@ -279,7 +279,7 @@ claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area
   changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}}}):null;
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 
-dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
+dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,markdown,getSyntheses:()=>opinionUI.viewState()?.batches?.filter(batch=>batch.kind==='synthesis')||[],getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
   loadModels:id=>id==='opencode'?checkOpenCodeModels(false):null,
   applySettings:(provider,settings)=>{const key=`${draftKey(current(),selectedProject)}:${provider}`;settingDrafts.set(key,{...(settingDrafts.get(key)||{}),...settings});}}):null;
 $('#dual-toggle').classList.toggle('hidden',!dualUI);
@@ -783,7 +783,7 @@ function renderMessages(conversation) {
   const hydra = claudexUI?.transcript(group, liveTask) || { tasks: [], entries: [], shown: new Set(), signature: '' };
   const opinionState=opinionUI.viewState();
   const signature = JSON.stringify([conversation?.id,hydraOn(),hydra.signature,dualUI?.signature(conversation),opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage,turn.diagnostics]), entry.handoffState])]);
-  if (signature === messageSignature) {opinionUI.refresh();return;}
+  if (signature === messageSignature) {opinionUI.refresh();dualUI?.refreshSyntheses();return;}
   messageSignature = signature;
   const view = $('#messages');
   const nearBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 120;
@@ -1327,6 +1327,8 @@ function renderSend() {
     $('#composer-hint').textContent = dual && busy ? (dualUI.running(conversation) ? 'Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.' : workReason(workBlock()) + ' · Este projeto/pasta ou cliente está reservado.')
       : !dual || dual.target === 'both' ? 'Enter para enviar aos dois · respondem sem ver a resposta um do outro'
       : `Enter para enviar só ao ${name(dual.target)} · o ${name(dual.target === 'a' ? 'b' : 'a')} recebe esta troca quando voltares a falar com ele`;
+    // Said before sending: a synthesis meant for the next round that is still being written does not go with it.
+    if (dual && !busy && dualUI.pendingSynthesis(conversation)) $('#composer-hint').textContent += ' · A síntese ainda está a ser escrita: se enviares agora, esta ronda segue sem ela.';
   }
   $('#stop').textContent = '■ Parar';
   if (hydraOn()) renderHydraSend();
@@ -1742,6 +1744,20 @@ function setupView(className, entries) {
   view.append(...entries.map(entry => entry.element));
   return { element: view, sync: () => { for (const entry of entries) entry.sync(); } };
 }
+// In a Dual, how its rounds are synthesized; the dialog holds the choices.
+const dualSynthesisField = (() => {
+  const field = element('div', 'mode-field mode-synthesis'), value = element('span', 'mode-synthesis-value'), button = element('button', 'mode-chip', 'Configurar…');
+  button.type = 'button';
+  button.addEventListener('click', () => { const record = dualUI?.record(current()); if (record) dualUI.synthesisDialog(record); });
+  field.append(element('span', 'mode-field-label', 'Síntese do Dual'), value, button);
+  return { element: field, sync() {
+    const record = dualUI?.record(current()), settings = record?.synthesis;
+    field.hidden = !record;
+    if (!record) return;
+    value.textContent = (settings?.auto ? `Automática · ${providerName(settings.provider)} · ${dualUI.modelLabel(settings.provider, settings)}` : 'Manual · botão em cada ronda') + (settings?.context ? ' · entra na ronda seguinte' : '');
+    button.disabled = sending;
+  } };
+})();
 const normalSetup = setupView('mode-normal', [
   chipGroup('Cliente', $('#provider'), { clients: true, text: option => shortClients[option.value] || option.textContent,
     blocked: () => sending || ($('#provider').disabled && !dualUI?.record(current()) && !dualUI?.pendingFor()),
@@ -1750,6 +1766,7 @@ const normalSetup = setupView('mode-normal', [
   chipGroup('Raciocínio', $('#effort')),
   chipGroup('Contexto', $('#context')),
   toggleField('Velocidade', 'Fast', $('#fast')),
+  dualSynthesisField,
 ]);
 const hydraSetups = new Map();
 function hydraSetup(pair) {
@@ -1810,12 +1827,21 @@ const pairButtons = HYDRA_PAIRS.map(pair => {
 });
 $('#hydra-pairs').replaceChildren(...pairButtons);
 /** Hydra starts in this conversation, with its sessions. Leaving a task that runs here stops it and gives the conversation back; an older task keeps its own conversations. */
+/** The Hydra pair of a Dual, when its two clients make one: Codex, Claude and Gemini only. */
+function dualHydraPair(record) {
+  const clients = record ? [record.members.a.provider, record.members.b.provider] : [];
+  return HYDRA_PAIRS.find(pair => pair.every(role => clients.includes(role))) || null;
+}
 function chooseMode(mode) {
   const conversation = current(), task = hydraTask(conversation), pair = hydraPair(conversation);
   const dual = !pair && Boolean(dualUI?.record(conversation) || dualUI?.pendingFor()), review = !pair && Boolean(opinionUI.automaticSetting());
   if (mode === 'hydra') {
     if (pair) return;
-    hydraDrafts.set(composerKey(), lastHydraPair());
+    // From a Dual, Hydra keeps its pair and the models and reasoning in use, in the same conversation.
+    const record = dualUI?.record(conversation), fromDual = dualHydraPair(record);
+    if (record && dualUI.running(conversation)) { toast('Aguarda o fim da ronda do Dual para passar ao Hydra.'); return; }
+    hydraDrafts.set(composerKey(), fromDual || lastHydraPair());
+    claudexUI?.preset(fromDual ? Object.fromEntries(['a', 'b'].map(key => [record.members[key].provider, dualMemberSettings(record, key)])) : null);
     render();
     return;
   }
@@ -1856,11 +1882,17 @@ function syncModePanel() {
   for (const [mode, tile] of Object.entries(modeTiles)) {
     tile.setAttribute('aria-pressed', String(active[mode]));
     tile.querySelector('small').textContent = subtitles[mode];
-    tile.disabled = sending || (mode === 'dual' && (!dualUI || (!pair && $('#dual-toggle').disabled))) || (mode === 'review' && !pair && $('#review-toggle').disabled) || (mode === 'hydra' && (!claudexUI || !state.claudex));
+    tile.disabled = sending || (mode === 'dual' && (!dualUI || (!pair && $('#dual-toggle').disabled))) || (mode === 'review' && !pair && $('#review-toggle').disabled) || (mode === 'hydra' && (!claudexUI || !state.claudex || (!pair && Boolean(record) && dualUI.running(conversation))));
     const heads = mode === 'normal' ? [providerId()] : mode === 'dual' ? dualPair : mode === 'hydra' && pair ? [pair[0], null, pair[1]] : null;
     tile.querySelectorAll('.mode-glyph i').forEach((dot, index) => { if (heads?.[index]) dot.dataset.client = heads[index]; else delete dot.dataset.client; });
   }
   $('#mode-panel').dataset.mode = pair ? 'hydra' : dualPair ? 'dual' : review ? 'review' : 'normal';
+  // The quick way from the Dual to Hydra, beside the Dual chip: same pair, models and conversation.
+  const quick = $('#dual-hydra'), fromDual = dualHydraPair(record);
+  quick.hidden = !record || !claudexUI || !state.claudex;
+  quick.disabled = sending || !fromDual || dualUI.running(conversation);
+  quick.textContent = fromDual ? `⇢ ${pairName(fromDual)}` : '⇢ Hydra';
+  quick.dataset.tip = !fromDual ? 'O Hydra junta o Codex, o Claude e o Gemini. Este Dual tem outro cliente.' : dualUI.running(conversation) ? 'Aguarda o fim da ronda para passar ao Hydra.' : `Passar ao Hydra ${pairName(fromDual)} com os mesmos dois modelos, nesta conversa. Escreves tu o pedido seguinte.`;
   $('#mode-panel-status').textContent = task && claudexUI ? claudexUI.badge.textContent : '';
   $('#hydra-pairs').hidden = !pair;
   for (const button of pairButtons) {
@@ -1882,6 +1914,7 @@ $('#hydra-chip').addEventListener('click', () => {
   $('#hydra-pairs [aria-pressed="true"]')?.focus({ preventScroll: true });
 });
 $('#plan-toggle').addEventListener('click', () => syncNextRequest());
+$('#dual-hydra').addEventListener('click', () => chooseMode('hydra'));
 for (const pill of document.querySelectorAll('#agent-dock [data-agent]')) {
   pill.addEventListener('click', () => {
     if (dualUI?.dockClick(pill.dataset.agent)) return;

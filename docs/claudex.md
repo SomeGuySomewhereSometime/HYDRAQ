@@ -61,6 +61,7 @@ Os cartões dos participantes mostram a última mensagem do diálogo efetivament
 Uma tarefa pedida numa conversa com histórico (`conversationId`) corre no grupo dessa conversa:
 - **Participantes:** cada participante é a conversa do grupo com esse cliente: primeiro o membro do Dual, depois a própria conversa, depois a mais recente. Um cliente que o grupo não tem recebe uma conversa nova no grupo.
 - **Contexto:** os pedidos da tarefa levam o que o resto do grupo disse e a sessão ainda não viu, com o mesmo mecanismo das passagens. A entrega fica registada e não se repete.
+- **Do Dual:** o botão **⇢ ClaudeX** (ou **⇢ Geminex**, **⇢ Claudini**), ao lado do Dual na caixa, e o mosaico Hydra do painel Modo passam ao Hydra com a dupla, os modelos e o raciocínio do Dual. Só mudam o modo: o pedido seguinte é escrito pela pessoa. Esperam pelo fim da ronda. Com o Cursor ou o OpenCode no Dual, o botão fica desativado e explica porquê.
 - **Vista:** a conversa continua à vista.
   - Os pedidos e os novos requisitos da pessoa aparecem como mensagens dela, pela ordem em que foram enviados. Logo a seguir vem o cartão da tarefa e, no fim, a resposta comum.
   - Nada aparece duas vezes. A cópia do pedido publicada com o resultado, as notas das rondas e o progresso das rondas e da publicação ficam no cartão.
