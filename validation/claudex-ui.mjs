@@ -108,6 +108,13 @@ try{
  await page.waitForFunction(()=>document.querySelector('.cx-badge').textContent==='Em diálogo');
  const clone=hub.claudex.records.at(-1);
  check('clone retains selected pair and author',clone.id!==pair.id&&JSON.stringify(clone.roles)===JSON.stringify(pair.roles)&&clone.author==='antigravity');
+ // A task whose agy lived in the retired private environment is archived: no resume, its content continues in a new task.
+ clients.antigravity.conversation(pair.members.antigravity.conversationId).claudexHome=root+'/old-private-home';hub.emit('state',hub.snapshot());
+ await page.locator('.cx-history button').filter({hasText:pair.title}).last().click();await page.waitForFunction(()=>document.querySelector('.cx-badge').textContent==='Arquivada');
+ check('archived task offers no resume',await page.getByRole('button',{name:'Retomar a mesma tarefa',exact:true}).count()===0&&!await page.getByRole('button',{name:'Terminar tarefa',exact:true}).isVisible());
+ check('archived task explains and continues in a new task',/^Arquivada: o agy desta tarefa/.test(await page.locator('#claudex-view .notice[role=status]').textContent())&&await page.getByRole('button',{name:'Nova tarefa a partir deste progresso',exact:true}).isVisible());
+ check('archived task marked in history',(await page.locator('.cx-history button').filter({hasText:pair.title}).last().locator('small').textContent())==='Arquivada'&&(await page.locator('.cx-history button').filter({hasText:pair.title}).first().locator('small').textContent())!=='Arquivada');
+ await page.screenshot({path:out+'/geminex-archived-1440.png',fullPage:true});
  clients.claude.connection='connected';hub.emit('state',hub.snapshot());
  await page.getByRole('button',{name:'＋ Nova tarefa Hydra',exact:true}).click();
  await page.locator('#cx-participant0').selectOption('claude');await page.locator('#cx-participant1').selectOption('antigravity');

@@ -127,3 +127,42 @@ test('ronda Hydra no agy: servidor registado, rota e regra só durante o pedido,
  assert.equal(c.messages.at(-1).text,'call_mcp_tool:ok call_mcp_tool:recusada call_mcp_tool:recusada write_file:recusada');
  await assert.rejects(client.send(c.id,'olá','h3',{...settings,sandbox:'workspace-write'}),/proteção só de leitura e do servidor MCP/);
 });
+
+test('tarefa Hydra numa conversa nova: agy normal pela rota; pausar a meio retira rota e regra, e retomar segue na mesma conversa com outra credencial',async t=>{
+ const dir=await mkdtemp('/tmp/hydraq-cx-agy-new-');
+ const config=path.join(dir,'agy-config'),hooksFile=path.join(config,'hooks.json'),mcpFile=path.join(config,'mcp_config.json'),guardDirectory=path.join(dir,'guard'),routeDirectory=path.join(dir,'route');
+ await mkdir(config,{recursive:true});
+ const agy=new Antigravity({dataDir:path.join(dir,'antigravity'),defaultCwd:dir,settingsFile:path.join(dir,'settings.json'),executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-agy.mjs')],env:{...process.env,FAKE_AGY_HOOKS:hooksFile,FAKE_AGY_HOLD:'1'},hooksFile,guardDirectory,mcpFile,routeDirectory});
+ const clients={codex:new OpinionClient('codex',dir+'/codex',{behavior:'hold'}),claude:new OpinionClient('claude',dir+'/claude',{behavior:'hold'}),antigravity:agy};clients.codex.capabilities=clients.claude.capabilities={steer:false};
+ const hub=new Providers({dataDir:dir+'/hub',defaultCwd:dir,clients,git:async()=>[]});await hub.load();await agy.connect();
+ const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+ t.after(async()=>{server.closeStreams();await new Promise(r=>server.close(r));await hub.close();await rm(dir,{recursive:true,force:true});});
+ const cx=hub.claudex,token=r=>[...cx.leases].find(([,l])=>l.taskId===r.id&&l.role==='antigravity')?.[0];
+ const created=await cx.create({text:'Analisa em conjunto.',requestId:randomUUID(),cwd:dir,roles:['codex','antigravity'],members:{codex:{model:'test',effort:'low'},antigravity:{model:'gemini-4-argon',effort:'low'}}});
+ const r=cx.record(created.task.id),c=cx.native(r,'antigravity');
+ await wait(()=>c.status==='running'&&agy.session?.route);
+ const routeFile=path.join(routeDirectory,c.threadId+'.json'),guardFile=path.join(guardDirectory,c.threadId+'.json'),thread=c.threadId,first=token(r);
+ assert.equal(r.inPlace,undefined);assert.equal(c.claudexHome,undefined,'sem ambiente privado');
+ assert.equal(agy.session.child.spawnfile,process.execPath,'o agy arranca diretamente, sem bwrap');
+ const route=JSON.parse(await readFile(routeFile,'utf8'));assert.equal(route.url,cx.url);assert.equal(route.token,first,'rota com a credencial desta ronda');assert.ok(route.tools.some(tool=>tool.name==='send_to_peer'));
+ const policy=JSON.parse(await readFile(guardFile,'utf8'));assert.ok(policy.mcp[GUARD_HOOK].includes('read_dialogue'));assert.deepEqual(Object.keys(policy.mcp),[GUARD_HOOK],'só as ferramentas da tarefa');
+ assert.equal(JSON.parse(await readFile(mcpFile,'utf8')).mcpServers[GUARD_HOOK].args.at(-1),routeDirectory);
+ await cx.tool(first,'initial_position',{text:'Posição do agy.'});assert.equal((await cx.tool(first,'read_dialogue',{})).self.role,'antigravity');
+ // Pausing interrupts the running turn: route and rule go, the old credential stops answering and nothing is resent.
+ await cx.pause(r.id);await wait(()=>r.status==='paused'&&!r.pause?.draining&&!r.pause?.interruptionPending&&!cx.pauseDrains.has(r.id)&&!cx.jobs.has(r.id)&&![...cx.dispatchOwners.values()].includes(r.id)&&!cx.preparing.get(r.id)?.size&&!r.pendingAnswers&&!agy.session);
+ assert.equal(await exists(routeFile),false,'rota retirada');assert.equal(await exists(guardFile),false,'regra retirada');
+ await assert.rejects(cx.tool(first,'read_dialogue',{}),/expirada/);assert.equal(c.turns.length,1,'nada foi reenviado');assert.equal(c.status,'interrupted');
+ await cx.resume(r.id);await wait(()=>c.turns.length===2&&c.status==='running'&&agy.session?.route);
+ assert.equal(c.threadId,thread,'mesma conversa do agy');assert.ok(agy.session.child.spawnargs.includes('--conversation'));
+ const renewed=JSON.parse(await readFile(routeFile,'utf8'));assert.notEqual(renewed.token,first);assert.equal(renewed.token,token(r));
+ assert.equal((await cx.tool(renewed.token,'read_dialogue',{})).self.role,'antigravity');
+});
+
+test('conversas do ambiente privado antigo do agy não continuam',async t=>{
+ const dir=await mkdtemp('/tmp/hydraq-agy-old-');
+ const client=new Antigravity({dataDir:path.join(dir,'state'),defaultCwd:dir,settingsFile:path.join(dir,'settings.json'),executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-agy.mjs')]});
+ t.after(async()=>{await client.close();await rm(dir,{recursive:true,force:true});});await client.load();await client.connect();
+ const c=await client.create({cwd:dir,model:'gemini-4-argon',effort:'low',sandbox:'plan'});c.claudexHome=path.join(dir,'claudex',c.id,'home');c.threadId='old-private-1';
+ for(const sandbox of ['plan','workspace-write'])await assert.rejects(client.send(c.id,'olá','old-'+sandbox,{sandbox}),/ambiente privado antigo do Hydra, que foi retirado/);
+ assert.equal(c.turns.length,0);assert.ok(!client.session,'nenhum processo agy');
+});

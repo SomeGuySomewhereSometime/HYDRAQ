@@ -1,5 +1,4 @@
 import test from 'node:test';
-import {request as httpRequest} from 'node:http';
 import assert from 'node:assert/strict';
 import {mkdtemp,rm,readFile,writeFile} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
@@ -431,21 +430,43 @@ for(const pair of [['antigravity','claude'],['claude','codex']])test('projeto as
 });
 
 
-test('MCP Antigravity usa socket privado, limita destino e credencial e revoga na pausa',async t=>{
- const ctx=await setup(t),r=await ctx.start({roles:['codex','antigravity'],members:{codex:{model:'test',effort:'low'},antigravity:{model:'test',effort:'low'}}});
- const token=ctx.token(r,'antigravity'),config=ctx.cx.leases.get(token).config,lease=JSON.parse(await readFile(config.file,'utf8'));
- assert.equal(lease.socketPath,config.socketPath);
- const send=(destination,credential=token,body={name:'read_dialogue',args:{}})=>new Promise((resolve,reject)=>{const req=httpRequest({socketPath:config.socketPath,path:destination,method:'POST',headers:{'x-hydraq-claudex-token':credential}},res=>{let text='';res.on('data',c=>text+=c);res.on('end',()=>resolve({status:res.statusCode,body:JSON.parse(text)}));});req.on('error',reject);req.end(JSON.stringify(body));});
- assert.equal((await send('/api/bootstrap')).status,404);assert.equal((await send('/api/state')).status,404);
- assert.equal((await send('/api/claudex/tools','invalid')).status,403);
- assert.equal((await send('/api/claudex/tools',ctx.token(r,'codex'))).status,403);
- assert.equal((await send('/api/claudex/tools',token,{name:'read_dialogue',args:{padding:'x'.repeat(640001)}})).status,413);
- await ctx.call(r,'antigravity','initial_position',{text:'Posição independente.'});
- assert.equal((await send('/api/claudex/tools')).body.self.role,'antigravity');
- const child=spawn(process.execPath,[fileURLToPath(new URL('../lib/claudex-mcp-server.mjs',import.meta.url))],{env:{...process.env,HYDRAQ_CLAUDEX_LEASE:config.file},stdio:['pipe','pipe','pipe']});
+test('MCP do agy pela rota da conversa: credencial desta tarefa e deste participante; pausa revoga e retoma dá outra',async t=>{
+ const ctx=await setup(t),agy=ctx.clients.antigravity,r=await ctx.start({roles:['codex','antigravity'],members:{codex:{model:'test',effort:'low'},antigravity:{model:'test',effort:'low'}}});
+ const token=ctx.token(r,'antigravity'),config=ctx.cx.leases.get(token).config,route=agy.logs[0].settings.contextMcp.route;
+ // No private socket or lease file: the adapter hands this route to agy's fixed hydraq server for each turn.
+ assert.equal(config.name,'hydraq');assert.equal(config.socketPath,undefined);await assert.rejects(readFile(config.file),{code:'ENOENT'});
+ assert.equal(route.url,ctx.url+'/api/claudex/tools');assert.equal(route.token,token);assert.ok(route.tools.some(tool=>tool.name==='read_dialogue'));
+ const send=(credential=token,body={name:'read_dialogue',args:{}})=>fetch(ctx.url+'/api/claudex/tools',{method:'POST',headers:{'content-type':'application/json','x-hydraq-claudex-token':credential},body:JSON.stringify(body)}).then(async res=>({status:res.status,body:await res.json()}));
+ assert.equal((await send('0'.repeat(64))).status,403);
+ assert.equal((await send(token,{name:'read_dialogue',args:{padding:'x'.repeat(640001)}})).status,413);
+ for(const role of ['codex','antigravity'])await ctx.call(r,role,'initial_position',{text:'Posição de '+role+'.'});
+ assert.equal((await send()).body.self.role,'antigravity');assert.equal((await send(ctx.token(r,'codex'))).body.self.role,'codex','cada credencial age só como o seu participante');
+ // The fixed server finds the task by agy's conversation id.
+ const routes=await mkdtemp('/tmp/hydraq-cx-route-');t.after(()=>rm(routes,{recursive:true,force:true}));
+ await writeFile(routes+'/conv-agy-1.json',JSON.stringify(route),{mode:0o600});
+ const child=spawn(process.execPath,[fileURLToPath(new URL('../lib/claudex-mcp-server.mjs',import.meta.url)),'--route',routes],{stdio:['pipe','pipe','pipe']});
  const lines=createInterface({input:child.stdout});t.after(()=>{lines.close();child.kill();});
- const reply=await new Promise((resolve,reject)=>{child.once('error',reject);lines.once('line',line=>resolve(JSON.parse(line)));child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/call',params:{name:'read_dialogue',arguments:{}}})+'\n');});
- assert.equal(reply.result.isError,false);assert.equal(JSON.parse(reply.result.content[0].text).self.role,'antigravity');
+ let id=0;const rpc=()=>new Promise((resolve,reject)=>{child.once('error',reject);lines.once('line',line=>resolve(JSON.parse(line)));child.stdin.write(JSON.stringify({jsonrpc:'2.0',id:++id,method:'tools/call',params:{name:'read_dialogue',arguments:{},_meta:{'antigravity.google/root_conversation_id':'conv-agy-1'}}})+'\n');});
+ const reply=await rpc();assert.equal(reply.result.isError,false);assert.equal(JSON.parse(reply.result.content[0].text).self.role,'antigravity');
  await ctx.cx.pause(r.id);await drained(ctx,r);await Promise.allSettled([...ctx.cx.leaseCleanups]);
- await assert.rejects(send('/api/claudex/tools'));await assert.rejects(ctx.cx.tool(token,'read_dialogue',{}),/expirada/);
+ assert.equal((await send()).status,403);await assert.rejects(ctx.cx.tool(token,'read_dialogue',{}),/expirada/);
+ const stale=await rpc();assert.equal(stale.result.isError,true);assert.match(stale.result.content[0].text,/expirada/,'uma rota antiga deixa de valer');
+ const sent=agy.logs.length;await ctx.cx.resume(r.id);await wait(()=>agy.logs.length>sent);
+ const renewed=agy.logs.at(-1).settings.contextMcp.route;assert.notEqual(renewed.token,token);assert.equal(renewed.token,ctx.token(r,'antigravity'));
+ assert.equal((await send(renewed.token)).body.self.role,'antigravity');assert.equal(agy.logs.at(-1).id,agy.logs[0].id,'mesma conversa do agy');
+});
+
+test('tarefa do ambiente privado antigo do agy fica arquivada: não retoma, liberta as conversas e o conteúdo segue numa tarefa nova',async t=>{
+ const ctx=await setup(t),{cx,hub}=ctx,r=await ctx.start({roles:['codex','antigravity'],members:{codex:{model:'test',effort:'low'},antigravity:{model:'test',effort:'low'}}});
+ await ctx.call(r,'codex','initial_position',{text:'POSICAO-ANTIGA'});
+ await cx.pause(r.id);await drained(ctx,r);
+ const old=cx.native(r,'antigravity'),codex=cx.native(r,'codex');assert.ok(cx.holds(codex.id),'antes, a pausa guarda as conversas');
+ old.claudexHome='/old/private/home';
+ assert.equal(cx.snapshot().records.find(x=>x.id===r.id).retired,true);assert.equal(cx.detail(r.id).retired,true);
+ await assert.rejects(cx.resume(r.id),/arquivada.*Nova tarefa a partir deste progresso/s);assert.equal(r.status,'paused');
+ assert.equal(cx.holds(codex.id),false,'as conversas ficam livres');assert.equal(hub.claudex.scopes().some(s=>s.id===r.id),false);
+ const next=await cx.create({...ctx.body,requestId:randomUUID(),roles:['codex','antigravity'],members:{codex:{model:'test',effort:'low'},antigravity:{model:'test',effort:'low'}},resumeFrom:r.id});
+ const n=cx.record(next.task.id);await wait(()=>n.roles.every(role=>n.members[role].turns));
+ assert.notEqual(n.members.antigravity.conversationId,old.id,'sessão nova do agy');assert.equal(cx.native(n,'antigravity').claudexHome,undefined);assert.equal(cx.detail(n.id).retired,false);
+ assert.match(n.messages.find(m=>m.type==='checkpoint').text,/POSICAO-ANTIGA/,'o progresso passa como contexto');
 });

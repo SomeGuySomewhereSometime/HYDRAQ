@@ -152,7 +152,8 @@ O protocolo documentado não aceita mensagens de controlo para autorizações ou
   - Recusa as opções que escrevem ou correm programas (`find -delete/-rm/-exec/-fprint`, `rg --pre/--hostname-bin`, `git --output/--ext-diff/--textconv/--filters/-O`). No `git`, também as suas abreviaturas e as letras juntas (`--op`, `-nO`).
   - No `find`, no `rg` e no `git`, um padrão `*`, `?` ou `[` só passa entre aspas, porque a bash podia trocá-lo pelo nome de um ficheiro como `-delete`.
 - Se o hook falhar, o agy recusa a ferramenta. Sem Node, a conversa protegida recusa e as outras seguem normalmente. Cada decisão fica registada: uma ferramenta que o hook não viu, ou que recusou e mesmo assim correu, para o pedido sem o repetir.
-- Se não for possível instalar o hook, por exemplo com um `hooks.json` inválido, o pedido Planear não começa. É uma regra do agy, não uma barreira do sistema operativo: depende de o agy correr os hooks. As conversas privadas do Hydra continuam protegidas pelo projeto montado só para leitura.
+- Se não for possível instalar o hook, por exemplo com um `hooks.json` inválido, o pedido Planear não começa. É uma regra do agy, não uma barreira do sistema operativo: depende de o agy correr os hooks.
+- No Hydra, o agy trabalha sempre na sua conversa normal com este hook e o servidor `hydraq` (detalhes em [docs/claudex.md](docs/claudex.md)). O ambiente privado antigo com `bwrap` foi retirado: as suas conversas não continuam e as tarefas onde estavam ficam arquivadas, com «Nova tarefa a partir deste progresso» para seguir o conteúdo.
 
 **Antigravity no terminal original.**
 - **Abrir:** depois do primeiro pedido, usa **Abrir no terminal · Antigravity**, por baixo da caixa de mensagens (também em **Configurações e detalhes → Antigravity original**).

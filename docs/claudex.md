@@ -74,20 +74,17 @@ Ensaio real: `node validation/hydra-inplace-live.mjs --run` (Codex Sol + agy Fla
 
 ## Antigravity nas duplas
 
-**Na mesma conversa**, o agy usa a sua conversa normal, sem `bwrap`:
+O agy trabalha sempre na sua conversa normal, a mesma do terminal, quer a tarefa comece numa conversa existente quer numa nova:
 - **Servidor MCP:** a HYDRAQ regista uma vez o servidor `hydraq` em `~/.gemini/config/mcp_config.json` (`lib/claudex-mcp-server.mjs --route`). O agy arranca-o em todas as sessões.
 - **Rota por pedido:** em cada pedido da tarefa, a HYDRAQ escreve em `~/.local/state/hydraq/agy-route/<conversa>.json` a credencial dessa ronda. O servidor encontra-a pelo identificador que o agy envia em cada chamada (`_meta["antigravity.google/root_conversation_id"]`); sem rota, as ferramentas recusam.
-- **Só leitura:** o hook só de leitura deixa passar apenas as ferramentas desta tarefa no servidor `hydraq`. A rota e a regra saem no fim de cada pedido.
-- **Limite:** é uma regra do agy, não uma barreira do sistema operativo, ao contrário do ambiente privado abaixo.
+- **Só leitura:** o hook só de leitura deixa passar apenas as ferramentas desta tarefa no servidor `hydraq`. A rota e a regra saem no fim de cada pedido, também quando o pedido é interrompido.
+- **Pausa e retoma:** pausar revoga a credencial; retomar continua na mesma conversa do agy com uma credencial nova.
+- **Limite:** a proteção depende do hook da HYDRAQ, que o agy corre antes de cada ferramenta. O `--mode plan` do agy não tem efeito aqui, e não há uma barreira do sistema operativo. No Planear o agy pode ler os ficheiros que o utilizador lê, incluindo as credenciais dos outros participantes em `.hydraq/`. Não as consegue usar, porque o hook recusa endereços locais e comandos de rede. Também o Codex e o Claude conseguem ler as do agy.
 
-**Numa tarefa começada numa conversa nova** (e nas tarefas antigas), em Linux, o Antigravity usa `bwrap`, uma HOME própria por conversa, estado nativo persistente e uma configuração MCP só com o servidor da tarefa. Não se regista nenhum servidor na configuração global. A pasta de investigação é montada em leitura; a HOME privada e o `/tmp` privado conservam o estado necessário. A autenticação utiliza a identidade e o serviço de credenciais existentes; pode precisar de uma sessão de desktop com esse serviço disponível. A rede do processo é separada da rede do anfitrião. O acesso à internet passa por um proxy que só aceita destinos públicos HTTP/HTTPS nas portas 80/443, valida e fixa os endereços DNS, e recusa endereços locais, privados ou do próprio anfitrião. O MCP passa por um socket Unix próprio da tarefa, sem disponibilizar a API administrativa. O DBus visível é filtrado para `org.freedesktop.secrets`, necessário à autenticação; o serviço systemd não fica acessível. O ambiente é construído por uma lista explícita de variáveis, sem herdar chaves de API, proxies ou opções do Node do anfitrião.
-
-A mudança de credencial na retoma renova o processo agy, mantendo o identificador da conversa e a HOME privada. Chamadas antigas continuam rejeitadas pelo coordenador. Conversas Antigravity criadas pela dupla permanecem em análise; para implementar, inicia uma conversa normal. A passagem deste ambiente privado ao terminal original ainda não está disponível. Conversas Antigravity normais mantêm o funcionamento anterior.
+**Ambiente privado antigo (retirado).** Antes da entrada 118, uma tarefa começada numa conversa nova punha o agy num ambiente `bwrap` com HOME, rede, proxy e D-Bus próprios. Esse ambiente foi retirado.
+- As conversas do agy que viviam nele não continuam, nem na HYDRAQ nem no terminal.
+- As tarefas onde participavam ficam **arquivadas**: não oferecem «Retomar» e deixam as conversas livres. «Nova tarefa a partir deste progresso» continua o conteúdo com sessões novas.
 
 As tarefas antigas sem lista de participantes são interpretadas como Codex + Claude. O trio e duas instâncias do mesmo cliente não estão disponíveis.
 
-Ensaio real dos novos pares: `node validation/claudex-pairs-live.mjs --run` usa Argon + Sol; `CX_PARTNER=claude node validation/claudex-pairs-live.mjs --run` usa Argon + Opus. São sessões temporárias que gastam quota. O teste de montagem sem modelos é `HYDRAQ_TEST_BWRAP=1 node --test test/antigravity-claudex.test.mjs`.
-
-## Limite observado dos comandos Antigravity
-
-Nos ensaios reais, a ferramenta `run_command` do agy devolveu `fork/exec agy: operation not permitted`. O participante continuou através das ferramentas nativas de leitura e MCP; não se deve apresentar um comando recusado como investigação executada. A restrição a escritas no projeto e o bloqueio de DBus/rede local são testados com processos capazes de executar comandos dentro do mesmo lançamento bwrap, sem depender dessa falha do agy. Uma atualização do agy que permita comandos continua sujeita a essas barreiras. A autenticação e a troca MCP são validadas em sessões temporárias reais; a alteração não reinicia automaticamente a instalação ativa.
+Ensaio real dos novos pares: `node validation/claudex-pairs-live.mjs --run` usa Argon + Sol; `CX_PARTNER=claude node validation/claudex-pairs-live.mjs --run` usa Argon + Opus; `CX_AGY_MODEL=gemini-3.8-flash` troca o Argon pelo Flash. São sessões temporárias que gastam quota e usam o hook e o servidor `hydraq` da configuração do agy do utilizador.

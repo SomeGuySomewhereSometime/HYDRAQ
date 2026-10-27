@@ -2,7 +2,7 @@
 
 2026-10-25. Guardado a pedido do utilizador para posterior discussão com o Claude. **Análise e proposta apenas: não há autorização nesta nota para implementar ou alterar configurações.**
 
-> Atualização: o utilizador autorizou posteriormente os ensaios e a implementação. A integração passou a usar MCP nativo numa HOME privada com bwrap, em vez da ponte CLI. Ver `docs/claudex.md` e a entrada correspondente de `AI_CHANGES.md` para o estado verificado. O texto abaixo preserva a análise anterior.
+> Atualização: o utilizador autorizou posteriormente os ensaios e a implementação. A integração passou a usar MCP nativo numa HOME privada com bwrap, em vez da ponte CLI; desde a entrada 118, o agy usa a sua conversa normal com o hook só de leitura e o servidor `hydraq`, e o bwrap foi retirado. Ver `docs/claudex.md` e a entrada correspondente de `AI_CHANGES.md` para o estado verificado. O texto abaixo preserva a análise anterior.
 
 ## Objetivo do utilizador
 

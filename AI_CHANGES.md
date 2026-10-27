@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 117
+Versão atual: 119
 
 ## Resumo atual
+
+- Um só caminho do agy no Hydra (entrada 118): qualquer tarefa com o agy, numa conversa nova ou existente, usa a sessão normal do agy com o hook só de leitura e o servidor `hydraq`. Saiu o ambiente privado com `bwrap` (proxy de rede, ponte e filtro D-Bus); as suas conversas não continuam e as tarefas onde estavam ficam arquivadas, com «Nova tarefa a partir deste progresso». Ensaio real Geminex numa conversa nova (Sol + Flash) com pausa, provas novas e segunda versão aprovada; 501 testes aprovados. Ativado na 4318 por reinício autorizado, pastas antigas apagadas e commit sem push (entrada 119).
 
 - Hook do agy lê os comandos como a bash (entrada 116): aspas dentro das opções (`-de''lete`, `--p''re`) deixavam passar ações que apagam ou correm programas; também `find -rm` (bfs), `rg --hostname-bin` e abreviaturas/letras juntas do `git grep` (`--op=sh`, `-nOsh`). 508 testes aprovados (1 omitido). Ativado na 4318 por reinício autorizado, hook instalado atualizado e ensaio real Planear com o Flash: os dois comandos do Codex recusados e o ficheiro intacto (entrada 117); commit sem push.
 
@@ -1443,3 +1445,70 @@ Versão atual: 117
   - a regra da conversa saiu no fim do pedido.
   - Um pedido ao Flash.
 - Commit com as entradas 116 e 117; `output/` fica fora. Sem push.
+
+### 118 — 2026-10-27 — Claude
+
+- Fase 3 A+B pedida pelo utilizador, com o plano revisto pelo Codex: um só caminho do agy no Hydra e remoção do ambiente privado antigo. O utilizador dispensou a sessão em pausa e as pastas antigas.
+- **Rota para todas as tarefas** (`lib/claudex.mjs`, `lib/antigravity.mjs`):
+  - O `lease` do agy passa a ser sempre a rota `{url, token, tools}` do servidor fixo `hydraq`, também nas tarefas começadas numa conversa nova.
+  - Saíram o servidor HTTP por socket Unix em `/tmp/hydraq-cx-*` e o suporte a `socketPath` em `lib/claudex-mcp-server.mjs`.
+  - Um pedido Hydra do agy exige rota, hook e servidor registado, ou não começa.
+  - Saíram `prepareAntigravityClaudeX`, `startAntigravityServices`, o arranque por `bwrap` e o `launchKey`.
+- **Removidos:** `lib/antigravity-claudex.mjs`, `lib/antigravity-egress.mjs` (proxy de rede), `lib/antigravity-net-bridge.mjs`, e com eles o filtro D-Bus (`xdg-dbus-proxy`). Também `test/antigravity-claudex.test.mjs` e `test/antigravity-egress.test.mjs`.
+- **Conversas e tarefas antigas:**
+  - Uma conversa do agy com `claudexHome` recusa novos pedidos, na HYDRAQ e no terminal, com uma mensagem a explicar.
+  - Uma tarefa com um participante desses fica `retired`:
+    - aparece «Arquivada» na lista, no estado e no detalhe, com um aviso;
+    - não oferece «Retomar» nem «Terminar tarefa», e `resume` recusa;
+    - deixa as conversas livres;
+    - «Nova tarefa a partir deste progresso» continua o conteúdo com sessões novas e o progresso como contexto.
+- **Testes** (as mesmas garantias no caminho normal):
+  - `claudex.test.mjs`: o MCP do agy pela rota.
+    - Sem socket nem ficheiro de credencial; a credencial é desta tarefa e deste participante, e uma inválida recebe 403.
+    - Mais de 640 KB recebe 413.
+    - O servidor fixo encontra a tarefa pela conversa.
+    - Pausar revoga a credencial, incluindo a de uma rota antiga.
+    - Retomar dá outra credencial na mesma conversa.
+  - Teste da tarefa arquivada: não retoma, liberta as conversas e o progresso segue numa tarefa nova.
+  - `claudex-inplace.test.mjs`, com o adaptador real e o agy simulado (`FAKE_AGY_HOLD` mantém o pedido em curso):
+    - uma tarefa numa conversa nova arranca o agy diretamente, sem `bwrap`;
+    - tem a rota e a regra Hydra, só com as ferramentas da tarefa;
+    - pausar a meio retira a rota e a regra, não reenvia nada e revoga a credencial;
+    - retomar segue no mesmo `threadId` com uma credencial nova.
+  - Conversas antigas recusam pedidos.
+  - **Saíram sem substituição:** montagens do `bwrap` e bloqueios do kernel, proxy e D-Bus, «sem alterar a configuração global» (já coberto pelos testes do hook) e esconder o estado dos outros clientes no projeto HYDRAQ.
+- **Ensaio real** (`validation/claudex-pairs-live.mjs` com `CX_AGY_MODEL=gemini-3.8-flash`): Geminex numa conversa nova, com Codex GPT-6.1 Sol low + Gemini 3.8 Flash low.
+  - Primeira candidata aprovada pelos dois.
+  - Pausa e provas novas: objeções fundamentadas dos dois (`export-A.json`/`export-B.json`, id 7 nas duas instalações).
+  - Segunda versão aprovada pelos dois e publicada.
+  - Mesmas sessões nativas, credenciais antigas revogadas.
+  - O agy na sua sessão normal, com todas as rondas sob o hook e sem violações; nenhuma rota deixada.
+  - Projeto só com os ficheiros do ensaio.
+  - 7 pedidos ao Codex e 5 ao Flash. Provas em `.hydraq/hydra-agy-route-live-2026-10-27/`.
+  - O ensaio passou a verificar a sessão normal do agy, a rota e os ficheiros do projeto.
+- **Verificação:**
+  - suite sequencial **501 testes: 501 aprovados, 0 falhas, 0 omitidos** (sai o teste opcional do `bwrap`);
+  - `claudex-ui` **56/56**, com 3 verificações novas da tarefa arquivada e captura `geminex-archived-1440.png`;
+  - `hydra-inplace-ui` 26/26 e `hydra-mode-ui` 66/66;
+  - `git diff --check` aprovado.
+- **Documentação:** `docs/claudex.md` (secção «Antigravity nas duplas» reescrita; saiu «Limite observado dos comandos Antigravity», que só se aplicava ao `bwrap`), README e nota de `docs/claudex-gemini-analysis.md`.
+- **Limites:**
+  - A proteção do agy no Hydra depende do hook da HYDRAQ; o `--mode plan` do agy não tem efeito aqui, e não há uma barreira do sistema operativo.
+  - Continuam os limites conhecidos: `git` com configuração do repositório, nomes de domínio que apontem para endereços locais, e o agy tem de correr os hooks.
+  - No Planear, o agy pode ler as credenciais dos outros participantes em `.hydraq/`, mas não as consegue usar sem endereços locais nem comandos de rede.
+- **Falta:**
+  - reiniciar a 4318;
+  - apagar `.hydraq/antigravity/claudex/` (2 pastas, 52 MB; autorizado sem mostrar), depois do reinício;
+  - commit.
+
+### 119 — 2026-10-27 — Claude
+
+- Reinício, remoção das pastas antigas e commit pedidos pelo utilizador.
+- Antes da paragem: nenhum pedido em curso, autorização, reserva, terminal, passagem, sessão nativa, colaboração ou tarefa Hydra ativa (89 conversas).
+- Só o PID 472053 recebeu SIGTERM. Parou em 0,4 s e os 3 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; ambiente só em memória) no scope `hydraq-20261027T172650Z`, PID 536196.
+- Com os cinco clientes ligados, a impressão do estado ficou igual à de antes: conversas, opiniões, automático, colaboração, projetos, Dual e tarefas Hydra. Os 18 ficheiros que a página serve são iguais aos do disco.
+- As duas tarefas com o agy no ambiente antigo (`b49a7e0a`, em pausa, e `749167c3`, concluída) chegam à página como `retired`. As outras 8 não.
+- O filtro do hook não mudou nesta entrada, por isso `hooks.json` ficou como estava (só a entrada `hydraq`). O `mcp_config.json` mantém o servidor `hydraq`.
+- Apagada `.hydraq/antigravity/claudex/` (2 pastas, 52 MB) depois do reinício, sem processos a usá-la. Não havia restos em `/tmp`.
+- Commit com as entradas 118 e 119; `output/` fica fora. Sem push.
+- **Falta:** recarregar os separadores da HYDRAQ abertos antes do reinício.

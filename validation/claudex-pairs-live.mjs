@@ -1,6 +1,7 @@
 // Opt-in subscription experiment. Fresh sessions and fixtures, never active HYDRAQ data.
-// Controlled changing-evidence review, not a blind quality benchmark.
-import {mkdtemp,writeFile} from 'node:fs/promises';
+// Controlled changing-evidence review, not a blind quality benchmark. agy works in its normal session through the HYDRAQ
+// hook and hydraq MCP route of the user's agy configuration; CX_AGY_MODEL picks its model (default Argon).
+import {mkdtemp,writeFile,readdir} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {Providers} from '../lib/providers.mjs';
 import {Hydraq} from '../lib/hydraq.mjs';
@@ -48,11 +49,16 @@ try{
   if(cx.active(r))await cx.pause(r.id);
   const nativeAfter=Object.fromEntries([partner,'antigravity'].map(role=>[role,{conversationId:cx.native(r,role).id,threadId:cx.native(r,role).threadId}]));
   const sameNative=JSON.stringify(nativeBefore)===JSON.stringify(nativeAfter),oldTokensRevoked=Boolean(oldTokens?.length)&&oldTokens.every(token=>!cx.leases.has(token));
+  // agy in its normal session: no private environment, every Hydra turn under the read-only rule, and no route left behind.
+  const agyConversation=cx.native(r,'antigravity'),hydraTurns=agyConversation.turns.filter(t=>t.internal==='claudex');
+  const normalAgy=!agyConversation.claudexHome&&hydraTurns.length>0&&hydraTurns.every(t=>t.readOnlyGuard&&!t.guardViolation);
+  const routeLeft=(await readdir(clients.antigravity.routeDirectory).catch(()=>[])).includes(agyConversation.threadId+'.json');
+  const projectFiles=(await readdir(directory)).filter(name=>!['codex','claude','antigravity','hub'].includes(name)).sort();
   const objections=r.messages.filter(m=>m.type==='objection'&&[partner,'antigravity'].includes(m.from));
   const groundedObjection=objections.some(m=>/7|office-A|home-B|export-[AB]/.test(m.text)&&/colis|ident|perd|sobrescre|global/i.test(m.text));
-  const evidence={directory,taskId:r.id,selected,resolvedAntigravity:{id:agyModel.id,name:agyModel.name},experiment:'controlled changing-evidence review; synthetic fixture exports, not production data or blind benchmark',bothRunning,receivedDuringBoth,pausedForAudit,sameNative,oldTokensRevoked,leaseFilesBefore,nativeBefore,nativeAfter,status:r.status,error:r.error,turns:Object.fromEntries([partner,'antigravity'].map(role=>[role,r.members[role].turns])),messageCount:r.messages.length,candidateCount:r.candidates.length,groundedObjection,objections,final:r.result?.text,hash:r.result?.hash,agreed:r.result?.agreed,approvals:r.result?.approvals,candidates:r.candidates.map(c=>({id:c.id,hash:c.hash,version:c.version,text:c.text})),events};
+  const evidence={directory,taskId:r.id,selected,normalAgy,routeLeft,projectFiles,resolvedAntigravity:{id:agyModel.id,name:agyModel.name},experiment:'controlled changing-evidence review; synthetic fixture exports, not production data or blind benchmark',bothRunning,receivedDuringBoth,pausedForAudit,sameNative,oldTokensRevoked,leaseFilesBefore,nativeBefore,nativeAfter,status:r.status,error:r.error,turns:Object.fromEntries([partner,'antigravity'].map(role=>[role,r.members[role].turns])),messageCount:r.messages.length,candidateCount:r.candidates.length,groundedObjection,objections,final:r.result?.text,hash:r.result?.hash,agreed:r.result?.agreed,approvals:r.result?.approvals,candidates:r.candidates.map(c=>({id:c.id,hash:c.hash,version:c.version,text:c.text})),events};
   await writeFile(directory+'/evidence.json',JSON.stringify(evidence,null,2));await writeFile(directory+'/detail.json',JSON.stringify(cx.detail(r.id),null,2));
-  console.log(JSON.stringify({directory,selected,status:r.status,turns:evidence.turns,messageCount:evidence.messageCount,candidateCount:evidence.candidateCount,groundedObjection,pausedForAudit,sameNative,oldTokensRevoked,agreed:r.result?.agreed,hash:r.result?.hash,approvers:Object.keys(r.result?.approvals||{})}));
-  if(r.status!=='completed'||!r.result?.agreed||!sameNative||!pausedForAudit||!oldTokensRevoked||r.candidates.length<2||!groundedObjection)process.exitCode=1;
+  console.log(JSON.stringify({directory,selected,status:r.status,turns:evidence.turns,messageCount:evidence.messageCount,candidateCount:evidence.candidateCount,groundedObjection,pausedForAudit,sameNative,oldTokensRevoked,normalAgy,routeLeft,projectFiles,agreed:r.result?.agreed,hash:r.result?.hash,approvers:Object.keys(r.result?.approvals||{})}));
+  if(r.status!=='completed'||!r.result?.agreed||!sameNative||!pausedForAudit||!oldTokensRevoked||r.candidates.length<2||!groundedObjection||!normalAgy||routeLeft||projectFiles.join()!=='export-A.json,export-B.json,legacy-contract.md')process.exitCode=1;
  }
 }finally{if(server){server.closeStreams();await new Promise(resolve=>server.close(resolve));}await hub.close();}
