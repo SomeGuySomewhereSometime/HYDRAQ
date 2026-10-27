@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 120
+Versão atual: 121
 
 ## Resumo atual
+
+- Claudini na mesma conversa com clientes reais (entrada 121): Claude Sonnet 5.5 + Gemini 3.8 Flash, Normal → Dual → Claudini → Dual → Normal, 18/18. As três duplas já foram testadas com modelos reais na mesma conversa. O ensaio escolhe a dupla com `CX_PAIR`. Commit sem push.
 
 - Hydra dentro da conversa (entrada 120): o histórico fica sempre à vista. O pedido e os novos requisitos aparecem como mensagens da pessoa, seguidos do cartão da tarefa (participantes, diálogo, versões) e, no fim, da resposta comum. Tarefas terminadas ficam como cartões fechados no seu lugar, também depois de recarregar, sem nada repetido. Sai «Ver a conversa / Ver o Hydra». Só a página mudou: ativo ao recarregar, sem reinício. 501 testes; validações da página 46/46 e 67/67; commit sem push.
 
@@ -1546,3 +1548,24 @@ Versão atual: 120
   - Os ficheiros alterados já existiam, por isso a 4318 serve-os ao recarregar a página, sem reinício.
   - Os contributos das tarefas anteriores só se veem ao abrir o seu cartão. O separador Hydra continua com a vista completa.
   - Sem pedidos aos modelos reais. Commit sem push; `output/` fica fora.
+
+### 121 — 2026-10-27 — Claude
+
+- Pedido do utilizador: ensaio real do Claudini (Claude + Gemini) na mesma conversa, com o Sonnet e o Gemini 3.8 Flash. Até aqui, o Claudini na mesma conversa só tinha sido testado com clientes simulados.
+- **Ensaio** (`validation/hydra-inplace-live.mjs`): passou a aceitar qualquer dupla.
+  - `CX_PAIR=geminex|claudex|claudini` escolhe a dupla. `geminex` continua por omissão e `CX_PARTNER=claude` continua a dar `claudex`.
+  - No Claudini, a conversa começa no Claude em Planear e o agy é o parceiro.
+  - `CX_CLAUDE_MODEL` escolhe o modelo do Claude; por omissão é o `haiku`, como antes.
+  - As verificações do Claude aplicam-se onde ele estiver, como base ou como parceiro, e as do agy sempre que ele participa.
+- **Ensaio real Claudini** (Claude Sonnet 5.5 low + Gemini 3.8 Flash medium, pasta temporária), Normal → Dual → Claudini → Dual → Normal numa só conversa: **18/18**.
+  - As mesmas sessões nativas do Claude e do agy do princípio ao fim.
+  - O agy, com o Dual em só leitura, usou o servidor fixo pela rota da conversa e nenhuma escrita lhe foi autorizada. As decisões do hook foram `run_command`, `read_file` e `call_mcp_tool`, todas `ask`.
+  - O Claude usou as ferramentas da tarefa (`initial_position`, `read_dialogue`, `ready_to_conclude`…) na sessão do Dual, sem escrever nem correr comandos.
+  - A resposta comum, aprovada pelos dois, traz a palavra-código dita antes do Hydra.
+  - Ao terminar, a tarefa repôs as definições e publicou o resultado na conversa.
+  - Na ronda Dual seguinte, o agy lembrava-se da palavra-código e o Claude foi relançado sem as ferramentas da tarefa. A nota de regresso chegou aos dois.
+  - De volta só ao Claude, na mesma sessão, ele lembrava-se da palavra-código e do primeiro ponto da resposta comum.
+  - O projeto ficou sem alterações.
+  - Foram 7 pedidos ao Sonnet e 4 ao Flash. Provas em `.hydraq/hydra-inplace-live-2026-10-27-claudini/`.
+- **Documentação:** `docs/claudex.md` (como escolher a dupla do ensaio).
+- **Verificação:** sintaxe do script e `git diff --check` aprovados. O ensaio só usa a HYDRAQ isolada, sem tocar na 4318. Commit sem push; `output/` fica fora.

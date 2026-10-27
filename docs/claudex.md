@@ -75,7 +75,12 @@ Uma tarefa pedida numa conversa com histórico (`conversationId`) corre no grupo
 - **Resultado:** a resposta comum é publicada na conversa de onde foi pedida, se participou, e senão na do autor. Com aprovação dos dois, o outro participante não a volta a receber como novidade.
 - **Depois de devolvida:** a tarefa não se retoma; uma nova tarefa a partir do progresso corre na mesma conversa.
 
-Ensaio real: `node validation/hydra-inplace-live.mjs --run` (Codex Sol + agy Flash) faz Normal → Dual → Geminex → Dual → Normal numa só conversa; `CX_PARTNER=claude` faz o mesmo com ClaudeX (Codex Sol + Claude Haiku). A validação da página sem modelos é `node validation/hydra-inplace-ui.mjs`.
+Ensaio real: `node validation/hydra-inplace-live.mjs --run` faz Normal → Dual → Hydra → Dual → Normal numa só conversa. A dupla escolhe-se com `CX_PAIR`:
+- `geminex` (por omissão): Codex Sol + agy Flash;
+- `claudex` (ou `CX_PARTNER=claude`): Codex Sol + Claude;
+- `claudini`: Claude + agy Flash, com a conversa a começar no Claude, em Planear.
+
+`CX_CLAUDE_MODEL` escolhe o modelo do Claude; por omissão é o `haiku`. A validação da página sem modelos é `node validation/hydra-inplace-ui.mjs`.
 
 ## Antigravity nas duplas
 
