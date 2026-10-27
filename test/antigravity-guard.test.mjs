@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Antigravity } from '../lib/antigravity.mjs';
-import { GUARD_HOOK, guardPaths, readOnlyPolicy, readOnlyCommand, publicUrl, decide, guardCommand, ensureGuard, openGuard, closeGuard, guardDecisions } from '../lib/antigravity-guard.mjs';
+import { GUARD_HOOK, guardPaths, readOnlyPolicy, readOnlyCommand, shellWords, publicUrl, decide, guardCommand, ensureGuard, openGuard, closeGuard, guardDecisions } from '../lib/antigravity-guard.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const waitFor = async predicate => { const deadline = Date.now() + 4000; while (!predicate()) { if (Date.now() > deadline) throw new Error('Tempo excedido.'); await new Promise(r => setTimeout(r, 10)); } };
@@ -31,10 +31,24 @@ test('só leitura: leitura, comandos simples e artefactos do agy passam; escrita
   assert.equal(answer('run_command', { CommandLine: 'ls -la' }), 'ask');
   assert.equal(answer('run_command', { CommandLine: 'touch y.txt' }), 'deny');
 
+  // The words as bash passes them: quotes inside an option, find's -rm, rg's --hostname-bin, git's abbreviations
+  // and joined flags, and unquoted patterns that could expand to an option.
+  for (const line of ["find . -name sentinel.txt -de''lete", 'find . -name x "-del"ete', "find . -name x '-delete'", 'find . -name x -rm', "rg --p''re ./processor HYDRAQ input.txt", 'rg --hostname-bin=./x foo', 'git grep --op=sh x', "git grep --open-f''iles=sh x", 'git grep -nOsh x', 'git cat-file --filt HEAD:x', 'git diff --ext', 'find . -name *.js', 'rg foo lib/*', 'git log -- *.mjs', 'find . -name -[d]elete', "find . -name 'x", 'cat "a', 'ls\vx', 'ls\x00x']) assert.ok(!readOnlyCommand(line), line);
+  for (const line of ["find . -name '*.mjs' -not -path './node_modules/*'", 'find . ! -name x', 'ls *.md', 'grep -n "a b" lib/*.mjs', "git log --oneline -- 'lib/*.mjs'", 'git grep -n foo', 'git diff --stat', 'git show --name-only HEAD', 'cat "README.md"', "rg -g '*.mjs' guard", 'find . -name x #-delete', 'grep -n "it\'s" a.txt']) assert.ok(readOnlyCommand(line), line);
+
   for (const url of ['https://antigravity.google/docs', 'http://example.com/a?b=1']) assert.ok(publicUrl(url), url);
   for (const url of ['http://127.0.0.1:4318/api/bootstrap', 'http://localhost:4318', 'http://[::1]:4318', 'http://10.0.0.1', 'http://192.168.1.2', 'http://172.20.0.1', 'http://169.254.169.254', 'http://2130706433', 'http://0x7f000001', 'http://printer.local', 'http://router', 'file:///etc/passwd', 'http://user:pw@example.com', 'ftp://example.com', 'nope']) assert.ok(!publicUrl(url), url);
   assert.equal(answer('read_url_content', { Url: 'http://127.0.0.1:4318/api/bootstrap' }), 'deny');
   assert.equal(answer('read_url_content', { Url: 'https://antigravity.google/docs' }), 'ask');
+});
+
+test('as palavras do filtro são as que a bash do agy passa ao programa', () => {
+  const lines = ["find . -name sentinel.txt -de''lete", "rg --p''re ./processor HYDRAQ input.txt", 'a"b c"\'d\' e', "'' x", '"it\'s" \'a"b\'', 'a\t\tb  c', 'find . -name x #-delete y', 'x"#"y #z', "--op''en=1 -n'O'x", 'ls *.md "[x]"'];
+  for (const line of lines) {
+    const bash = execFileSync('bash', ['-c', 'set -f; set -- ' + line + '\nprintf "%s\\0" "$@"']).toString().split('\0').slice(0, -1);
+    assert.deepEqual(shellWords(line).map(word => word.text), bash, line);
+  }
+  assert.deepEqual(shellWords('ls *.md "[x]" a?').map(word => word.glob), [false, true, false, true]);
 });
 
 test('o hook corre pelo shell, regista cada passo e só falha fechado nas conversas protegidas', async t => {
@@ -47,8 +61,9 @@ test('o hook corre pelo shell, regista cada passo e só falha fechado nas conver
   assert.equal(run(call('write_file', { Path: '/p/x.txt' }, 4)).decision, 'deny');
   assert.equal(run(call('run_command', { CommandLine: 'ls -la' }, 6)).decision, 'ask');
   assert.equal(run(call('run_command', { CommandLine: 'touch y.txt' }, 8)).decision, 'deny');
+  assert.equal(run(call('run_command', { CommandLine: "find . -name sentinel.txt -de''lete" }, 9)).decision, 'deny');
   assert.equal(run(call('write_file', { Path: '/p/x' }, 9, 'other-5678')).decision, 'ask', 'outra conversa não é afetada');
-  assert.deepEqual([...guardDecisions(directory, 'conv-1234')], [[2, 'ask'], [4, 'deny'], [6, 'ask'], [8, 'deny']]);
+  assert.deepEqual([...guardDecisions(directory, 'conv-1234')], [[2, 'ask'], [4, 'deny'], [6, 'ask'], [8, 'deny'], [9, 'deny']]);
   const missing = guardCommand({ directory, node: path.join(directory, 'no-node') });
   assert.equal(run(call('read_file', {}), missing).decision, 'deny', 'sem Node, a conversa protegida recusa');
   assert.equal(run(call('read_file', {}, 1, 'other-5678'), missing).decision, 'ask', 'sem Node, as restantes seguem normalmente');

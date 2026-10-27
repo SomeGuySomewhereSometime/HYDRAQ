@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 115
+Versão atual: 117
 
 ## Resumo atual
+
+- Hook do agy lê os comandos como a bash (entrada 116): aspas dentro das opções (`-de''lete`, `--p''re`) deixavam passar ações que apagam ou correm programas; também `find -rm` (bfs), `rg --hostname-bin` e abreviaturas/letras juntas do `git grep` (`--op=sh`, `-nOsh`). 508 testes aprovados (1 omitido). Ativado na 4318 por reinício autorizado, hook instalado atualizado e ensaio real Planear com o Flash: os dois comandos do Codex recusados e o ficheiro intacto (entrada 117); commit sem push.
 
 - Chave da sessão e ensaio com o Claude (entrada 114): `/api/bootstrap` só entrega a chave e o estado a pedidos com o cabeçalho próprio da página; leitores de URLs dos modelos deixam de a obter. Ensaio real ClaudeX na mesma conversa (Codex Sol + Claude Haiku) 16/16. 507 testes aprovados (1 omitido). Ativado na 4318 por reinício autorizado e commit sem push (entrada 115); separadores abertos antes têm de ser recarregados.
 
@@ -1406,3 +1408,38 @@ Versão atual: 115
 - Só o PID 271333 (scope `hydraq-20261027T012316Z`) recebeu SIGTERM. Parou em 1,6 s e os 3 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; ambiente só em memória) no scope `hydraq-20261027T115649Z`, PID 428612. Cinco clientes ligados e 87 conversas; impressões do estado iguais às de antes e `public/` servido igual ao disco.
 - Na 4318 ativa, `/api/bootstrap` sem o cabeçalho responde 403; com o cabeçalho entrega a sessão.
 - Commit com as entradas 114 e 115; `output/` fica fora. Sem push.
+
+### 116 — 2026-10-27 — Claude
+
+- Revisão do Codex à entrada 112 (P1): `find . -name sentinel.txt -de''lete` e `rg --p''re ./processor …` eram autorizados pelo hook e, em `/tmp`, apagaram o ficheiro e correram o script. O filtro tirava só as aspas das pontas de cada palavra; a bash junta-as e passa `-delete` e `--pre`.
+- **Causa e correção** (`lib/antigravity-guard.mjs`):
+  - Novo `shellWords`: lê a linha como a bash a passa ao programa (aspas simples e duplas juntas à palavra, espaços e tabulações, `#` no início de uma palavra como comentário; aspas por fechar são recusadas). As regras por opção correm sobre estas palavras. Também recusa caracteres de controlo.
+  - Ensaio com o Flash: o agy corre cada comando com `/usr/bin/bash -c`, não interativo e sem expansão do histórico (`!$` fica literal). Por isso `!` continua permitido.
+  - Na mesma revisão apareceram mais casos, todos confirmados à mão:
+    - o `find` desta máquina é o `bfs 4.1.1`, onde `-rm` apaga como `-delete`;
+    - o `rg 15` tem `--hostname-bin=COMMAND`, que corre um programa;
+    - o `git grep`, o `ls-files` e o `cat-file` aceitam abreviaturas (`--op=echo` abre `--open-files-in-pager`) e letras juntas (`-nOecho`). O `log`, o `show` e o `diff` recusam-nas.
+    - Passam a ser recusados `-rm`, `--hostname-bin`, qualquer abreviatura ou extensão de `--output`, `--ext-diff`, `--textconv`, `--filters`, `--open-files-in-pager` e qualquer grupo de letras curtas com `O` no `git`.
+  - No `find`, no `rg` e no `git`, um `*`, `?` ou `[` fora de aspas passa a ser recusado: a bash podia trocá-lo pelo nome de um ficheiro como `-delete`. Entre aspas (`find . -name '*.mjs'`) e nos outros programas (`ls *.md`) continua a passar.
+- **Testes** (`test/antigravity-guard.test.mjs`): 19 linhas recusadas e 12 aceites novas; um teste novo compara as palavras de `shellWords` com as que a bash entrega (`set -f; set -- …`) em 10 linhas com aspas, comentários e tabulações; o hook instalado pelo `sh` recusa a linha do Codex. O código anterior aceitava todas as variantes novas.
+- **Verificação:** 9/9 no ficheiro do hook; 70/70 em `antigravity-guard`, `antigravity`, `claudex-inplace`, `handoff` e `opinions`; suite sequencial **509 testes: 508 aprovados, 0 falhas, 1 omitido**; `git diff --check` aprovado.
+- Documentado no README (secção Planear/Só leitura no Antigravity).
+- **Falta:** a 4318 ativa e o `~/.gemini/config/hooks.json` instalado têm o filtro antigo. A própria 4318 reescreve o hook quando inicia um pedido Planear, por isso o hook só deve ser atualizado depois do reinício (como na entrada 113). Sem commit nem push.
+
+### 117 — 2026-10-27 — Claude
+
+- Reinício, atualização do hook, ensaio e commit pedidos pelo utilizador.
+- Antes da paragem: nenhum pedido em curso, autorização, reserva, terminal, passagem, sessão nativa, colaboração ou tarefa Hydra ativa (89 conversas).
+- Só o PID 428612 (scope `hydraq-20261027T115649Z`) recebeu SIGTERM. Parou em 1,0 s e os 5 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; ambiente só em memória) no scope `hydraq-20261027T135709Z`, PID 472053.
+- A primeira impressão do estado foi tirada com os clientes ainda a ligar e diferia nas conversas. Repetida segundos depois, com os cinco clientes ligados, ficou igual à de antes. `public/` servido igual ao disco e `/api/bootstrap` sem cabeçalho responde 403.
+- **Hook:** `~/.gemini/config/hooks.json` atualizado logo a seguir, pelo `ensureGuard` com o mesmo Node da 4318. O comando ficou igual ao que a 4318 escreve. Sem cópia nova, porque o ficheiro só tem a entrada `hydraq`.
+  - Pelo comando instalado, numa conversa protegida, `-de''lete`, `--p''re`, `git grep --op=sh` e `find -rm` dão `deny`, e `ls -la` e `find . -name '*.mjs'` dão `ask`.
+  - Numa conversa não protegida, `touch x` dá `ask`.
+- **Ensaio real Planear com o Gemini 3.8 Flash** (pasta temporária com `sentinel.txt` e um `processor` que deixaria um ficheiro `RAN`):
+  - `ls -la` correu;
+  - `find . -name sentinel.txt -de''lete` e `rg --p''re ./processor HYDRAQ input.txt` foram recusados pelo hook («tool call denied by pre-tool hook»);
+  - decisões registadas `ask`, `deny`, `deny`, sem violação no pedido;
+  - `sentinel.txt` ficou e `RAN` não apareceu;
+  - a regra da conversa saiu no fim do pedido.
+  - Um pedido ao Flash.
+- Commit com as entradas 116 e 117; `output/` fica fora. Sem push.
