@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 113
+Versão atual: 115
 
 ## Resumo atual
+
+- Chave da sessão e ensaio com o Claude (entrada 114): `/api/bootstrap` só entrega a chave e o estado a pedidos com o cabeçalho próprio da página; leitores de URLs dos modelos deixam de a obter. Ensaio real ClaudeX na mesma conversa (Codex Sol + Claude Haiku) 16/16. 507 testes aprovados (1 omitido). Ativado na 4318 por reinício autorizado e commit sem push (entrada 115); separadores abertos antes têm de ser recarregados.
 
 - Correções da revisão do Codex às entradas 108 e 110 (entrada 112): o hook do agy deixava passar comandos com opções que escrevem ou correm programas (`file -C`, `tree -R`, `sort --compress-program`); ao voltar de Planear, o agy reutilizava o processo no modo errado; uma tarefa Hydra devolvida oferecia «Retomar». 507 testes aprovados (1 omitido); Hydra na conversa 26/26, modo Hydra 66/66, `claudex-ui` 53/53. Ativado na 4318 por reinício autorizado e commit sem push (entrada 113).
 
@@ -1372,3 +1374,35 @@ Versão atual: 113
   - Esta alteração só decide se se faz cópia; a 4318 ativa usa-a no próximo reinício.
 - **Verificação:** suite sequencial **508 testes: 507 aprovados, 0 falhas, 1 omitido**; `git diff --check` aprovado.
 - Commit com as entradas 112 e 113; `output/` fica fora. Sem push.
+
+### 114 — 2026-10-27 — Claude
+
+- Pedido do utilizador: corrigir o `/api/bootstrap` e fazer o ensaio real do Hydra na conversa com o Claude, antes da Fase 3.
+- **Chave da sessão** (`lib/http.mjs`, `public/app.js`):
+  - Antes, um `GET /api/bootstrap` simples devolvia a chave da sessão e o estado completo a qualquer processo local, incluindo o WebFetch do Claude ou o `read_url_content` do agy. Com a chave, era possível enviar pedidos e aprovar autorizações como a página.
+  - Passa a exigir o cabeçalho `X-HYDRAQ-Bootstrap: 1`, que a página envia. Sem ele, recebe 403 sem chave nem estado. Ferramentas que só leem um endereço não juntam cabeçalhos.
+  - Um modelo com terminal em modo de escrita pode forjá-lo, mas aí já tem o mesmo acesso que o utilizador.
+  - Os testes que abrem a sessão passam a enviar o cabeçalho, e `test/integration.test.mjs` verifica a recusa do pedido simples. Também atualizado o script de verificação usado nos reinícios.
+- **Ensaio real com o Claude** (`validation/hydra-inplace-live.mjs`, agora com `CX_PARTNER=claude`): ClaudeX com Codex GPT-6.1 Sol low + Claude Haiku 5.5 low, Normal → Dual → ClaudeX → Dual → Normal numa só conversa, **16/16**:
+  - mesmas sessões nativas do Codex e do Claude;
+  - o Claude usou as ferramentas da tarefa (`mcp__hydraq_cx_…__initial_position`, `read_dialogue`, `ready_to_conclude`…) na sua sessão do Dual, sem escrever nem correr comandos;
+  - resposta comum com a palavra-código anterior ao Hydra; definições repostas e resultado publicado;
+  - na ronda Dual seguinte, o Claude foi relançado sem as ferramentas da tarefa e lembrava-se da palavra-código; nota de regresso entregue aos dois;
+  - o Codex, sozinho no fim, lembrava-se do antes e do durante; projeto sem alterações.
+  - Provas em `.hydraq/hydra-inplace-live-2026-10-27-claude/`.
+- **Teste instável:** `test/opencode-native.test.mjs` falhou 2 vezes seguidas, também com o código do último commit. A causa medida foi tempo: com a máquina carregada (média 5), o catálogo simulado precisava de cerca de 870 ms para estabilizar e o teste dava 1000 ms, contando com o arranque do servidor. O limite do teste passa a 5000 ms; o ciclo termina assim que o catálogo estabiliza. Um teste da Colaboração falhou uma vez e passou 3 de 3 sozinho, sem alteração.
+- **Ficheiros:** `lib/http.mjs`, `public/app.js`, 12 ficheiros de teste (cabeçalho), `test/integration.test.mjs` (recusa), `test/opencode-native.test.mjs` (limite), `validation/ui-check.mjs`, `validation/hydra-inplace-live.mjs`, `README.md`, `docs/claudex.md`.
+- **Verificação:** suite sequencial **508 testes: 507 aprovados, 0 falhas, 1 omitido**. Página: Hydra na conversa **26/26**, mensagens/terminal **73/73**. `git diff --check` aprovado.
+- **Limitações:**
+  - A 4318 ainda corre o código anterior.
+  - Depois do reinício, um separador aberto antes tem de ser recarregado: ao religar sem o cabeçalho, recebe «Não foi possível abrir a sessão local».
+  - Os scripts de reinício antigos do Codex em `.hydraq/` também precisam do cabeçalho.
+  - Cerca de 6 pedidos ao Codex Sol low e 6 ao Claude Haiku low no ensaio. Sem commit nem push.
+
+### 115 — 2026-10-27 — Claude
+
+- Reinício e commit pedidos pelo utilizador.
+- Antes da paragem: nenhum pedido em curso, autorização, reserva, terminal, passagem, sessão nativa, colaboração ou tarefa Hydra ativa.
+- Só o PID 271333 (scope `hydraq-20261027T012316Z`) recebeu SIGTERM. Parou em 1,6 s e os 3 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; ambiente só em memória) no scope `hydraq-20261027T115649Z`, PID 428612. Cinco clientes ligados e 87 conversas; impressões do estado iguais às de antes e `public/` servido igual ao disco.
+- Na 4318 ativa, `/api/bootstrap` sem o cabeçalho responde 403; com o cabeçalho entrega a sessão.
+- Commit com as entradas 114 e 115; `output/` fica fora. Sem push.

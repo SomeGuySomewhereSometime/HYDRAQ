@@ -226,7 +226,7 @@ test('HTTP escolhe cliente por conversa e encaminha autorizações Codex pelo id
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>{server.closeStreams();server.close();});
   const base=`http://127.0.0.1:${server.address().port}`;
-  const {token}=await(await fetch(base+'/api/bootstrap')).json();
+  const {token}=await(await fetch(base+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
   const post=async(route,body)=>{const response=await fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json','x-hydraq-token':token},body:JSON.stringify(body)});return {status:response.status,body:await response.json()};};
   const agyChat=await post('/api/conversations',{provider:'antigravity',cwd:directory,model:'claude-opus-5-5',effort:'high',sandbox:'plan'});
   assert.equal(agyChat.status,201);assert.equal(agyChat.body.capabilities.steer,false);

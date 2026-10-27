@@ -9,7 +9,7 @@ const fixture=fileURLToPath(new URL('./fixtures/fake-opencode-native.mjs',import
 const wait=async fn=>{const deadline=Date.now()+8000;while(!fn()){if(Date.now()>deadline)throw Error('Timeout');await new Promise(r=>setTimeout(r,20));}};
 async function setup(t){
  const root=await mkdtemp('/tmp/hydraq-opencode-native-test-');await mkdir(root+'/project');const clients=[];
- const make=async()=>{const runtime=new OpenCodeRuntime({directory:root+'/state/native',executable:process.execPath,args:[fixture],env:{...process.env,FAKE_OPENCODE_LOG:root+'/log'},manifest:false,minimumSettleMs:0,settleMs:1000});const client=new OpenCode({dataDir:root+'/state',defaultCwd:root+'/project',runtime});clients.push(client);await client.load();await client.connect();return client;};
+ const make=async()=>{const runtime=new OpenCodeRuntime({directory:root+'/state/native',executable:process.execPath,args:[fixture],env:{...process.env,FAKE_OPENCODE_LOG:root+'/log'},manifest:false,minimumSettleMs:0,settleMs:5000});const client=new OpenCode({dataDir:root+'/state',defaultCwd:root+'/project',runtime});clients.push(client);await client.load();await client.connect();return client;};
  t.after(async()=>{for(const c of clients)await c.close();await rm(root,{recursive:true,force:true});});
  return {root,make,log:async()=> (await readFile(root+'/log','utf8')).trim().split('\n').map(JSON.parse)};
 }

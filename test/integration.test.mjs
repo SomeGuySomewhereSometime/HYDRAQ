@@ -171,7 +171,11 @@ test('HTTP protege mutações contra origens externas, tokens ausentes e DNS reb
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>{server.closeStreams();server.close();});
   const url = `http://127.0.0.1:${server.address().port}`;
-  const initial = await (await fetch(url+'/api/bootstrap')).json();
+  // A plain read of the address (as a model's URL fetcher does) gets neither the key nor the state.
+  const plain = await fetch(url+'/api/bootstrap');
+  assert.equal(plain.status,403);assert.doesNotMatch(await plain.text(),/token|conversations/);
+  const initial = await (await fetch(url+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
+  assert.match(initial.token,/^[a-f0-9]{64}$/);
   assert.equal((await fetch(url+'/api/connect',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'})).status,403);
   assert.equal((await fetch(url+'/api/connect',{method:'POST',headers:{'Content-Type':'application/json','x-hydraq-token':initial.token,Origin:'https://example.com'},body:'{}'})).status,403);
   assert.equal((await fetch(url+'/api/state',{headers:{'x-hydraq-token':initial.token}})).status,200);
@@ -198,7 +202,7 @@ test('HTTP encaminha steer para o turno indicado e recusa mudanças de configura
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
   t.after(()=>{server.closeStreams();server.close();});
   const url = `http://127.0.0.1:${server.address().port}`;
-  const {token} = await (await fetch(url+'/api/bootstrap')).json();
+  const {token} = await (await fetch(url+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
   const steer = body=>fetch(`${url}/api/conversations/${chat.id}/steer`,{method:'POST',headers:{'Content-Type':'application/json','x-hydraq-token':token},body:JSON.stringify(body)});
   for (const key of ['model','effort','cwd','sandbox']) {
     const response = await steer({text:'finish',requestId:`override-${key}`,expectedTurnId:turnId,[key]:'different'});

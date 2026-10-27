@@ -72,7 +72,7 @@ test('recibo corrompido ou pasta simbólica não autoriza repetição nem leitur
 test('HTTP distingue revisão indisponível antes do envio e autentica a paginação',async t=>{
  const{hub,c,main}=await setup(t),server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeStreams();server.closeAllConnections();server.close();});
- const base='http://127.0.0.1:'+server.address().port,{token}=await(await fetch(base+'/api/bootstrap')).json();
+ const base='http://127.0.0.1:'+server.address().port,{token}=await(await fetch(base+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
  const headers={'Content-Type':'application/json','x-hydraq-token':token};hub.clients.claude.models=[];
  const send=autoReview=>fetch(base+'/api/conversations/'+c.id+'/send',{method:'POST',headers,body:JSON.stringify({text:'Pedido conservado',requestId:'http-no-review',autoReview})});
  const failed=await send(config);assert.equal(failed.status,409);const error=await failed.json();assert.equal(error.code,'REVIEW_UNAVAILABLE');assert.equal(error.beforeSend,true);assert.equal(main.logs.length,1);

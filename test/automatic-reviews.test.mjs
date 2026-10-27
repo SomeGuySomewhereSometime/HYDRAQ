@@ -43,7 +43,7 @@ test('passagem de cliente conserva o grupo e revê apenas o pedido no destino',a
 test('HTTP conserva a configuração do pedido e protege alterações da política',async t=>{
  const{hub,c,main}=await setup(t);const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeStreams();server.close();});
- const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap')).json();
+ const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
  const post=(route,body,authenticated=true)=>fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json',...(authenticated?{'x-hydraq-token':token}:{})},body:JSON.stringify(body)});
  assert.equal((await post(`/api/conversations/${c.id}/review-policy`,{config:config()},false)).status,403);
  assert.equal(Object.keys(hub.automaticReviews.policies).length,0);

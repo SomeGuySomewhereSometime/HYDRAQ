@@ -61,7 +61,7 @@ test('HTTP mantém UTF-8 entre blocos e aceita pedidos Unicode dentro do limite 
   const hub=new EventEmitter();let received;hub.snapshot=()=>({conversations:[],approvals:[]});hub.send=async(_id,text)=>{received=text;return {accepted:true};};
   const server=createHttpServer({hydraq:hub,publicDir:path.join(root,'public')});await new Promise(r=>server.listen(0,'127.0.0.1',r));
   t.after(()=>{server.closeStreams();server.close();});const port=server.address().port,url=`http://127.0.0.1:${port}`;
-  const {token}=await (await fetch(url+'/api/bootstrap')).json();
+  const {token}=await (await fetch(url+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
   const status=await new Promise((resolve,reject)=>{
     const req=http.request({hostname:'127.0.0.1',port,path:'/api/conversations/c/send',method:'POST',headers:{'content-type':'application/json','x-hydraq-token':token}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);
     req.write(Buffer.concat([Buffer.from('{"text":"Ol'),Buffer.from([0xc3])]));

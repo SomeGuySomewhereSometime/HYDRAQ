@@ -225,7 +225,7 @@ test('rotas HTTP do Dual exigem a sessão local e encaminham para o coordenador'
  const{hub,c,claude}=await setup(t);
  const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});
  await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeStreams();server.close();});
- const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap')).json();
+ const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
  const post=(route,body,authenticated=true)=>fetch(base+route,{method:'POST',headers:{'Content-Type':'application/json',...(authenticated?{'x-hydraq-token':token}:{})},body:JSON.stringify(body)});
  assert.equal((await post(`/api/conversations/${c.id}/dual`,{provider:'claude',model:'test',effort:'low'},false)).status,403);
  const started=await(await post(`/api/conversations/${c.id}/dual`,{provider:'claude',model:'test',effort:'low',principal:'b'})).json();

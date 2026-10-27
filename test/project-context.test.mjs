@@ -121,7 +121,7 @@ test('consulta de imagem exige origem explícita e importação copia o original
 test('MCP usa credencial própria; token da interface, outro projeto, expiração e revogação são recusados',async t=>{
  const s=await setup(t),c=await s.make(),hub=Object.assign(new EventEmitter(),s,{conversations:()=>s.conversations,snapshot:()=>({}),refreshProjects:async()=>{}});hub.contextMcp=new ContextMcp(hub,s.dir+'/runtime');
  const server=createHttpServer({hydraq:hub,publicDir:root+'public'});await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(async()=>{server.closeStreams();server.close();await hub.contextMcp.close();});
- const config=await hub.contextMcp.issue(c),credential=JSON.parse(await readFile(config.file));const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap')).json();
+ const config=await hub.contextMcp.issue(c),credential=JSON.parse(await readFile(config.file));const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
  const call=(key,args={})=>fetch(credential.url,{method:'POST',headers:{'content-type':'application/json','x-hydraq-context-token':key},body:JSON.stringify({name:'get_project_memory',args})});
  assert.equal((await call(token)).status,403);assert.equal((await call(credential.token)).status,200);assert.equal((await call(credential.token,{projectId:s.q.id})).status,403);
  const lease=hub.contextMcp.sessions.get(c.id);lease.expires=0;assert.equal((await call(credential.token)).status,403);lease.expires=Date.now()+10000;

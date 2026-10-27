@@ -10,7 +10,7 @@ Requisitos: Node.js 22 ou superior e o cliente que pretendes usar: Codex autenti
 
 Abre `HYDRAQ.desktop` nesta pasta. O atalho inicia o serviço local e abre o browser; alguns ambientes Linux pedem que marques o atalho como fiável na primeira utilização. Também podes executar `./scripts/launch.sh` ou `npm start` e abrir <http://127.0.0.1:4318>.
 
-O HYDRAQ só escuta em `127.0.0.1`. Não precisa de alojamento remoto. A inferência continua a ser feita pelo serviço do cliente escolhido, através da tua conta e dos limites do teu plano.
+O HYDRAQ só escuta em `127.0.0.1`. A chave da sessão local só é entregue a pedidos com o cabeçalho próprio da página (`X-HYDRAQ-Bootstrap`); uma ferramenta que apenas lê um endereço, como o leitor de URLs de um modelo, não a obtém. Não precisa de alojamento remoto. A inferência continua a ser feita pelo serviço do cliente escolhido, através da tua conta e dos limites do teu plano.
 
 ## Utilizar
 

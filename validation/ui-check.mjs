@@ -41,7 +41,7 @@ try {
   const marker='HYDRA_BACK_'+randomUUID().slice(0,8);
   await page.locator('#prompt').fill(`Responde apenas ${marker}. Não uses ferramentas nem alteres ficheiros.`);
   await page.locator('#send').click();
-  await page.waitForFunction(async ({id,marker})=>{const {state}=await(await fetch('/api/bootstrap')).json();const c=state.conversations.find(c=>c.id===id);return c?.status==='completed'&&c.messages.at(-1)?.text===marker;},{id:info.conversationId,marker},{timeout:120000});
+  await page.waitForFunction(async ({id,marker})=>{const {state}=await(await fetch('/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();const c=state.conversations.find(c=>c.id===id);return c?.status==='completed'&&c.messages.at(-1)?.text===marker;},{id:info.conversationId,marker},{timeout:120000});
   results.push({existingSessionSelected:true,release:true,backRequestCompleted:true,marker});
   }
   assert.deepEqual(errors,[]);

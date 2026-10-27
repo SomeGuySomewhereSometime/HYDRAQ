@@ -2166,7 +2166,7 @@ function listen() {
 
 async function boot(recovering = false) {
   try {
-    const response = await fetch('/api/bootstrap');
+    const response = await fetch('/api/bootstrap', { headers: { 'X-HYDRAQ-Bootstrap': '1' } });
     if (!response.ok) throw new Error('Não foi possível abrir a sessão local.');
     const initial = await response.json();
     token = initial.token;

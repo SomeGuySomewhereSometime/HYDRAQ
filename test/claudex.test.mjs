@@ -253,7 +253,7 @@ test('recusa da descrição das divergências termina sem acordo e preserva as p
 
 test('HTTP oferece pausa e retoma da mesma tarefa com guardas revistos',async t=>{
  const ctx=await setup(t),r=await ctx.start();
- const {token}=await fetch(ctx.url+'/api/bootstrap').then(response=>response.json());
+ const {token}=await fetch(ctx.url+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}}).then(response=>response.json());
  const post=async(action,body={})=>fetch(ctx.url+'/api/claudex/'+r.id+'/'+action,{method:'POST',headers:{'content-type':'application/json','x-hydraq-token':token},body:JSON.stringify(body)});
  assert.equal((await post('pause')).status,200);assert.equal(r.status,'paused');await drained(ctx,r);
  assert.equal((await post('resume',{guards:{turns:0,minutes:0},requestId:'http-resume',text:'Continuar com a mesma análise.'})).status,200);
@@ -341,7 +341,7 @@ test('retoma valida todos os terminais nativos antes de renovar o transporte Cod
 });
 
 test('HTTP pausa filtra estado e categoria injetados e preserva só o motivo público',async t=>{
- const ctx=await setup(t),r=await ctx.start(),guards=structuredClone(r.guards),{token}=await fetch(ctx.url+'/api/bootstrap').then(x=>x.json());
+ const ctx=await setup(t),r=await ctx.start(),guards=structuredClone(r.guards),{token}=await fetch(ctx.url+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}}).then(x=>x.json());
  const response=await fetch(ctx.url+'/api/claudex/'+r.id+'/pause',{method:'POST',headers:{'content-type':'application/json','x-hydraq-token':token},body:JSON.stringify({reason:'Pausa explícita via HTTP.',status:'completed',kind:'guard',guards:{turns:0,minutes:0},result:{agreed:true}})});
  assert.equal(response.status,200);await drained(ctx,r);assert.equal(r.status,'paused');assert.equal(r.pause.kind,'user');assert.equal(r.pause.reason,'Pausa explícita via HTTP.');assert.deepEqual(r.guards,guards);assert.equal(r.result,undefined);assert.equal(ctx.cx.leases.size,0);
 });

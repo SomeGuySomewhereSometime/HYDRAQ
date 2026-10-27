@@ -143,7 +143,7 @@ test('HTTP protege upload e leitura; imagens não usam tokens na URL nem entram 
   const {hub,create}=await setup(t),c=await create('codex');
   const server=createHttpServer({hydraq:hub,publicDir:path.join(root,'public')});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));t.after(()=>{server.closeStreams();server.close();});
-  const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap')).json();
+  const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
   const route=base+'/api/conversations/'+c.id+'/attachments?name=screen.png';
   assert.equal((await fetch(route,{method:'POST',body:png,headers:{'content-type':'image/png'}})).status,403);
   const response=await fetch(route,{method:'POST',body:png,headers:{'content-type':'image/png','x-hydraq-token':token}});

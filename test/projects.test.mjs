@@ -118,7 +118,7 @@ test('catálogo inválido conserva os históricos dos clientes e desativa só as
 
 test('HTTP protege organização, transmite conflitos 409 e serve os módulos',async t=>{
   const {hub,dir,chat}=await setup(t),c=await chat(),server=createHttpServer({hydraq:hub,publicDir:root+'/public'});await new Promise(r=>server.listen(0,'127.0.0.1',r));
-  t.after(()=>{server.closeStreams();server.close();});const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap')).json();
+  t.after(()=>{server.closeStreams();server.close();});const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
   const post=(route,body,key=token)=>fetch(base+route,{method:'POST',headers:{'content-type':'application/json','x-hydraq-token':key},body:JSON.stringify(body)});
   assert.equal((await post('/api/projects',{name:'A',root:dir,revision:0},'wrong')).status,403);
   const response=await post('/api/projects',{name:'A',root:dir,revision:0});assert.equal(response.status,201);const p=await response.json();
@@ -225,7 +225,7 @@ test('preparação explicada por reserva; organização independente não bloque
 test('HTTP serve só o módulo partilhado autorizado e devolve recusa estruturada sem enviar',async t=>{
   const {hub,dir,chat}=await setup(t),c=await chat(),server=createHttpServer({hydraq:hub,publicDir:root+'/public'});
   await new Promise(r=>server.listen(0,'127.0.0.1',r));t.after(()=>{server.closeStreams();server.close();});
-  const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap')).json();
+  const base=`http://127.0.0.1:${server.address().port}`,{token}=await(await fetch(base+'/api/bootstrap',{headers:{'X-HYDRAQ-Bootstrap':'1'}})).json();
   const module=await fetch(base+'/work-locks.js');assert.equal(module.status,200);assert.match(module.headers.get('content-type'),/javascript/);
   assert.equal(await module.text(),await readFile(root+'/lib/work-locks.mjs','utf8'));
   assert.equal((await fetch(base+'/lib/providers.mjs')).status,404);
