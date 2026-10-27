@@ -53,10 +53,13 @@ try {
   await page.locator('#mode-setup .mode-field:has(.mode-current) .mode-chip', { hasText: 'GPT-6.1 Sol' }).click();
   check('model chip sets composer model', await page.locator('#model').inputValue() === 'gpt-6.1-sol');
   check('model list collapses after choice', !await page.locator('#mode-setup .mode-field:has(.mode-current) .mode-chips').isVisible());
-  // Hydra from a conversation with history opens a new conversation.
+  // Hydra from a new conversation: each participant gets its own conversation (Hydra in a conversation with
+  // history stays in it; see hydra-inplace-ui.mjs).
+  await page.locator('#new-chat').click();
   await tile('hydra').click();
   await page.locator('#hydra-inline .cx-main').waitFor();
-  check('hydra opens a new conversation', await page.evaluate(() => !localStorage.getItem('hydraq.conversation')));
+  check('hydra in a new conversation keeps it new', await page.evaluate(() => !localStorage.getItem('hydraq.conversation')));
+  check('no history toggle in a new conversation', await page.locator('#hydra-view').isHidden());
   check('transcript replaced by task view', await page.locator('#hydra-inline').isVisible() && !await page.locator('#messages').isVisible());
   check('hydra tile pressed', await tile('hydra').getAttribute('aria-pressed') === 'true');
   check('pairs visible', await page.locator('#hydra-pairs').isVisible() && await page.locator('.hydra-pair').count() === 3);

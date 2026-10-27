@@ -83,9 +83,10 @@ test('instalação junta só a entrada da HYDRAQ, guarda o original uma vez e n�
 
 test('o agy real usa a configuração da HOME com que corre; o simulado só com ficheiro indicado', () => {
   const real = new Antigravity({ dataDir: '/tmp/x', defaultCwd: '/tmp', env: { HOME: '/home/teste', PATH: '/usr/bin' } });
-  assert.deepEqual({ hooksFile: real.hooksFile, directory: real.guardDirectory }, guardPaths('/home/teste'));
+  assert.deepEqual({ hooksFile: real.hooksFile, directory: real.guardDirectory, mcpFile: real.mcpFile, routeDirectory: real.routeDirectory }, guardPaths('/home/teste'));
+  assert.equal(real.mcpFile, '/home/teste/.gemini/config/mcp_config.json');
   const simulated = new Antigravity({ dataDir: '/tmp/x', defaultCwd: '/tmp', prefixArgs: ['fake.mjs'], env: { HOME: '/home/teste' } });
-  assert.equal(simulated.hooksFile, null);assert.equal(simulated.guardDirectory, null);
+  for (const key of ['hooksFile', 'guardDirectory', 'mcpFile', 'routeDirectory']) assert.equal(simulated[key], null, key);
 });
 
 async function setup(t, env = {}) {

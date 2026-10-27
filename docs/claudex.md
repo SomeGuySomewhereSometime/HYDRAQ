@@ -10,7 +10,7 @@ Modo de análise, pesquisa e planeamento com dois participantes distintos entre 
 4. Escolhe as proteções: **30 turnos por participante e 60 minutos ativos** por defeito. **0 desativa** a proteção respetiva. São limites de consumo configuráveis que pausam o trabalho e conservam o progresso.
 5. Envia o pedido. Podes acompanhar os participantes e abrir o diálogo. Um novo requisito na caixa chega aos dois e invalida aprovações anteriores.
 6. **Pausar os dois** interrompe os participantes e conserva a mesma tarefa. O motivo aparece na interface; em pausa, podes editar as proteções e usar **Retomar a mesma tarefa**, com a caixa vazia ou um requisito novo opcional. **Terminar tarefa** liberta as conversas e conserva o progresso; uma retoma posterior só é aceite se as sessões nativas continuarem compatíveis.
-7. Quando terminam, o documento fica em destaque; versões anteriores e contribuições continuam consultáveis. **Nova tarefa a partir deste progresso**, disponível nas tarefas terminadas, cria outra tarefa com sessões novas e a origem do contexto identificada.
+7. Quando terminam, o documento fica em destaque; versões anteriores e contribuições continuam consultáveis. **Nova tarefa a partir deste progresso**, disponível nas tarefas terminadas, cria outra tarefa com a origem do contexto identificada: com sessões novas, ou na mesma conversa se a anterior correu numa conversa (ver «Na mesma conversa»).
 
 As duas conversas são normais, do mesmo grupo, com as suas sessões nativas. O coordenador prepara ambos os contextos antes do primeiro envio. As continuações automáticas e a retoma após pausa mantêm o identificador da tarefa, o histórico e as duas conversas nativas. Depois de uma falha ou reinício, a recuperação também exige uma retoma explícita; não existe reenvio automático de pedidos cuja entrega ficou incerta. Se a entrega nativa não puder ser confirmada, a retoma é recusada. **Nova tarefa com este progresso** permite abrir outras sessões com o contexto anterior identificado e conserva a tarefa original.
 
@@ -56,9 +56,31 @@ A validação funcional não demonstra que o diálogo supera um modelo sozinho o
 
 Os cartões dos participantes mostram a última mensagem do diálogo efetivamente lida e a hora dessa leitura. Registos antigos sem hora são identificados como tal. As ferramentas em execução vêm apenas do turno nativo atual; não se infere investigação a partir de um turno aberto. As instruções incentivam a partilha antecipada de descobertas verificadas e úteis, sem mensagens artificiais. Uma leitura anterior à posição independente devolve apenas os pedidos do utilizador e o próximo passo, sem revelar contribuições do colega nem registar uma leitura do diálogo.
 
+## Na mesma conversa
+
+Uma tarefa pedida numa conversa com histórico (`conversationId`) corre no grupo dessa conversa:
+- **Participantes:** cada participante é a conversa do grupo com esse cliente: primeiro o membro do Dual, depois a própria conversa, depois a mais recente. Um cliente que o grupo não tem recebe uma conversa nova no grupo.
+- **Contexto:** os pedidos da tarefa levam o que o resto do grupo disse e a sessão ainda não viu, com o mesmo mecanismo das passagens. A entrega fica registada e não se repete.
+- **Condições para começar:** nenhum pedido em curso, resultado por confirmar, terminal, passagem ou decisão pendente no grupo. Durante a tarefa, pedidos normais a essas conversas são recusados.
+- **Codex:** um fio já carregado mantém os servidores MCP com que foi carregado. Por isso a ligação ao Codex é renovada ao entrar (é recusada com terminais Codex abertos ou outro trabalho do Codex em curso) e, se possível, ao sair. Até lá, as ferramentas antigas só recusam.
+- **Fim:** quando a tarefa termina, fica sem acordo ou é parada (também ao escolher outro modo), a conversa é devolvida depois de os dois pararem:
+  - credenciais revogadas e `claudexTask` limpo;
+  - modelo, raciocínio e acesso anteriores repostos;
+  - uma nota no pedido seguinte de cada participante.
+- **Resultado:** a resposta comum é publicada na conversa de onde foi pedida, se participou, e senão na do autor. Com aprovação dos dois, o outro participante não a volta a receber como novidade.
+- **Depois de devolvida:** a tarefa não se retoma; uma nova tarefa a partir do progresso corre na mesma conversa.
+
+Ensaio real: `node validation/hydra-inplace-live.mjs --run` (Codex Sol + agy Flash) faz Normal → Dual → Geminex → Normal numa só conversa. A validação da página sem modelos é `node validation/hydra-inplace-ui.mjs`.
+
 ## Antigravity nas duplas
 
-Em Linux, o Antigravity usa `bwrap`, uma HOME própria por conversa, estado nativo persistente e uma configuração MCP só com o servidor da tarefa. Não se regista nenhum servidor na configuração global. A pasta de investigação é montada em leitura; a HOME privada e o `/tmp` privado conservam o estado necessário. A autenticação utiliza a identidade e o serviço de credenciais existentes; pode precisar de uma sessão de desktop com esse serviço disponível. A rede do processo é separada da rede do anfitrião. O acesso à internet passa por um proxy que só aceita destinos públicos HTTP/HTTPS nas portas 80/443, valida e fixa os endereços DNS, e recusa endereços locais, privados ou do próprio anfitrião. O MCP passa por um socket Unix próprio da tarefa, sem disponibilizar a API administrativa. O DBus visível é filtrado para `org.freedesktop.secrets`, necessário à autenticação; o serviço systemd não fica acessível. O ambiente é construído por uma lista explícita de variáveis, sem herdar chaves de API, proxies ou opções do Node do anfitrião.
+**Na mesma conversa**, o agy usa a sua conversa normal, sem `bwrap`:
+- **Servidor MCP:** a HYDRAQ regista uma vez o servidor `hydraq` em `~/.gemini/config/mcp_config.json` (`lib/claudex-mcp-server.mjs --route`). O agy arranca-o em todas as sessões.
+- **Rota por pedido:** em cada pedido da tarefa, a HYDRAQ escreve em `~/.local/state/hydraq/agy-route/<conversa>.json` a credencial dessa ronda. O servidor encontra-a pelo identificador que o agy envia em cada chamada (`_meta["antigravity.google/root_conversation_id"]`); sem rota, as ferramentas recusam.
+- **Só leitura:** o hook só de leitura deixa passar apenas as ferramentas desta tarefa no servidor `hydraq`. A rota e a regra saem no fim de cada pedido.
+- **Limite:** é uma regra do agy, não uma barreira do sistema operativo, ao contrário do ambiente privado abaixo.
+
+**Numa tarefa começada numa conversa nova** (e nas tarefas antigas), em Linux, o Antigravity usa `bwrap`, uma HOME própria por conversa, estado nativo persistente e uma configuração MCP só com o servidor da tarefa. Não se regista nenhum servidor na configuração global. A pasta de investigação é montada em leitura; a HOME privada e o `/tmp` privado conservam o estado necessário. A autenticação utiliza a identidade e o serviço de credenciais existentes; pode precisar de uma sessão de desktop com esse serviço disponível. A rede do processo é separada da rede do anfitrião. O acesso à internet passa por um proxy que só aceita destinos públicos HTTP/HTTPS nas portas 80/443, valida e fixa os endereços DNS, e recusa endereços locais, privados ou do próprio anfitrião. O MCP passa por um socket Unix próprio da tarefa, sem disponibilizar a API administrativa. O DBus visível é filtrado para `org.freedesktop.secrets`, necessário à autenticação; o serviço systemd não fica acessível. O ambiente é construído por uma lista explícita de variáveis, sem herdar chaves de API, proxies ou opções do Node do anfitrião.
 
 A mudança de credencial na retoma renova o processo agy, mantendo o identificador da conversa e a HOME privada. Chamadas antigas continuam rejeitadas pelo coordenador. Conversas Antigravity criadas pela dupla permanecem em análise; para implementar, inicia uma conversa normal. A passagem deste ambiente privado ao terminal original ainda não está disponível. Conversas Antigravity normais mantêm o funcionamento anterior.
 

@@ -4736,7 +4736,7 @@ body[data-theme="mono"] .message-header .copy-message:hover { background: var(--
 .cx-intro { max-width: 62ch; color: var(--text-secondary); }
 .hydra-inline .cx-composer { padding: 6px 0 12px; }
 .hydra-chip[hidden] { display: none; }
-body[data-hydra] #composer .composer-controls > :not(#hydra-chip) { display: none !important; }
+body[data-hydra] #composer .composer-controls > :not(#hydra-chip, #hydra-view) { display: none !important; }
 body[data-hydra] :is(#agent-dock, #followup-queue, #steer-mode, #progress-panel, #switch-note, #review-unavailable) { display: none !important; }
 
 body[data-theme="classic"] .mode-panel { border-radius: var(--r-lg); background: linear-gradient(180deg, var(--bg-surface), color-mix(in srgb, var(--bg-surface) 70%, var(--bg-sidebar))); box-shadow: var(--shadow-sm), inset 0 1px 0 var(--highlight); }

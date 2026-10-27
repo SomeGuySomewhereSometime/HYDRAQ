@@ -52,9 +52,9 @@ createInterface({input:process.stdin}).on('line',line=> {
     setTimeout(()=>emit({event:'result',result:{conversation_id:nativeId,status:error?'ERROR':'SUCCESS',error,response:empty||error?'':text==='diagnostic-prose'?'O manual explica a mensagem quota exceeded; a minha resposta não indica um limite atingido.':'Resposta recebida com aviso nativo.'}}),20);
     return;
   }
-  if(text==='hold')return;
-  if(text==='guard-tools'||text==='guard-hold-write') {
-    const calls=text==='guard-hold-write'?[['write_file',{Path:process.cwd()+'/x.txt'}]]:[['read_file',{Path:process.cwd()+'/README.md'}],['run_command',{CommandLine:'ls -la'}],['write_file',{Path:process.cwd()+'/x.txt'}],['write_file',{Path:'/fake-agy/brain/'+nativeId+'/task.md'}],['run_command',{CommandLine:'touch y.txt'}]];
+  if(text==='hold'||text==='guard-mcp-hold')return;
+  if(text==='guard-tools'||text==='guard-hold-write'||text==='guard-mcp') {
+    const calls=text==='guard-hold-write'?[['write_file',{Path:process.cwd()+'/x.txt'}]]:text==='guard-mcp'?[['call_mcp_tool',{ServerName:'hydraq',ToolName:'read_dialogue'}],['call_mcp_tool',{ServerName:'hydraq',ToolName:'other_tool'}],['call_mcp_tool',{ServerName:'other',ToolName:'read_dialogue'}],['write_file',{Path:process.cwd()+'/x.txt'}]]:[['read_file',{Path:process.cwd()+'/README.md'}],['run_command',{CommandLine:'ls -la'}],['write_file',{Path:process.cwd()+'/x.txt'}],['write_file',{Path:'/fake-agy/brain/'+nativeId+'/task.md'}],['run_command',{CommandLine:'touch y.txt'}]];
     const outcome=calls.map(([name,parameters],i)=>name+':'+(tool(nativeId,{...step,step_index:count*10+1+i,state:'DONE',step_type:'tool',tool_name:name,tool_info:{parameters,output:'ok'}})?'ok':'recusada'));
     if(text==='guard-hold-write')return;
     setTimeout(()=>emit({event:'result',result:{conversation_id:nativeId,status:'SUCCESS',response:outcome.join(' ')}}),10);

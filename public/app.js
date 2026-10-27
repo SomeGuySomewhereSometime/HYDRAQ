@@ -180,7 +180,7 @@ const HYDRA_PAIRS = [['codex', 'claude'], ['codex', 'antigravity'], ['claude', '
 const hydraDrafts = new Map();
 const pairName = claudexModule?.pairName || (() => 'Hydra');
 function hydraTask(conversation = current()) { return conversation?.claudexTask ? state?.claudex?.records.find(record => record.id === conversation.claudexTask) || { id: conversation.claudexTask } : null; }
-function hydraPair(conversation = current()) { const task = hydraTask(conversation); if (task) return task.roles || HYDRA_PAIRS[0]; return !conversation && claudexUI && state?.claudex ? hydraDrafts.get(composerKey()) || null : null; }
+function hydraPair(conversation = current()) { const task = hydraTask(conversation); if (task) return task.roles || HYDRA_PAIRS[0]; return claudexUI && state?.claudex ? hydraDrafts.get(composerKey()) || null : null; }
 function hydraOn() { return Boolean(claudexUI && !projectOverview && collaborationUI.view === 'conversations' && hydraPair()); }
 function lastHydraPair() { try { const pair = JSON.parse(localStorage.getItem('hydraq.hydraPair')); return HYDRA_PAIRS.find(entry => entry.join() === pair?.join()) || HYDRA_PAIRS[0]; } catch { return HYDRA_PAIRS[0]; } }
 function terminalConversation() { const conversation = current(); return hydraTask(conversation) ? null : conversation; }
@@ -720,6 +720,13 @@ function markTurn(node, message, owner) {
 
 function internalMessage(message, owner) {
   const name = providerName(owner.provider);
+  // Hydra rounds stay in the conversation as short notes; the dialogue and the common answer are in the task panel.
+  if (message.internal === 'claudex') {
+    if (message.role === 'user') return element('p', 'handoff-note', `Hydra · ${message.kind === 'peer-notice' ? 'aviso ao' : 'ronda do'} ${name} · ${new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}`);
+    const details = element('details', 'handoff-summary');
+    details.append(element('summary', '', `Hydra · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text, message.id));
+    return details;
+  }
   if (message.role === 'user') return element('p', 'handoff-note', `HYDRAQ pediu ao ${name} ${message.internal==='memory-proposal'?'uma proposta de memória':'um resumo de passagem'} · ${new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}`);
   const details = element('details', 'handoff-summary');
   details.append(element('summary', '', `${message.internal==='memory-proposal'?'Proposta de memória':'Resumo de passagem'} · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text, message.id));
@@ -1352,13 +1359,19 @@ function renderHandoffRecovery(conversation) {
   }));
 }
 
-// The task view takes the place of the transcript; the composer and the Modo panel drive it.
+// The task view takes the place of the transcript; the composer and the Modo panel drive it. In a conversation
+// with history, a toggle shows that history again while the composer keeps sending to the task.
+const hydraTranscript = new Set();
 function renderHydra(conversation) {
   const on = hydraOn(), pair = on ? hydraPair(conversation) : null, task = on ? hydraTask(conversation) : null;
+  const history = on && Boolean(conversation?.messages?.length), transcript = history && hydraTranscript.has(conversation.id);
   if (on) document.body.dataset.hydra = pairName(pair); else delete document.body.dataset.hydra;
-  $('#messages').classList.toggle('hidden', on);
-  $('#hydra-inline').classList.toggle('hidden', !on);
+  $('#messages').classList.toggle('hidden', on && !transcript);
+  $('#hydra-inline').classList.toggle('hidden', !on || transcript);
   $('#hydra-chip').hidden = !on;
+  $('#hydra-view').hidden = !history;
+  $('#hydra-view').textContent = transcript ? 'Ver o Hydra' : 'Ver a conversa';
+  $('#hydra-view').setAttribute('aria-pressed', String(transcript));
   if (!claudexUI) return;
   if (!on) { claudexUI.inline(null); return; }
   // While a request is being sent, the selection it creates must survive the state updates it causes.
@@ -1764,17 +1777,17 @@ const pairButtons = HYDRA_PAIRS.map(pair => {
   return button;
 });
 $('#hydra-pairs').replaceChildren(...pairButtons);
-/** Leaving a Hydra task, or starting one from a conversation with history, opens a new conversation. */
+/** Hydra starts in this conversation, with its sessions. Leaving a task that runs here stops it and gives the conversation back; an older task keeps its own conversations. */
 function chooseMode(mode) {
   const conversation = current(), task = hydraTask(conversation), pair = hydraPair(conversation);
   const dual = !pair && Boolean(dualUI?.record(conversation) || dualUI?.pendingFor()), review = !pair && Boolean(opinionUI.automaticSetting());
   if (mode === 'hydra') {
     if (pair) return;
-    if (conversation) { choose(null, selectedProject); toast('O Hydra começa numa conversa nova. A anterior fica guardada.'); }
     hydraDrafts.set(composerKey(), lastHydraPair());
     render();
     return;
   }
+  if (task?.inPlace) { leaveHydra(task, mode); return; }
   if (task) choose(null, selectedProject);
   else if (pair) hydraDrafts.delete(composerKey());
   render();
@@ -1783,6 +1796,17 @@ function chooseMode(mode) {
   // A pair still working in this folder keeps its clients reserved: say so instead of doing nothing.
   if (source.disabled) { toast(mode === 'dual' ? `O Dual fica disponível quando terminar o trabalho em curso${workBlock() ? ': ' + workReason(workBlock()) : ''}.` : source.dataset.tip || 'O Revisor não está disponível agora.'); return; }
   source.click();
+}
+// The conversation comes back once both participants have stopped; then the chosen mode applies as usual.
+async function leaveHydra(task, mode) {
+  const id = selected;
+  if (!task.released) {
+    try { await api(`/api/claudex/${task.id}/stop`, {}); } catch (error) { toast(error.message); return; }
+    toast(`${pairName(task.roles || HYDRA_PAIRS[0])} parado. A conversa volta ao modo anterior quando os dois terminarem.`);
+  }
+  for (const deadline = Date.now() + 20000; Date.now() < deadline && state.conversations.find(c => c.id === id)?.claudexTask === task.id;) await new Promise(resolve => setTimeout(resolve, 250));
+  if (selected !== id || current()?.claudexTask) { render(); return; }
+  chooseMode(mode);
 }
 function syncModePanel() {
   if (!state) return;
@@ -1811,12 +1835,18 @@ function syncModePanel() {
     const on = Boolean(pair) && button.dataset.pair === pair.join('+');
     button.setAttribute('aria-pressed', String(on));
     button.disabled = sending || Boolean(task && !on);
-    button.dataset.tip = task ? 'A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.' : `${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
+    button.dataset.tip = task ? (task.inPlace ? 'A dupla fica fixa até a tarefa terminar. Para outra dupla, volta a Normal ou Dual e escolhe Hydra outra vez.' : 'A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.') : `${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
   }
   const setup = pair && claudexUI ? hydraSetup(pair) : normalSetup;
   if ($('#mode-setup').firstElementChild !== setup.element) $('#mode-setup').replaceChildren(setup.element);
   setup.sync();
 }
+$('#hydra-view').addEventListener('click', () => {
+  const id = current()?.id;
+  if (!id) return;
+  if (hydraTranscript.has(id)) hydraTranscript.delete(id); else hydraTranscript.add(id);
+  render();
+});
 $('#hydra-chip').addEventListener('click', () => {
   layout.toggle('inspector', true);
   if (['activity', 'telemetry'].includes($('#inspector').dataset.inspectorTab)) $('#inspector-tabs [data-inspector-view=all]')?.click();
@@ -2028,15 +2058,15 @@ async function submitHydra() {
   sending = true;
   renderSend();
   try {
-    const task = await claudexUI.requestInline(text.trim(), { projectId: selectedProject, cwd: $('#cwd').value });
+    const task = await claudexUI.requestInline(text.trim(), { projectId: selectedProject, cwd: $('#cwd').value, conversationId: conversationAtSubmit?.id });
     if (!task) return;
     composerDrafts.clear(key, text);
     if (composerKey() === key && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
-    // A new task (from a new conversation, or from the progress of a finished one) has its own
-    // conversation per participant, in one group: open it here.
+    // A task from a conversation stays in it. One from a new conversation has a conversation per participant,
+    // in one group: open it here.
     if (task.id && task.id !== hydraTask(conversationAtSubmit)?.id) {
       accept(await api('/api/state'));
-      const member = (task.roles || HYDRA_PAIRS[0]).map(role => task.members?.[role]?.conversationId).find(id => state.conversations.some(c => c.id === id));
+      const member = !task.inPlace && (task.roles || HYDRA_PAIRS[0]).map(role => task.members?.[role]?.conversationId).find(id => state.conversations.some(c => c.id === id));
       if (member) choose(member, selectedProject, false, true);
       hydraDrafts.delete(key);
     }

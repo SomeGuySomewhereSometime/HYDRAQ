@@ -94,7 +94,15 @@ Limites atuais: dois clientes diferentes (dois modelos do mesmo cliente ficam pa
 
 No painel direito, por baixo do último pedido, o cartão **Modo** escolhe como corre o próximo pedido: **Normal** (um cliente), **Dual**, **Revisor** ou **Hydra**. Dual e Revisor abrem as mesmas opções dos botões da caixa de mensagens. Por baixo ficam o cliente, o modelo e o raciocínio do próximo pedido, em botões de consulta e mudança rápida (o modelo abre a lista ao tocar), e **Abrir no terminal**, como por baixo da caixa.
 
-**Hydra** junta as duplas ClaudeX (Codex + Claude), Geminex (Codex + Gemini no Antigravity) e Claudini (Claude + Gemini) dentro da própria conversa: escolhes a dupla, os modelos de cada participante, o autor, a resposta final e as proteções no cartão, e escreves o pedido na caixa de mensagens habitual. A conversa mostra os participantes, o diálogo e a resposta comum; **Pausar os dois** fica no lugar de Parar. Uma tarefa Hydra começa sempre numa conversa nova e fica na lista do projeto; escolher outro modo a partir dela abre uma conversa nova. A aba **Hydra**, no topo, mostra as mesmas tarefas com o histórico completo.
+**Hydra** junta as duplas ClaudeX (Codex + Claude), Geminex (Codex + Gemini no Antigravity) e Claudini (Claude + Gemini) dentro da própria conversa: escolhes a dupla, os modelos de cada participante, o autor, a resposta final e as proteções no cartão, e escreves o pedido na caixa de mensagens habitual. A conversa mostra os participantes, o diálogo e a resposta comum; **Pausar os dois** fica no lugar de Parar. A aba **Hydra**, no topo, mostra as mesmas tarefas com o histórico completo.
+
+**Hydra na mesma conversa.** Numa conversa com histórico (normal ou Dual), o Hydra corre nessa conversa e com as mesmas sessões:
+- Cada participante é a conversa do grupo com esse cliente, primeiro a do Dual. Um cliente que o grupo ainda não tem entra com o que a conversa disse antes, como numa passagem entre modelos.
+- Durante a tarefa, **Ver a conversa** mostra o histórico e **Ver o Hydra** volta ao painel da tarefa; a caixa continua a enviar para o Hydra. As rondas aparecem no histórico como notas curtas.
+- No fim, a resposta comum fica no histórico. A conversa volta ao modo anterior (Normal ou Dual), com o modelo, o raciocínio e o acesso de antes. O pedido seguinte de cada modelo leva uma nota a dizer que a tarefa terminou.
+- Escolher Normal ou Dual durante a tarefa para os dois e devolve a conversa da mesma forma. Uma tarefa devolvida não se retoma: escolhe Hydra outra vez, com o progresso anterior se quiseres.
+- Para receber as ferramentas da tarefa, a ligação ao Codex é renovada ao entrar e ao sair, se não houver outro trabalho do Codex em curso.
+- Numa conversa nova, sem histórico, cada participante continua a ter a sua conversa nova, como antes.
 
 ## Hydra · ClaudeX, Geminex e Claudini em diálogo
 

@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 109
+Versão atual: 111
 
 ## Resumo atual
+
+- Hydra na mesma conversa (entrada 110): numa conversa com histórico, o Hydra usa as sessões do grupo (as do Dual primeiro), dá o histórico a quem entra de novo e, no fim ou ao escolher outro modo, devolve a conversa com as definições anteriores e uma nota para o pedido seguinte. O agy entra pela sua conversa normal, com o servidor fixo `hydraq` e o hook só de leitura, sem bwrap. Ensaio real Codex Sol + agy Flash 14/14 (Normal → Dual → Geminex → Normal na mesma conversa); 506 testes aprovados (1 omitido); validações da página 25/25, 66/66 e 53/53. Ativado na 4318 por reinício autorizado e commit sem push (entrada 111).
 
 - Planear/Só leitura do agy passa a ser real (entrada 108): com os comandos de barra desligados o agy ignorava `--mode plan`, por isso o Planear do agy nunca foi só de leitura fora do Hydra. Passa a valer um hook da HYDRAQ em `~/.gemini/config/hooks.json`, com regra por conversa e vigilância por passo. 501 testes aprovados (1 omitido); validação real 9/9 com o Flash; hook instalado com autorização e sessão normal do agy confirmada pelo utilizador no terminal. Ativado na 4318 por reinício autorizado (entrada 109); commit sem push.
 
@@ -1290,3 +1292,53 @@ Versão atual: 109
 - O servidor corria no grupo de um terminal partilhado com outros processos do utilizador. Só o PID 10911 recebeu SIGTERM; parou em 1 s e os 43 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; o ambiente ficou só em memória) no scope `hydraq-20261027T000504Z`, PID 224007, registo em `.hydraq/server.log`. Disponível em 1 s.
 - Depois: cinco clientes ligados e 87 conversas. Impressões de conversas, pareceres, automático, colaboração, projetos, Dual e Hydra iguais às de antes. Ficheiros de `public/` servidos iguais ao disco.
 - Ativa a entrada 108. Commit com as entradas 108 e 109; `output/` fica fora. Sem push.
+
+### 110 — 2026-10-27 — Claude
+
+- Pedido do utilizador: Fases 1 e 2 do plano (pontos 4 e 8): Normal → Dual → Hydra → Dual ou Normal na mesma conversa, com as mesmas sessões. Registo global do servidor `hydraq` no agy autorizado pelo utilizador; plano revisto pelo Codex (credenciais por tarefa, regresso, ensaio completo, caminho antigo mantido).
+- **Coordenador** (`lib/claudex.mjs`):
+  - Com `conversationId`, a tarefa corre no grupo dessa conversa (`adopt`). Cada participante é a conversa do grupo com esse cliente: primeiro o membro do Dual, depois a própria conversa, depois a mais recente. Um cliente que falta recebe uma conversa nova no grupo. É recusado com pedido em curso, resultado por confirmar, terminal, passagem ou decisão pendente.
+  - Os pedidos da tarefa levam, pelo mecanismo das passagens, o que o grupo disse e a sessão não viu; a entrega fica registada.
+  - **Fim** (concluída, sem acordo ou parada, também ao escolher outro modo): a conversa é devolvida depois de os dois pararem (`release`). Credenciais revogadas, `claudexTask` limpo, modelo, raciocínio e acesso anteriores repostos e uma nota (`hydraReturnNote`) no pedido seguinte de cada participante.
+  - O resultado é publicado na conversa de origem quando participou. Com aprovação dos dois, não volta ao outro participante como novidade. Uma tarefa devolvida não se retoma; a seguinte, a partir do progresso, corre na mesma conversa.
+  - **Codex:** um fio já carregado mantém os servidores MCP com que foi carregado. O primeiro ensaio real mostrou o Codex sem as ferramentas da tarefa. A ligação ao Codex passa a ser renovada ao entrar (recusada com terminais Codex abertos ou outro trabalho do Codex) e, se possível, ao sair.
+- **Servidor central** (`lib/providers.mjs`): contexto do grupo para o Hydra na conversa, `hydraGroup`, recusa de pedidos normais a conversas ocupadas pelo Hydra e nota de regresso no pedido seguinte.
+- **agy** (`lib/antigravity.mjs`, `lib/antigravity-guard.mjs`, `lib/claudex-mcp-server.mjs`):
+  - Na mesma conversa, o agy usa a sua conversa normal, sem `bwrap`.
+  - O servidor `claudex-mcp-server.mjs --route` fica registado uma vez em `~/.gemini/config/mcp_config.json` e encontra a tarefa pelo identificador da conversa que o agy envia em cada chamada.
+  - Em cada pedido da tarefa, a HYDRAQ escreve a rota (`~/.local/state/hydraq/agy-route/`) e a regra do hook, que deixa passar só leitura e as ferramentas desta tarefa no servidor `hydraq`. As duas saem no fim do pedido.
+  - Tarefas começadas numa conversa nova e as antigas continuam no ambiente privado com `bwrap`.
+- **Página:**
+  - Hydra numa conversa com histórico fica nessa conversa. **Ver a conversa** / **Ver o Hydra** alterna entre o histórico e o painel da tarefa.
+  - Escolher Normal ou Dual durante uma tarefa na conversa para-a e espera pela devolução.
+  - As rondas aparecem como notas «Hydra · ronda do …» em vez de «resumo de passagem».
+  - Corrigido: depois de uma tarefa, o modelo de um participante ficava vazio quando o preferido não existia no catálogo.
+- **Ficheiros:** `lib/claudex.mjs`, `lib/providers.mjs`, `lib/antigravity.mjs`, `lib/antigravity-guard.mjs`, `lib/claudex-mcp-server.mjs`, `public/app.js`, `public/claudex.js`, `public/index.html`, `public/style.css`, `test/claudex-inplace.test.mjs` (novo, 5 testes), `test/antigravity-guard.test.mjs`, `test/fixtures/fake-agy.mjs`, `test/fixtures/opinion-client.mjs` (mensagens internas como nos clientes reais), `validation/hydra-inplace-ui.mjs` (novo), `validation/hydra-inplace-live.mjs` (novo), `validation/hydra-mode-ui.mjs` (começa numa conversa nova), `README.md`, `docs/claudex.md`.
+- **Verificação:**
+  - Suite sequencial: **507 testes: 506 aprovados, 0 falhas, 1 omitido**.
+  - Página com clientes simulados: Hydra na conversa **25/25**, modo Hydra **66/66**, `claudex-ui` **53/53**, mensagens/terminal **73/73**, progresso **46/46**, Mono **62/62**. Sem erros de JavaScript.
+  - Ensaio real (`validation/hydra-inplace-live.mjs`, Codex GPT-6.1 Sol low + agy Gemini 3.8 Flash medium, pasta temporária): o primeiro ensaio passou **10/14** e revelou o problema do Codex acima. Depois da correção, **14/14**:
+    - a mesma conversa do Codex e a do agy (do Dual) do princípio ao fim, com os mesmos IDs nativos;
+    - agy do Dual em só leitura pelo hook;
+    - Geminex concluído com resposta comum, que inclui a palavra-código dita antes do Hydra;
+    - agy pelo servidor fixo e pela rota, sem escrita autorizada;
+    - definições repostas, rota retirada e resultado publicado na conversa;
+    - de volta a um só modelo, o Codex lembra-se da palavra-código e do primeiro ponto da resposta comum;
+    - nota de regresso enviada uma vez e projeto sem alterações.
+  - O servidor `hydraq` ficou registado na configuração real do agy.
+  - Sintaxe e `git diff --check` aprovados. Provas em `.hydraq/hydra-inplace-live-2026-10-27-b/`.
+- **Limitações:**
+  - A 4318 não foi reiniciada: até lá, o servidor ativo ignora o pedido «na mesma conversa» e o Hydra abre conversas novas, como antes.
+  - O Claude não entrou no ensaio real; o caminho dele está coberto por testes simulados e relança o processo quando o MCP muda.
+  - No agy, o servidor `hydraq` arranca em todas as sessões e as ferramentas só respondem durante uma ronda. A proteção é uma regra do agy, não do sistema operativo.
+  - Pausa e retoma na conversa só foram testadas com clientes simulados.
+  - Limite antigo de 100 tarefas Hydra no total.
+  - Cerca de 10 pedidos ao Codex Sol low e 5 ao agy Flash nos ensaios reais. Sem commit nem push.
+
+### 111 — 2026-10-27 — Claude
+
+- Reinício e commit pedidos pelo utilizador.
+- Antes da paragem: nenhum pedido em curso, autorização, reserva, terminal, passagem, sessão nativa, colaboração, parecer pendente ou tarefa Hydra ativa.
+- Só o PID 224007 (scope `hydraq-20261027T000504Z`) recebeu SIGTERM. Parou em 0,4 s e os 3 processos que tinha lançado terminaram. Relançado com o mesmo executável, pasta e ambiente (exceto `INVOCATION_ID`; ambiente só em memória) no scope `hydraq-20261027T005732Z`, PID 253603. Disponível em 1 s.
+- Depois: cinco clientes ligados, 87 conversas; impressões de conversas, pareceres, automático, colaboração, projetos, Dual e Hydra iguais às de antes. Ficheiros de `public/` servidos iguais ao disco. Os registos do Hydra já trazem `inPlace`, o que confirma o código da entrada 110 ativo.
+- Ativa a entrada 110. Commit com as entradas 110 e 111; `output/` fica fora. Sem push.
