@@ -103,6 +103,9 @@ let approvalsSignature = '';
 let modelsSignature = '';
 let progressSignature = '';
 const progressPanel = $('#progress-panel');
+// The Hydra task card; it moves into the transcript while Hydra runs in the conversation.
+const hydraHost = $('#hydra-inline');
+let transcriptPinned = true;
 let composerIntent = null;
 const deliveryPreferences = {};
 const chosenDelivery = () => composerIntent?.deliveryMode || $('#followup-mode')?.value || followupOptions(current())[0];
@@ -273,7 +276,7 @@ const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:curre
 const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
 claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area:collaborationUI,toast,markdown,openConversation:id=>choose(id,selectedProject,false,true),
   openTask:id=>{const task=state?.claudex?.records.find(record=>record.id===id),member=task&&Object.values(task.members||{}).find(entry=>state.conversations.some(c=>c.id===entry.conversationId));if(member)choose(member.conversationId);else claudexUI.choose(id);},
-  changed:()=>{if(state&&hydraOn()){renderSend();syncModePanel();}}}):null;
+  changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}}}):null;
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 
 dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
@@ -751,10 +754,35 @@ function pendingHandoff(entry) {
   return article;
 }
 
+function copyButton(text, tip, failure) {
+  const button = element('button', 'copy-message', 'Copiar');
+  button.type = 'button';
+  button.dataset.tip = tip;
+  button.addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(text); button.textContent = 'Copiado ✓'; setTimeout(() => { button.textContent = 'Copiar'; }, 1800); }
+    catch { toast(failure); }
+  });
+  return button;
+}
+
+// The person's requests to a Hydra task stay in the conversation as their own messages, before the task's card.
+function hydraRequest({ message, record }) {
+  const article = element('article', 'message user hydra-request'), header = element('div', 'message-header'), content = element('div', 'message-content');
+  article.dataset.hydraTask = record.id;
+  const time = element('time', '', new Date(message.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }));
+  time.dateTime = message.at;
+  header.append(element('span', 'avatar', 'TU'), element('span', '', `Tu · ${message.type === 'update' ? 'novo requisito para o' : 'para o'} ${pairName(record.roles || HYDRA_PAIRS[0])}`), time, copyButton(message.text, 'Copiar o pedido', 'Não foi possível copiar o pedido.'));
+  content.append(element('p', '', message.text));
+  article.append(header, content);
+  return article;
+}
+
 function renderMessages(conversation) {
   const group = members(conversation);
+  const liveTask = hydraOn() ? hydraTask(conversation)?.id || claudexUI?.selected || null : null;
+  const hydra = claudexUI?.transcript(group, liveTask) || { tasks: [], entries: [], shown: new Set(), signature: '' };
   const opinionState=opinionUI.viewState();
-  const signature = JSON.stringify([conversation?.id,dualUI?.signature(conversation),opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage,turn.diagnostics]), entry.handoffState])]);
+  const signature = JSON.stringify([conversation?.id,hydraOn(),hydra.signature,dualUI?.signature(conversation),opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage,turn.diagnostics]), entry.handoffState])]);
   if (signature === messageSignature) {opinionUI.refresh();return;}
   messageSignature = signature;
   const view = $('#messages');
@@ -762,9 +790,14 @@ function renderMessages(conversation) {
   const oldScroll = view.scrollTop;
   imageAttachments.resetObservers();
   view.replaceChildren();
+  if (!hydraHost.isConnected) view.before(hydraHost);
   opinionUI.mountArchive(view,conversation);
-  const timeline = group.flatMap(owner => owner.messages.map(message => ({ message, owner }))).sort((a, b) => a.message.at.localeCompare(b.message.at));
+  // Hydra rounds, and the copy of the request published with the result, give way to the task's requests and card.
+  const hidden = message => hydra.tasks.length && message.internal === 'claudex' || message.source === 'claudex-publication' && message.role === 'user' && hydra.shown.has(message.requestId?.replace(/^cx-result:/, ''));
+  const timeline = [...group.flatMap(owner => owner.messages.filter(message => !hidden(message)).map(message => ({ message, owner }))), ...hydra.entries.map(entry => ({ message: { internal: 'hydra', at: entry.at, entry }, owner: conversation }))].sort((a, b) => a.message.at.localeCompare(b.message.at));
+  let placed = false;
   if (!timeline.length && !group.some(entry => entry.handoffState)) {
+    if (hydraOn()) { view.append(hydraHost); return; }
     view.append(welcomeTemplate.cloneNode(true));
     wireSuggestions();
     return;
@@ -773,6 +806,14 @@ function renderMessages(conversation) {
   timeline.forEach((entry,index)=>{const at=anchors[index];if(!resultsAt.has(at))resultsAt.set(at,[]);resultsAt.get(at).push(entry);});
   let previousOwner = null;
   for (const [index,{ message, owner }] of timeline.entries()) {
+    if (message.internal === 'hydra') {
+      const { card, record } = message.entry;
+      if (!card) view.append(hydraRequest(message.entry));
+      else if (record.id === liveTask) { view.append(hydraHost); placed = true; }
+      else view.append(claudexUI.card(record));
+      previousOwner = null;
+      continue;
+    }
     if (message.internal) { const note = internalMessage(message, owner); markTurn(note, message, owner); view.append(note); continue; }
     if (previousOwner && previousOwner !== owner.id && !dualUI?.anyRecord(conversation)) view.append(element('div', 'provider-divider', `Continuação no ${providerName(owner.provider)}`));
     previousOwner = owner.id;
@@ -795,14 +836,7 @@ function renderMessages(conversation) {
     header.append(time);
     if (message.text) {
       const user = message.role === 'user';
-      const copyMsg = element('button', 'copy-message', 'Copiar');
-      copyMsg.type = 'button';
-      copyMsg.dataset.tip = user ? (message.kind === 'steer' ? 'Copiar a orientação' : 'Copiar o pedido') : 'Copiar resposta completa';
-      copyMsg.addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText(message.text); copyMsg.textContent = 'Copiado ✓'; setTimeout(() => { copyMsg.textContent = 'Copiar'; }, 1800); }
-        catch { toast(user ? 'Não foi possível copiar o pedido.' : 'Não foi possível copiar a resposta.'); }
-      });
-      header.append(copyMsg);
+      header.append(copyButton(message.text, user ? (message.kind === 'steer' ? 'Copiar a orientação' : 'Copiar o pedido') : 'Copiar resposta completa', user ? 'Não foi possível copiar o pedido.' : 'Não foi possível copiar a resposta.'));
     }
     article.append(header);
     if (message.role === 'user') {
@@ -842,6 +876,8 @@ function renderMessages(conversation) {
     view.append(article);
     for(const source of resultsAt.get(index)||[])opinionUI.mountResults(view,source.owner,source.message,timeline.indexOf(source));
   }
+  // Hydra chosen and no task yet: its card waits at the end, where the request will appear.
+  if (hydraOn() && !placed) view.append(hydraHost);
   dualUI?.organize(view,timeline,conversation);
   opinionUI.organizeTranscript(view,timeline);
   for (const entry of group) if (entry.handoffState) {
@@ -853,12 +889,14 @@ function renderMessages(conversation) {
 }
 
 function renderProgress(conversation) {
-  const progress = conversation?.progress;
+  // A Hydra round's work, and the publication of its result, show in the task card.
+  const turn = conversation?.turns?.find(entry => entry.id === conversation.progress?.turnId);
+  const progress = turn?.internal === 'claudex' || turn?.source === 'claudex-publication' ? null : conversation?.progress;
   const view = progressPanel, transcript = $('#messages');
   const anchor = progress && [...transcript.querySelectorAll('[data-request]')].find(article=>article.dataset.ownerId===conversation.id&&article.dataset.turnId===progress.turnId||JSON.parse(article.dataset.progressRequests||'[]').some(([owner,turn])=>owner===conversation.id&&turn===progress.turnId));
   view.classList.toggle('hidden', !progress);
   // A request missing from the transcript (still in a handoff, say) leaves the card in its old place above it.
-  const home = $('#hydra-inline');
+  const home = hydraHost.parentElement === transcript ? transcript : hydraHost;
   if(anchor){if(anchor.nextElementSibling!==view)anchor.after(view);}else if(view.nextElementSibling!==home)home.before(view);
   const signature = JSON.stringify([conversation?.id,progress]);
   if (signature === progressSignature) return;
@@ -1359,25 +1397,19 @@ function renderHandoffRecovery(conversation) {
   }));
 }
 
-// The task view takes the place of the transcript; the composer and the Modo panel drive it. In a conversation
-// with history, a toggle shows that history again while the composer keeps sending to the task.
-const hydraTranscript = new Set();
+// The conversation stays in view; the task card sits in it, after the person's requests (see renderMessages).
+// The composer and the Modo panel drive the task.
 function renderHydra(conversation) {
   const on = hydraOn(), pair = on ? hydraPair(conversation) : null, task = on ? hydraTask(conversation) : null;
-  const history = on && Boolean(conversation?.messages?.length), transcript = history && hydraTranscript.has(conversation.id);
   if (on) document.body.dataset.hydra = pairName(pair); else delete document.body.dataset.hydra;
-  $('#messages').classList.toggle('hidden', on && !transcript);
-  $('#hydra-inline').classList.toggle('hidden', !on || transcript);
+  hydraHost.classList.toggle('hidden', !on);
   $('#hydra-chip').hidden = !on;
-  $('#hydra-view').hidden = !history;
-  $('#hydra-view').textContent = transcript ? 'Ver o Hydra' : 'Ver a conversa';
-  $('#hydra-view').setAttribute('aria-pressed', String(transcript));
   if (!claudexUI) return;
   if (!on) { claudexUI.inline(null); return; }
   // While a request is being sent, the selection it creates must survive the state updates it causes.
   if (task) { if (!sending && claudexUI.selected !== task.id) claudexUI.choose(task.id, { show: false }); }
   else if (!sending) { if (claudexUI.selected) claudexUI.choose(null, { show: false }); claudexUI.setPair(pair); }
-  claudexUI.inline($('#hydra-inline'));
+  claudexUI.inline(hydraHost);
   $('#hydra-chip').textContent = `Hydra · ${pairName(pair)}`;
   $('#hydra-chip').dataset.tip = task ? 'Tarefa Hydra desta conversa. Os participantes, os modelos e as proteções estão no painel Modo.' : 'Escolher a dupla, os modelos e as proteções no painel Modo.';
 }
@@ -1841,12 +1873,8 @@ function syncModePanel() {
   if ($('#mode-setup').firstElementChild !== setup.element) $('#mode-setup').replaceChildren(setup.element);
   setup.sync();
 }
-$('#hydra-view').addEventListener('click', () => {
-  const id = current()?.id;
-  if (!id) return;
-  if (hydraTranscript.has(id)) hydraTranscript.delete(id); else hydraTranscript.add(id);
-  render();
-});
+// The live Hydra card follows its updates only while the person is reading the end of the conversation.
+$('#messages').addEventListener('scroll', () => { const view = $('#messages'); transcriptPinned = view.scrollHeight - view.scrollTop - view.clientHeight < 120; });
 $('#hydra-chip').addEventListener('click', () => {
   layout.toggle('inspector', true);
   if (['activity', 'telemetry'].includes($('#inspector').dataset.inspectorTab)) $('#inspector-tabs [data-inspector-view=all]')?.click();

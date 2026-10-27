@@ -4729,14 +4729,29 @@ body[data-theme="mono"] .message-header .copy-message:hover { background: var(--
 .turn-usage .usage-duration { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin: 10px 0 0; color: var(--text-secondary); font-size: 12px; }
 .turn-usage .usage-duration strong { color: var(--text-primary); font-variant-numeric: tabular-nums; }
 
-/* Hydra inside the conversation: the task view takes the transcript's place; the composer sends. */
-.hydra-inline { flex: 1; min-height: 0; overflow: auto; padding: 22px var(--gutter) 10px; scrollbar-color: var(--border-subtle) transparent; scrollbar-width: thin; }
+/* Hydra inside the conversation: the task is a card in the transcript, after the person's requests; the composer sends.
+   Finished tasks stay as one-line cards that open to their dialogue. */
 .hydra-inline .cx-main { max-width: none; }
-.hydra-inline .cx-heading h1 { margin: 2px auto 8px 0; font-size: 24px; }
+.messages > .hydra-inline { margin: 0 0 30px; padding: 14px 16px 2px; border: 1px solid color-mix(in srgb, var(--accent) 32%, var(--border-subtle)); border-radius: 14px; background: var(--bg-surface); }
+.hydra-inline .cx-heading h1 { margin: 0 auto 4px 0; font-size: 17px; }
+.hydra-inline .cx-participants { margin: 10px 0; }
 .cx-intro { max-width: 62ch; color: var(--text-secondary); }
 .hydra-inline .cx-composer { padding: 6px 0 12px; }
+.cx-inline .cx-message[data-client="user"] { display: none; }
+.cx-card { margin: 0 0 30px; padding: 0 16px; border: 1px solid var(--border-subtle); border-radius: 14px; background: var(--bg-surface); overflow-wrap: anywhere; }
+.cx-card > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 12px 0; cursor: pointer; }
+.cx-card > summary::before { content: '▸'; color: var(--text-secondary); }
+.cx-card[open] > summary::before { content: '▾'; }
+.cx-card > summary strong { color: var(--text-primary); font-size: 14px; font-weight: 650; }
+.cx-card-state, .cx-card > summary small { color: var(--text-secondary); font-size: 12.5px; }
+.cx-card-body { display: grid; justify-items: start; gap: 8px; padding: 0 0 14px; }
+.cx-card-body > .cx-messages { justify-self: stretch; padding-top: 0; }
+.cx-card-body > .cx-draft { justify-self: stretch; padding: 4px 0; }
+.cx-card button { padding: 7px 12px; border: 1px solid var(--border-subtle); border-radius: 8px; background: var(--bg-raised); color: var(--text-primary); }
+.cx-card button:hover:not(:disabled) { border-color: var(--text-secondary); }
+@media (max-width: 560px) { .hydra-inline .cx-participants { grid-template-columns: 1fr; } }
 .hydra-chip[hidden] { display: none; }
-body[data-hydra] #composer .composer-controls > :not(#hydra-chip, #hydra-view) { display: none !important; }
+body[data-hydra] #composer .composer-controls > :not(#hydra-chip) { display: none !important; }
 body[data-hydra] :is(#agent-dock, #followup-queue, #steer-mode, #progress-panel, #switch-note, #review-unavailable) { display: none !important; }
 
 body[data-theme="classic"] .mode-panel { border-radius: var(--r-lg); background: linear-gradient(180deg, var(--bg-surface), color-mix(in srgb, var(--bg-surface) 70%, var(--bg-sidebar))); box-shadow: var(--shadow-sm), inset 0 1px 0 var(--highlight); }

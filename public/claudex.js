@@ -12,7 +12,7 @@ export class ClaudeXUI{
  // The same task view serves the Hydra tab and, inline, the Conversations panel; there the
  // conversation's composer sends the requests and the Modo panel holds the settings.
  constructor({api,getState,area,toast,markdown,openConversation,openTask,changed=()=>{}}){
-  Object.assign(this,{api,getState,area,toast,markdown,openConversation,openTask,changed});this.selected=localStorage.getItem('hydraq.claudex');this.root=document.getElementById('claudex-view');this.controls={};this.inlineHost=null;this.view={};
+  Object.assign(this,{api,getState,area,toast,markdown,openConversation,openTask,changed});this.selected=localStorage.getItem('hydraq.claudex');this.root=document.getElementById('claudex-view');this.controls={};this.inlineHost=null;this.view={};this.cards=new Map();this.cache=new Map();this.fetching=new Set();
   document.getElementById('tab-claudex').addEventListener('click',()=>this.area.show('claudex'));
   this.build();this.timer=setInterval(()=>{if((this.area.view==='claudex'||this.inlineHost)&&this.selected)this.refresh();},1200);
  }
@@ -62,7 +62,10 @@ export class ClaudeXUI{
   const available=Boolean(state.claudex);document.getElementById('tab-claudex').hidden=!available;if(!visible&&!inline)return;
   const host=visible?this.root:this.inlineHost;if(this.main.parentElement!==host)host.append(this.main);this.main.classList.toggle('cx-inline',inline);
   if(visible){document.getElementById('chat-workspace').classList.add('hidden');document.getElementById('project-overview').classList.add('hidden');document.getElementById('project-name').textContent='Hydra';}
-  const summary=state.claudex?.records.find(r=>r.id===this.selected),status=this.detail?.status||summary?.status,pausing=['pausing','stopping'].includes(status)||Boolean(this.detail?.pause?.draining),interruptionPending=Boolean(this.detail?.pause?.interruptionPending),running=active.has(status)||pausing||interruptionPending,released=Boolean(this.detail?.released||summary?.released),retired=Boolean(this.detail?.retired||summary?.retired),canResume=resumable.has(status)&&!pausing&&!released&&!retired;
+  const summary=state.claudex?.records.find(r=>r.id===this.selected);
+  // The conversation shows a result as soon as the state has it; the task's own buttons follow at once.
+  if(summary&&this.detail?.id===summary.id&&this.detail.updatedAt!==summary.updatedAt)this.refresh();
+  const status=this.detail?.status||summary?.status,pausing=['pausing','stopping'].includes(status)||Boolean(this.detail?.pause?.draining),interruptionPending=Boolean(this.detail?.pause?.interruptionPending),running=active.has(status)||pausing||interruptionPending,released=Boolean(this.detail?.released||summary?.released),retired=Boolean(this.detail?.retired||summary?.retired),canResume=resumable.has(status)&&!pausing&&!released&&!retired;
   const listSig=JSON.stringify([state.claudex?.records,this.selected]);if(this.listSig!==listSig){this.listSig=listSig;this.list.replaceChildren();for(const r of [...(state.claudex?.records||[])].reverse()){const b=this.button(pairName(r.roles||legacyRoles)+' · '+r.title,()=>this.choose(r.id));b.setAttribute('aria-current',String(r.id===this.selected));b.append(node('small','',r.retired?'Arquivada':labels[r.status]||r.status));this.list.append(b);}}
   const projects=(state.projectCatalog?.projects||[]).filter(p=>!p.archived);this.options(this.controls.project,[{value:'',label:'Sem projeto'},...projects.map(p=>({value:p.id,label:p.name}))],this.detail?.projectId??this.controls.project.value);
   if(!this.controls.cwd.value)this.controls.cwd.value=state.defaultCwd||'';
@@ -80,7 +83,8 @@ export class ClaudeXUI{
   if((state.claudex?.protocolVersion||0)<(roles.includes('antigravity')?3:2)){this.error.textContent='Reinicia o servidor HYDRAQ para ativar esta versão do ClaudeX. O histórico continua disponível.';this.error.hidden=false;this.send.disabled=true;this.stop.disabled=true;this.finish.disabled=true;this.clone.disabled=true;}
   if(!this.selected){this.participants.replaceChildren();this.goal.replaceChildren();this.messages.replaceChildren();this.result.replaceChildren();this.versions.replaceChildren();this.approvals.replaceChildren();this.exchanges.hidden=this.draft.hidden=true;}
   this.view={roles,status,running,canResume,pausing,interruptionPending,connected,stopLabel:this.stop.textContent,stopDisabled:this.stop.disabled};
-  this.settings.hidden=this.promptLabel.hidden=this.prompt.hidden=this.send.hidden=this.hint.hidden=inline;if(inline)this.stop.hidden=true;this.form.hidden=inline&&this.finish.hidden&&this.clone.hidden;this.intro.hidden=!inline||Boolean(this.selected);
+  // In a conversation the request and the common answer are its own messages, around this card.
+  this.settings.hidden=this.promptLabel.hidden=this.prompt.hidden=this.send.hidden=this.hint.hidden=this.goal.hidden=this.result.hidden=inline;if(inline)this.stop.hidden=true;this.form.hidden=inline&&this.finish.hidden&&this.clone.hidden;this.intro.hidden=!inline||Boolean(this.selected);
   this.changed();
  }
  async refresh(){if(this.loading||!this.selected)return;this.loading=true;const id=this.selected;try{const d=await this.api('/api/claudex/'+id);if(id!==this.selected)return;this.detail=d;this.renderDetail();this.render();}catch(e){this.error.textContent=e.message;this.error.hidden=false;}finally{this.loading=false;}}
@@ -89,13 +93,58 @@ export class ClaudeXUI{
   this.controls.cwd.value=d.cwd;this.controls.author.value=d.author;this.controls.consensus.value=String(d.consensus);
   const guardSignature=JSON.stringify([d.id,d.guards]);if(this.guardSignature!==guardSignature){this.guardSignature=guardSignature;this.controls.guardTurns.value=d.guards?.turns??30;this.controls.guardMinutes.value=d.guards?.minutes??60;}if(d.status==='paused'&&this.detailStatus!=='paused')this.settings.open=true;this.detailStatus=d.status;
   const sig=JSON.stringify(d);if(sig===this.signature)return;this.signature=sig;
+  // Updates rebuild the view; what the person opened stays open.
+  const opened=new Set([...this.main.querySelectorAll('details[data-key][open]')].map(e=>e.dataset.key));
   const request=d.messages.find(m=>m.type==='request')?.text||'';this.goal.replaceChildren(node('h2','','Pedido comum'),node('p','',request));if(request)this.goal.append(this.button('Copiar pedido',()=>navigator.clipboard.writeText(request)));
-  this.participants.replaceChildren();for(const role of roles){const p=d.participants[role],m=d.members[role],card=node('section','cx-participant');card.dataset.client=role;card.append(node('strong','',names[role]),node('span','',states[p?.status]||p?.status||'A preparar'),node('small','',m?.model||''),node('small','',`${m?.turns||0} turnos no total · proteção ${d.guards?.turns?d.guards.turns+' por retoma':'desativada'}`));const read=d.read?.[role];card.append(node('small','cx-last-read',read?`Última leitura: mensagem ${read.seq} · ${read.at?new Date(read.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'hora não registada'}`:'Ainda não leu o diálogo'));if(read?.at)card.lastChild.title=new Date(read.at).toLocaleString('pt-PT');if(p?.activity?.length)card.append(node('small','cx-tool-activity','Em execução: '+p.activity.map(a=>a.name).join(' · ')));if(d.approvals[role])card.append(node('span','cx-approved','Aprovou a versão atual'));if(p?.answer){const detail=node('details');detail.append(node('summary','','Última contribuição'),this.markdown(p.answer));card.append(detail);}this.participants.append(card);}
+  this.participants.replaceChildren();for(const role of roles){const p=d.participants[role],m=d.members[role],card=node('section','cx-participant');card.dataset.client=role;card.append(node('strong','',names[role]),node('span','',states[p?.status]||p?.status||'A preparar'),node('small','',m?.model||''),node('small','',`${m?.turns||0} turnos no total · proteção ${d.guards?.turns?d.guards.turns+' por retoma':'desativada'}`));const read=d.read?.[role];card.append(node('small','cx-last-read',read?`Última leitura: mensagem ${read.seq} · ${read.at?new Date(read.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit',second:'2-digit'}):'hora não registada'}`:'Ainda não leu o diálogo'));if(read?.at)card.lastChild.title=new Date(read.at).toLocaleString('pt-PT');if(p?.activity?.length)card.append(node('small','cx-tool-activity','Em execução: '+p.activity.map(a=>a.name).join(' · ')));if(d.approvals[role])card.append(node('span','cx-approved','Aprovou a versão atual'));if(p?.answer){const detail=node('details');detail.dataset.key='answer:'+role;detail.open=opened.has(detail.dataset.key);detail.append(node('summary','','Última contribuição'),this.markdown(p.answer));card.append(detail);}this.participants.append(card);}
   const pending=(this.getState()?.approvals||[]).filter(a=>roles.some(role=>d.members[role]?.conversationId===a.conversationId));this.approvals.replaceChildren();for(const a of pending)this.approvals.append(this.button('Responder à decisão de '+names[a.provider||a.id.split(':')[0]],()=>this.openConversation(a.conversationId),'cx-decision'));
-  this.exchanges.hidden=false;this.exchangeSummary.textContent=`Diálogo · ${d.messages.length-1} contributos e atualizações`;this.messages.replaceChildren();for(const m of d.messages.filter(m=>m.type!=='request')){const card=node('article','cx-message');card.dataset.client=m.from;card.append(node('strong','',`${names[m.from]||m.from} · ${kinds[m.type]||m.type} · #${m.seq}`));if(m.replyTo)card.append(node('small','',`Em resposta a #${m.replyTo}`));if(m.type==='checkpoint'){let previous;try{previous=JSON.parse(m.text).previousTask;}catch{}card.append(node('p','','Progresso anterior incluído nesta tarefa. As aprovações anteriores não transitam.'));if(previous)card.append(this.button('Abrir tarefa anterior',()=>this.main.classList.contains('cx-inline')&&this.openTask?this.openTask(previous):this.choose(previous)));}else card.append(this.markdown(m.text));this.messages.append(card);}
+  // The newest contributions stay in view unless the person scrolled back to read.
+  const pinned=this.messages.scrollHeight-this.messages.scrollTop-this.messages.clientHeight<40;
+  this.exchanges.hidden=false;this.exchangeSummary.textContent=`Diálogo · ${d.messages.length-1} contributos e atualizações`;this.messages.replaceChildren();for(const m of d.messages.filter(m=>m.type!=='request'))this.messages.append(this.messageCard(m,this.main.classList.contains('cx-inline')));if(pinned)this.messages.scrollTop=this.messages.scrollHeight;
   this.result.replaceChildren();if(d.result){if(this.resultTask!==d.id){this.resultTask=d.id;this.exchanges.open=false;}this.result.append(node('h2','',d.result.label||outcomes[d.result.outcome]||(d.result.agreed?outcomes.agreement:outcomes.synthesis)),this.markdown(d.result.text),this.button('Copiar resposta',()=>navigator.clipboard.writeText(d.result.text)));}
   else if(d.candidateId)this.result.append(node('p','cx-hint','A versão candidata está em revisão. O documento final aparece aqui quando o processo terminar.'));
-  this.draft.hidden=!d.candidates.length;this.versions.replaceChildren();for(const c of d.candidates){const detail=node('details');detail.append(node('summary','',`Versão ${c.version} · ${c.id===d.candidateId?'atual':'substituída'}${d.result?.id===c.id?' · publicada':''}${c.outcome?' · '+(candidateKinds[c.outcome]||c.outcome):''}`),this.markdown(c.text));this.versions.append(detail);}
+  this.draft.hidden=!d.candidates.length;this.versions.replaceChildren(...this.versionList(d,opened));
+ }
+ messageCard(m,inline){const card=node('article','cx-message');card.dataset.client=m.from;card.append(node('strong','',`${names[m.from]||m.from} · ${kinds[m.type]||m.type} · #${m.seq}`));if(m.replyTo)card.append(node('small','',`Em resposta a #${m.replyTo}`));if(m.type==='checkpoint'){let previous;try{previous=JSON.parse(m.text).previousTask;}catch{}card.append(node('p','','Progresso anterior incluído nesta tarefa. As aprovações anteriores não transitam.'));if(previous)card.append(this.button('Abrir tarefa anterior',()=>inline&&this.openTask?this.openTask(previous):this.choose(previous)));}else card.append(this.markdown(m.text));return card;}
+ versionList(d,opened=new Set()){return d.candidates.map(c=>{const detail=node('details');detail.dataset.key='version:'+c.id;detail.open=opened.has(detail.dataset.key);detail.append(node('summary','',`Versão ${c.version} · ${c.id===d.candidateId?'atual':'substituída'}${d.result?.id===c.id?' · publicada':''}${c.outcome?' · '+(candidateKinds[c.outcome]||c.outcome):''}`),this.markdown(c.text));return detail;});}
+ /** The detail of a task: the open task's own, else the copy kept for the conversation's history. */
+ detailOf(id,live=false){return live&&this.detail?.id===id?this.detail:this.cache.get(id)?.detail||null;}
+ load(record){const kept=this.cache.get(record.id);if(kept?.updatedAt===record.updatedAt||this.fetching.has(record.id))return;this.fetching.add(record.id);
+  this.api('/api/claudex/'+record.id).then(detail=>this.cache.set(record.id,{updatedAt:record.updatedAt,detail}),()=>this.cache.set(record.id,{updatedAt:record.updatedAt,detail:kept?.detail||null,failed:true})).finally(()=>{this.fetching.delete(record.id);this.changed();});}
+ /** Hydra tasks of a conversation's group, for its transcript: the person's requests at their time, then the task's card.
+  * The live task's card is the inline view itself. */
+ transcript(members,liveId){
+  const ids=new Set(members.map(c=>c.id)),group=members[0]?.group,entries=[],shown=new Set();
+  const tasks=(this.getState()?.claudex?.records||[]).filter(r=>r.groupId?r.groupId===group:Object.values(r.members||{}).some(m=>ids.has(m.conversationId)));
+  for(const record of tasks){
+   const live=record.id===liveId;if(!live)this.load(record);
+   const d=this.detailOf(record.id,live),requests=(d?.messages||[]).filter(m=>m.from==='user');
+   // A past task waits for its detail, so that its card does not jump from the end to its place.
+   if(!d&&!live&&!this.cache.get(record.id)?.failed)continue;
+   for(const message of requests)entries.push({at:message.at,record,message});
+   if(requests.length)shown.add(record.id);
+   entries.push({at:requests.at(-1)?.at||'￿',record,card:true});
+  }
+  return {tasks,entries,shown,signature:JSON.stringify([liveId,tasks.map(r=>[r.id,r.id===liveId?null:[r.status,r.updatedAt],entries.filter(e=>e.record===r).map(e=>e.message?.seq??'card')])])};
+ }
+ /** A finished task in the conversation: one line that opens to its dialogue and versions. Kept between renders, so what was opened stays open. */
+ card(record){
+  const d=this.detailOf(record.id),signature=JSON.stringify([record.status,record.retired,record.released,record.result,d?.messages.length,d?.candidates.length]);
+  let entry=this.cards.get(record.id);
+  if(!entry){const element=node('details','cx-card');element.dataset.task=record.id;element.addEventListener('toggle',()=>{if(element.open)this.fillCard(record.id);});entry={element};this.cards.set(record.id,entry);}
+  if(entry.signature!==signature){
+   entry.signature=signature;entry.filled=false;const summary=node('summary'),count=d?.messages.filter(m=>m.from!=='user').length;
+   summary.append(node('strong','','Hydra · '+pairName(record.roles||legacyRoles)),node('span','cx-card-state',record.retired?'Arquivada':record.result?.label||labels[record.status]||record.status));
+   if(count!==undefined)summary.append(node('small','',`${count} ${count===1?'contributo':'contributos'}`));
+   entry.element.dataset.status=record.status;entry.element.replaceChildren(summary);if(entry.element.open)this.fillCard(record.id);
+  }
+  return entry.element;
+ }
+ fillCard(id){
+  const entry=this.cards.get(id),d=this.detailOf(id);if(!entry||entry.filled||!d)return;entry.filled=true;
+  const body=node('div','cx-card-body'),list=node('div','cx-messages');for(const m of d.messages.filter(m=>m.from!=='user'))list.append(this.messageCard(m,true));body.append(list);
+  if(d.candidates.length){const versions=node('details','cx-draft');versions.append(node('summary','','Versões e aprovações'),...this.versionList(d));body.append(versions);}
+  body.append(this.button('Abrir no separador Hydra',()=>this.choose(id)));entry.element.append(body);
  }
  guards(){const values=[this.controls.guardTurns.value,this.controls.guardMinutes.value],guards={turns:Number(values[0]),minutes:Number(values[1])};if(values.some(value=>!value.trim())||Object.values(guards).some(value=>!Number.isSafeInteger(value)||value<0))throw Error('As proteções devem ser números inteiros iguais ou superiores a 0.');return guards;}
  async sendRequest(newTask=false){if(this.sending)return;this.sending=true;this.render();try{await this.submit(newTask);}catch(e){this.toast(e.message);}finally{this.sending=false;this.render();}}

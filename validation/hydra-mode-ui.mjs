@@ -59,8 +59,8 @@ try {
   await tile('hydra').click();
   await page.locator('#hydra-inline .cx-main').waitFor();
   check('hydra in a new conversation keeps it new', await page.evaluate(() => !localStorage.getItem('hydraq.conversation')));
-  check('no history toggle in a new conversation', await page.locator('#hydra-view').isHidden());
-  check('transcript replaced by task view', await page.locator('#hydra-inline').isVisible() && !await page.locator('#messages').isVisible());
+  check('no history toggle any more', await page.locator('#hydra-view').count() === 0);
+  check('task card shown in the conversation', await page.locator('#messages > #hydra-inline').isVisible() && await page.locator('#messages .welcome').count() === 0);
   check('hydra tile pressed', await tile('hydra').getAttribute('aria-pressed') === 'true');
   check('pairs visible', await page.locator('#hydra-pairs').isVisible() && await page.locator('.hydra-pair').count() === 3);
   check('composer shows only hydra chip', await page.locator('#hydra-chip').isVisible() && !await page.locator('#model').isVisible() && !await page.locator('#review-toggle').isVisible());
@@ -96,6 +96,8 @@ try {
   await page.waitForFunction(() => localStorage.getItem('hydraq.conversation'), null, { timeout: 4000 }).catch(() => {});
   const selectedId = await page.evaluate(() => localStorage.getItem('hydraq.conversation'));
   check('conversation selected is the task group', [r.members.codex.conversationId, r.members.claude.conversationId].includes(selectedId), selectedId);
+  await page.locator('#messages > .hydra-request', { hasText: 'Planear um organizador offline.' }).waitFor({ timeout: 4000 }).catch(() => {});
+  check('request shown as the person\'s message, then the card', await page.evaluate(() => document.querySelector('#messages > .hydra-request')?.nextElementSibling?.id === 'hydra-inline'));
   check('inline hint not duplicated', !await page.locator('#hydra-inline .cx-actions .cx-hint').isVisible());
   check('composer cleared', await page.locator('#prompt').inputValue() === '');
   check('send label updates both', /Atualizar o pedido dos dois/.test(await page.locator('#send').textContent()));
@@ -108,13 +110,13 @@ try {
   await call('claude', 'send_to_peer', { messageId: 'x1', type: 'discovery', text: 'O sistema tem de funcionar offline e exportar JSON.' });
   await page.locator('#hydra-inline .cx-message', { hasText: 'exportar JSON' }).waitFor();
   check('dialogue shown inline', await page.locator('#hydra-inline .cx-message[data-client="claude"]').count() >= 1);
-  check('common request has Copiar pedido', await page.locator('#hydra-inline .cx-goal button', { hasText: 'Copiar pedido' }).count() === 1);
+  check('request can be copied from its message', await page.locator('#messages > .hydra-request .copy-message').count() === 1 && !await page.locator('#hydra-inline .cx-goal').isVisible());
   check('terminal not offered for a hydra member', !await page.locator('#inspector-terminal').isVisible() && !await page.locator('#terminal-switch').isVisible());
   await page.screenshot({ path: out + '/hydra-running-atelier.png' });
   // Update request through the composer.
   await page.locator('#prompt').fill('Também deve permitir importar JSON.');
   await page.locator('#send').click();
-  await page.locator('#hydra-inline .cx-message', { hasText: 'importar JSON' }).waitFor();
+  await page.locator('#messages > .hydra-request', { hasText: 'importar JSON' }).waitFor();
   check('update reaches the task', r.revision === 2);
   // Pause through the composer stop.
   await page.locator('#stop').click();
@@ -125,7 +127,7 @@ try {
   await tile('normal').click();
   check('normal leaves hydra', !await page.locator('#hydra-inline').isVisible() && await page.locator('#messages').isVisible() && await page.locator('#model').isVisible());
   await page.locator('#conversation-list').getByText(/ClaudeX · Planear um organizador/).first().click();
-  await page.locator('#hydra-inline .cx-message', { hasText: 'importar JSON' }).waitFor();
+  await page.locator('#messages > .hydra-request', { hasText: 'importar JSON' }).waitFor();
   check('sidebar reopens task inline', await page.locator('#hydra-inline').isVisible() && await tile('hydra').getAttribute('aria-pressed') === 'true');
   // The Hydra tab still shows the same task.
   await page.locator('#tab-claudex').click();
@@ -133,11 +135,11 @@ try {
   check('tab shows settings form', await page.locator('#claudex-view .cx-settings').isVisible() && await page.locator('#cx-prompt').isVisible());
   await page.locator('#tab-conversations').click();
   await page.locator('#hydra-inline .cx-main').waitFor();
-  check('back to conversation inline', await page.locator('#hydra-inline .cx-message', { hasText: 'importar JSON' }).count() === 1);
+  check('back to conversation inline', await page.locator('#messages > .hydra-request', { hasText: 'importar JSON' }).count() === 1 && await page.locator('#hydra-inline .cx-message', { hasText: 'exportar JSON' }).isVisible());
   for (const theme of ['classic', 'mono', 'atelier']) {
     await page.evaluate(t => localStorage.setItem('hydraq.theme', t), theme); await page.reload();
     await page.locator('#hydra-inline .cx-main').waitFor();
-    const loaded = await page.locator('#hydra-inline .cx-message', { hasText: 'importar JSON' }).waitFor({ timeout: 900 }).then(() => true, () => false);
+    const loaded = await page.locator('#hydra-inline .cx-message', { hasText: 'exportar JSON' }).waitFor({ timeout: 900 }).then(() => true, () => false);
     check(`${theme} reload shows the dialogue at once`, loaded);
     check(`${theme} panel shows the task models`, await page.locator('.mode-participant[data-client="codex"] .mode-current').textContent() === 'Modelo teste');
     for (const width of [1440, 1024]) {
@@ -155,8 +157,10 @@ try {
   for (const role of ['codex', 'claude']) await call(role, 'ready_to_conclude', await call(role, 'read_dialogue'));
   const draft = (await call('claude', 'propose_final', { ...await call('claude', 'read_dialogue'), text: 'Plano comum: funcionar offline, exportar e importar JSON.' })).candidate;
   for (const role of ['codex', 'claude']) { const v = await call(role, 'read_dialogue'); await call(role, 'review_final', { candidateId: draft.id, hash: draft.hash, revision: v.revision, reviewedThrough: v.reviewedThrough, decision: 'approve' }); clients[role].finish(hub.claudex.native(r, role), 'Contribuição terminada.'); }
-  await page.locator('#hydra-inline .cx-result h2').waitFor({ timeout: 8000 });
-  check('published result shown inline', /Plano comum/.test(await page.locator('#hydra-inline .cx-result').textContent()));
+  await page.locator('#messages .message.assistant', { hasText: 'Plano comum' }).waitFor({ timeout: 8000 });
+  check('published result follows the card in the conversation', await page.evaluate(() => { const card = document.querySelector('#messages > #hydra-inline'), answer = [...document.querySelectorAll('#messages > .message.assistant')].find(e => e.textContent.includes('Plano comum')); return Boolean(card && answer && card.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING); }) && !await page.locator('#hydra-inline .cx-result').isVisible() && await page.locator('#messages .message.user:not(.hydra-request)', { hasText: 'Planear um organizador offline.' }).count() === 0);
+  // The card's buttons follow the result shown in the conversation without waiting for the next poll (1,2 s).
+  await page.waitForFunction(() => /Nova tarefa a partir deste progresso/.test(document.querySelector('#send').textContent), null, { timeout: 700 }).catch(() => {});
   check('finished task offers a new task from its progress', /Nova tarefa a partir deste progresso/.test(await page.locator('#send').textContent()));
   const before = await page.evaluate(() => localStorage.getItem('hydraq.conversation'));
   await page.locator('#prompt').fill('Aprofundar a exportação.');

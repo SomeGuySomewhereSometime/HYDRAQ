@@ -61,6 +61,11 @@ Os cartões dos participantes mostram a última mensagem do diálogo efetivament
 Uma tarefa pedida numa conversa com histórico (`conversationId`) corre no grupo dessa conversa:
 - **Participantes:** cada participante é a conversa do grupo com esse cliente: primeiro o membro do Dual, depois a própria conversa, depois a mais recente. Um cliente que o grupo não tem recebe uma conversa nova no grupo.
 - **Contexto:** os pedidos da tarefa levam o que o resto do grupo disse e a sessão ainda não viu, com o mesmo mecanismo das passagens. A entrega fica registada e não se repete.
+- **Vista:** a conversa continua à vista.
+  - Os pedidos e os novos requisitos da pessoa aparecem como mensagens dela, pela ordem em que foram enviados. Logo a seguir vem o cartão da tarefa e, no fim, a resposta comum.
+  - Nada aparece duas vezes. A cópia do pedido publicada com o resultado, as notas das rondas e o progresso das rondas e da publicação ficam no cartão.
+  - Uma tarefa terminada, parada ou devolvida fica como um cartão fechado no seu lugar, e o cartão abre-se para rever o diálogo e as versões. Tudo isto também se mantém depois de recarregar a página.
+  - As atualizações do cartão não fecham o que a pessoa abriu e não mexem no scroll enquanto ela lê mensagens anteriores.
 - **Condições para começar:** nenhum pedido em curso, resultado por confirmar, terminal, passagem ou decisão pendente no grupo. Durante a tarefa, pedidos normais a essas conversas são recusados.
 - **Codex:** um fio já carregado mantém os servidores MCP com que foi carregado. Por isso a ligação ao Codex é renovada ao entrar (é recusada com terminais Codex abertos ou outro trabalho do Codex em curso) e, se possível, ao sair. Até lá, as ferramentas antigas só recusam.
 - **Fim:** quando a tarefa termina, fica sem acordo ou é parada (também ao escolher outro modo), a conversa é devolvida depois de os dois pararem:

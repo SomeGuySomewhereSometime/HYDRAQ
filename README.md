@@ -98,7 +98,12 @@ No painel direito, por baixo do último pedido, o cartão **Modo** escolhe como 
 
 **Hydra na mesma conversa.** Numa conversa com histórico (normal ou Dual), o Hydra corre nessa conversa e com as mesmas sessões:
 - Cada participante é a conversa do grupo com esse cliente, primeiro a do Dual. Um cliente que o grupo ainda não tem entra com o que a conversa disse antes, como numa passagem entre modelos.
-- Durante a tarefa, **Ver a conversa** mostra o histórico e **Ver o Hydra** volta ao painel da tarefa; a caixa continua a enviar para o Hydra. As rondas aparecem no histórico como notas curtas.
+- A conversa continua à vista durante a tarefa, e a caixa continua a enviar para o Hydra:
+  - o teu pedido e cada novo requisito aparecem como mensagens tuas;
+  - logo a seguir aparece o cartão do Hydra, com os participantes, o diálogo e as versões;
+  - no fim, a resposta comum aparece depois do cartão;
+  - o cartão fica fechado numa linha, com a dupla, o resultado e o número de contributos, e abre-se para rever o diálogo;
+  - as tarefas anteriores ficam assim no ponto da conversa onde aconteceram.
 - No fim, a resposta comum fica no histórico. A conversa volta ao modo anterior (Normal ou Dual), com o modelo, o raciocínio e o acesso de antes. O pedido seguinte de cada modelo leva uma nota a dizer que a tarefa terminou.
 - Escolher Normal ou Dual durante a tarefa para os dois e devolve a conversa da mesma forma. Uma tarefa devolvida não se retoma: escolhe Hydra outra vez, com o progresso anterior se quiseres.
 - Para receber as ferramentas da tarefa, a ligação ao Codex é renovada ao entrar e ao sair, se não houver outro trabalho do Codex em curso.

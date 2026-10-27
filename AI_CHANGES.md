@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 119
+Versão atual: 120
 
 ## Resumo atual
+
+- Hydra dentro da conversa (entrada 120): o histórico fica sempre à vista. O pedido e os novos requisitos aparecem como mensagens da pessoa, seguidos do cartão da tarefa (participantes, diálogo, versões) e, no fim, da resposta comum. Tarefas terminadas ficam como cartões fechados no seu lugar, também depois de recarregar, sem nada repetido. Sai «Ver a conversa / Ver o Hydra». Só a página mudou: ativo ao recarregar, sem reinício. 501 testes; validações da página 46/46 e 67/67; commit sem push.
 
 - Um só caminho do agy no Hydra (entrada 118): qualquer tarefa com o agy, numa conversa nova ou existente, usa a sessão normal do agy com o hook só de leitura e o servidor `hydraq`. Saiu o ambiente privado com `bwrap` (proxy de rede, ponte e filtro D-Bus); as suas conversas não continuam e as tarefas onde estavam ficam arquivadas, com «Nova tarefa a partir deste progresso». Ensaio real Geminex numa conversa nova (Sol + Flash) com pausa, provas novas e segunda versão aprovada; 501 testes aprovados. Ativado na 4318 por reinício autorizado, pastas antigas apagadas e commit sem push (entrada 119).
 
@@ -1512,3 +1514,35 @@ Versão atual: 119
 - Apagada `.hydraq/antigravity/claudex/` (2 pastas, 52 MB) depois do reinício, sem processos a usá-la. Não havia restos em `/tmp`.
 - Commit com as entradas 118 e 119; `output/` fica fora. Sem push.
 - **Falta:** recarregar os separadores da HYDRAQ abertos antes do reinício.
+
+### 120 — 2026-10-27 — Claude
+
+- Pedido do utilizador: ao passar ao Hydra numa conversa, a página escondia o histórico e mostrava só o painel da tarefa, como se fosse uma conversa nova. O utilizador quer a conversa sempre à vista, como no Dual, com o trabalho do Hydra dentro dela. O plano foi revisto pelo Codex, que acrescentou quatro cuidados: nada repetido, cartões que ficam depois de terminar e de recarregar, os novos requisitos como mensagens da pessoa e a leitura preservada.
+- **Página** (`public/app.js`, `public/claudex.js`, `public/style.css`, `public/index.html`):
+  - O histórico continua visível no Hydra. Sai o botão «Ver a conversa / Ver o Hydra».
+  - O pedido e cada novo requisito da tarefa aparecem como mensagens da pessoa («Tu · para o ClaudeX», «Tu · novo requisito para o ClaudeX»), na hora em que foram enviados. A seguir vem o cartão da tarefa, que é a própria vista do Hydra, com os participantes, o diálogo, as versões e Pausar/Terminar.
+  - Antes do primeiro pedido, o cartão espera no fim da conversa.
+  - **Sem repetições:** a cópia do pedido publicada com o resultado não volta a aparecer. O cartão deixa de mostrar o pedido comum, a resposta comum e os requisitos dentro do diálogo. Também saem as notas «Hydra · ronda do …» e o progresso das rondas e da publicação.
+  - **Cartões que ficam:** cada tarefa do grupo da conversa fica no seu lugar, presa à tarefa e não ao Hydra estar ligado. Quando termina, é parada ou é devolvida, passa a uma linha fechada (dupla, resultado ou estado, número de contributos) que se abre para ver o diálogo, as versões e «Abrir no separador Hydra». Depois de recarregar, a página vai buscar o detalhe de cada tarefa (`GET /api/claudex/:id`), e um cartão só aparece quando o detalhe chega, para não saltar do fim para o seu lugar.
+  - **Leitura preservada:** as atualizações do cartão mantêm abertos as versões, as contribuições e os cartões que a pessoa abriu. A conversa só desce sozinha se a pessoa estiver no fim, e o diálogo mantém à vista os contributos mais recentes, exceto se a pessoa tiver subido para ler.
+  - Os botões do cartão acompanham logo o resultado mostrado na conversa. A validação mostrou que «Atualizar o pedido dos dois» ficava até 1,2 s depois da resposta comum e dava erro 400 se fosse usado nesse intervalo.
+  - Corrigido também: depois de publicar o resultado, o progresso «Pedido concluído · 0 ações» da publicação aparecia solto no topo da conversa. Foi visto na 4318 real.
+- **Validações:**
+  - `validation/hydra-inplace-ui.mjs` foi reescrita (46 verificações). Percorre Normal → Dual → Hydra (com um novo requisito) → Dual → Hydra → Normal, recarrega a página e depois faz outro Hydra, que fica em pausa, recarrega outra vez e devolve a tarefa.
+    - Confirma a ordem do histórico, os cartões no lugar, que nada se repete, o scroll e o que estava aberto.
+    - Confirma também o estado de cada cartão (concluída, parada, em pausa) e que o progresso da publicação não aparece solto.
+    - As verificações do progresso e da versão aberta falham com o código anterior a cada correção.
+  - `validation/hydra-mode-ui.mjs` foi adaptada e passa 67/67, com a verificação nova dos botões depois do resultado.
+- **Verificação:**
+  - Suite sequencial **501 testes: 501 aprovados, 0 falhas, 0 omitidos**.
+  - Página: Hydra na conversa **46/46**, modo Hydra **67/67**, `claudex-ui` **56/56**, progresso **46/46**, mensagens/terminal **73/73**, Mono **62/62**, sem erros de JavaScript. `ui-check` não foi corrida, porque precisa de uma sessão nativa preparada à parte.
+  - `git diff --check` aprovado.
+  - Vista só de leitura da 4318 real, num browser à parte:
+    - duas conversas com Hydra na própria conversa: pedido, cartão fechado «Hydra · ClaudeX · Acordo confirmado» e resposta comum, por ordem;
+    - uma tarefa de conversa nova: pedido, cartão e resposta;
+    - sem erros.
+  - Provas em `.hydraq/hydra-conversation-view-2026-10-27/`.
+- **Limitações:**
+  - Os ficheiros alterados já existiam, por isso a 4318 serve-os ao recarregar a página, sem reinício.
+  - Os contributos das tarefas anteriores só se veem ao abrir o seu cartão. O separador Hydra continua com a vista completa.
+  - Sem pedidos aos modelos reais. Commit sem push; `output/` fica fora.

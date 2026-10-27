@@ -64,7 +64,7 @@
           <section id="uncertainty-panel" class="uncertainty-panel hidden" aria-label="Resultado por confirmar"></section>
           <section id="handoff-recovery-panel" class="handoff-recovery-panel hidden" aria-label="Rever contexto da passagem"></section>
           <section id="progress-panel" class="progress-panel hidden" aria-label="Progresso da tarefa" aria-live="polite"></section>
-          <section id="hydra-inline" class="hydra-inline hidden" aria-label="Hydra · tarefa conjunta"></section>
+          <section id="hydra-inline" class="hydra-inline hidden" aria-label="Hydra · tarefa conjunta" aria-live="off"></section>
           <div id="messages" class="messages" aria-live="polite">
             <div class="welcome" id="welcome">
               <div class="welcome-mark"><svg class="mono-logo-symbol" viewBox="0 0 460 436" aria-hidden="true" focusable="false" display="none" hidden><use href="#mono-logo-symbol" width="460" height="436"/></svg><svg class="hydra-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="hydra-necks" d="M16 28V13M16 28c0-6.2-8.4-6.6-8.4-13.4M16 28c0-6.2 8.4-6.6 8.4-13.4"/><circle class="hydra-head" cx="7.6" cy="11.6" r="3.3"/><circle class="hydra-head hydra-head-main" cx="16" cy="8.2" r="3.5"/><circle class="hydra-head" cx="24.4" cy="11.6" r="3.3"/></svg></div>
@@ -160,7 +160,6 @@
                 <div class="composer-controls" role="group" aria-label="Opções do próximo pedido">
                   <div id="dual-targets" class="dual-targets" role="group" aria-label="Destinatário do pedido" hidden></div>
                   <button type="button" id="hydra-chip" class="pill-toggle hydra-chip" aria-pressed="true" aria-controls="mode-panel" hidden>Hydra · ClaudeX</button>
-                  <button type="button" id="hydra-view" class="pill-toggle hydra-chip" aria-pressed="false" hidden>Ver a conversa</button>
                   <label class="sr-only" for="provider">Cliente</label>
                   <select id="provider" class="pill-select provider-select" data-tip=""><option value="codex">Codex</option><option value="antigravity">Antigravity</option><option value="claude">Claude Code</option><option value="cursor">Cursor</option><option value="opencode">OpenCode · gratuitos</option></select>
                   <label class="sr-only" for="model">Modelo</label>
