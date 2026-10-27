@@ -1404,6 +1404,8 @@ function renderHandoffRecovery(conversation) {
 function renderHydra(conversation) {
   const on = hydraOn(), pair = on ? hydraPair(conversation) : null, task = on ? hydraTask(conversation) : null;
   if (on) document.body.dataset.hydra = pairName(pair); else delete document.body.dataset.hydra;
+  // The pair's two colours, side by side: composer, chip and task card take them in a gradient.
+  for (const [index, name] of ['--pair-a', '--pair-b'].entries()) { if (on) document.body.style.setProperty(name, `var(--c-${pair[index]})`); else document.body.style.removeProperty(name); }
   hydraHost.classList.toggle('hidden', !on);
   $('#hydra-chip').hidden = !on;
   if (!claudexUI) return;
@@ -1827,6 +1829,24 @@ const pairButtons = HYDRA_PAIRS.map(pair => {
 });
 $('#hydra-pairs').replaceChildren(...pairButtons);
 /** Hydra starts in this conversation, with its sessions. Leaving a task that runs here stops it and gives the conversation back; an older task keeps its own conversations. */
+/**
+ * Dual → Hydra: the two clients' squares meet over the composer and become the Hydra mark, in the pair's colours.
+ * About a second, on top of the page and never in the way; skipped with reduced motion.
+ */
+function playFusion(pair) {
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  const box = $('#composer').getBoundingClientRect(), fusion = element('div', 'hydra-fusion'), mark = welcomeTemplate.querySelector('.hydra-mark')?.cloneNode(true);
+  fusion.setAttribute('aria-hidden', 'true');
+  fusion.style.left = `${box.left + box.width / 2}px`;
+  fusion.style.top = `${box.top}px`;
+  fusion.style.setProperty('--pair-a', `var(--c-${pair[0]})`);
+  fusion.style.setProperty('--pair-b', `var(--c-${pair[1]})`);
+  fusion.append(element('i', 'hydra-fusion-a'), element('i', 'hydra-fusion-b'), element('i', 'hydra-fusion-core'), element('i', 'hydra-fusion-ring'));
+  if (mark) { mark.removeAttribute('hidden'); fusion.append(mark); }
+  document.body.querySelector(':scope > .hydra-fusion')?.remove();
+  document.body.append(fusion);
+  setTimeout(() => fusion.remove(), 1400);
+}
 /** The Hydra pair of a Dual, when its two clients make one: Codex, Claude and Gemini only. */
 function dualHydraPair(record) {
   const clients = record ? [record.members.a.provider, record.members.b.provider] : [];
@@ -1843,6 +1863,8 @@ function chooseMode(mode) {
     hydraDrafts.set(composerKey(), fromDual || lastHydraPair());
     claudexUI?.preset(fromDual ? Object.fromEntries(['a', 'b'].map(key => [record.members[key].provider, dualMemberSettings(record, key)])) : null);
     render();
+    // Measured after the switch: the composer is laid out for Hydra by then.
+    if (fromDual) playFusion(fromDual);
     return;
   }
   if (task?.inPlace) { leaveHydra(task, mode); return; }

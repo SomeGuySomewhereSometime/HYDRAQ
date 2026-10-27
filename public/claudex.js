@@ -134,7 +134,7 @@ export class ClaudeXUI{
  card(record){
   const d=this.detailOf(record.id),signature=JSON.stringify([record.status,record.retired,record.released,record.result,d?.messages.length,d?.candidates.length]);
   let entry=this.cards.get(record.id);
-  if(!entry){const element=node('details','cx-card');element.dataset.task=record.id;element.addEventListener('toggle',()=>{if(element.open)this.fillCard(record.id);});entry={element};this.cards.set(record.id,entry);}
+  if(!entry){const element=node('details','cx-card'),pair=record.roles||legacyRoles;element.dataset.task=record.id;element.style.setProperty('--pair-a',`var(--c-${pair[0]})`);element.style.setProperty('--pair-b',`var(--c-${pair[1]})`);element.addEventListener('toggle',()=>{if(element.open)this.fillCard(record.id);});entry={element};this.cards.set(record.id,entry);}
   if(entry.signature!==signature){
    entry.signature=signature;entry.filled=false;const summary=node('summary'),count=d?.messages.filter(m=>m.from!=='user').length;
    summary.append(node('strong','','Hydra · '+pairName(record.roles||legacyRoles)),node('span','cx-card-state',record.retired?'Arquivada':record.result?.label||labels[record.status]||record.status));

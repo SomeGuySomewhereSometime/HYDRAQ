@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 124
+Versão atual: 125
 
 ## Resumo atual
+
+- Visual do Hydra e do Dual (entrada 125): as cores dos dois clientes em gradiente na caixa, no chip, no envio (Atelier) e nos cartões; no Dual, mais discreto. A passagem do Dual ao Hydra tem uma fusão curta (cerca de 1,25 s, sem animação com «reduzir movimento»), verificada em vídeo, fotograma a fotograma. Só a página mudou: ativo ao recarregar. 510 testes; visual 18/18; commit sem push.
 
 - Síntese no Dual e passagem rápida ao Hydra (entrada 122): «Sintetizar…» por baixo das duas respostas, por um dos dois ou outro modelo, numa sessão à parte, com as duas respostas inteiras. Por omissão não entra na ronda seguinte; ligada, entra uma vez em cada um. Pode ser automática no fim de cada ronda, sem repetição depois de reinício. Se faltar uma resposta, só síntese parcial explícita. O botão «⇢ ClaudeX» junto ao Dual passa ao Hydra com a mesma dupla e modelos. Três falhas da revisão do Codex corrigidas (entrada 123). 510 testes; página 36/36; ensaio real 10/10 (Sol + Haiku, síntese pelo Flash). Ativado na 4318 por reinício autorizado e commit sem push (entrada 124).
 
@@ -1648,3 +1650,35 @@ Versão atual: 124
 - A rota nova `/api/dual/:id/synthesis-settings` responde: um identificador inexistente dá «Conversa dual não encontrada», sem alterar nada.
 - Commit com as entradas 122, 123 e 124; `output/` fica fora. Sem push.
 - **Falta:** recarregar os separadores da HYDRAQ abertos antes do reinício.
+
+### 125 — 2026-10-27 — Claude
+
+- Pedido do utilizador: o visual que tinha ficado para depois da síntese. Ao passar do Dual ao Hydra, uma animação curta de fusão. No Hydra, as cores dos dois clientes, metade de cada uma, num gradiente (opção A, escolhida pelo utilizador); no Dual, o mesmo, mais discreto.
+- **Página** (`public/app.js`, `public/dual.js`, `public/claudex.js`, `public/style.css`):
+  - **Cores da dupla:** `--pair-a` e `--pair-b` apontam para as cores dos clientes escolhidas em Configurações; o gradiente vai da cor de um para a do outro.
+    - **Hydra ligado:** margem da caixa de mensagens em gradiente, nas três aparências; no Atelier, um brilho de cada lado e o botão de envio no mesmo gradiente.
+    - **Chip «Hydra · ClaudeX»:** um traço nas duas cores.
+    - **Cartão da tarefa no histórico:** margem nas duas cores; os cartões de tarefas anteriores têm uma barra lateral com as cores da sua própria dupla.
+    - **Dual:** margem da caixa com as duas cores misturadas com a cor da margem, mais discreta.
+  - **Fusão:** ao passar do Dual ao Hydra, pelo botão ou pelo mosaico, dois quadrados com as cores dos clientes aproximam-se sobre a margem de cima da caixa e juntam-se numa barra metade de cada cor, em gradiente. A barra roda e encolhe, abre-se um anel e aparece o símbolo do Hydra nas cores da dupla, que sobe e desvanece.
+    - Dura cerca de 1,25 s, fica por cima da página e não intercepta cliques.
+    - Não aparece com «reduzir movimento».
+    - A posição é medida depois de a página mudar para o Hydra.
+  - Os estilos novos ficam depois da secção Mono; o CSS das outras aparências antes dela não muda.
+- **Validação nova** (`validation/hydra-visual-ui.mjs`, 18 verificações):
+  - cores calculadas da caixa, do envio, do chip e do cartão no Dual e no Hydra;
+  - a fusão começa no clique, nas cores da dupla e sobre a margem da caixa tal como fica no Hydra; a 0,85 s, o anel e o símbolo estão visíveis; no fim, o elemento é removido;
+  - com «reduzir movimento», não há animação e o Hydra liga na mesma;
+  - Clássico e Mono com o gradiente; sem transbordo horizontal.
+- **Vídeo e fotogramas:** a passagem gravada em vídeo e os fotogramas extraídos a 25 por segundo, 1,7 s a partir do clique, foram inspecionados.
+  - A primeira versão media a posição antes da mudança, e a animação ficava cerca de 50 px acima da margem da caixa. Também mostrava a junção só com a cor de cima. Ambas foram corrigidas e voltaram a ser verificadas nos fotogramas.
+  - A sequência observada: aproximação, barra em gradiente, rotação, anel, símbolo, desvanecimento.
+- **Verificação:**
+  - Suite sequencial **510 testes: 510 aprovados**.
+  - Página: visual **18/18**, síntese **36/36**, Hydra na conversa **46/46**, modo Hydra **67/67**, `claudex-ui` **56/56**, mensagens/terminal **73/73**, Mono **62/62**, progresso **46/46**, sem erros de JavaScript.
+  - `git diff --check` aprovado.
+  - Provas, com o vídeo e os fotogramas, em `.hydraq/hydra-visual-2026-10-27/`.
+- **Limitações:**
+  - Só mudaram ficheiros que a página já servia, por isso basta recarregar a página, sem reinício.
+  - A animação só existe na passagem do Dual para o Hydra; entrar no Hydra a partir do modo Normal muda as cores sem animação.
+  - Commit sem push; `output/` fica fora.

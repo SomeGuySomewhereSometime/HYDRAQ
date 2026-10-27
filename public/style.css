@@ -4836,3 +4836,46 @@ body .dual-synthesis-ask:disabled { cursor:default; opacity:.5; }
 .dual-hydra[hidden] { display:none; }
 #composer[data-dual] .dual-hydra { color:var(--text-secondary); }
 #composer[data-dual] .dual-hydra:hover:not(:disabled) { color:var(--accent); }
+
+/* Hydra on: the pair's two colours, side by side in a gradient, on the composer's edge, its chip and the task card.
+   The Dual shows its two participants the same way, more quietly. Atelier adds a glow on each side. */
+body[data-hydra] .composer, body:not([data-hydra]) #composer[data-dual] {
+  --pair-edge: linear-gradient(90deg, var(--pair-a, var(--accent)), var(--pair-b, var(--accent)));
+  border-color: transparent;
+  background: linear-gradient(var(--bg-surface), var(--bg-surface)) padding-box, var(--pair-edge) border-box;
+}
+body:not([data-hydra]) #composer[data-dual] { --pair-edge: linear-gradient(90deg, color-mix(in srgb, var(--pair-a, var(--accent)) 50%, var(--border-subtle)), color-mix(in srgb, var(--pair-b, var(--accent)) 50%, var(--border-subtle))); }
+body[data-theme="atelier"][data-hydra] .composer, body[data-theme="atelier"]:not([data-hydra]) #composer[data-dual] { background: linear-gradient(180deg, #141928 0%, #0d101b 100%) padding-box, var(--pair-edge) border-box; }
+body[data-theme="mono"][data-hydra] .composer, body[data-theme="mono"]:not([data-hydra]) #composer[data-dual] { background: linear-gradient(#202020, #202020) padding-box, var(--pair-edge) border-box; }
+body[data-hydra] .composer:focus-within, body:not([data-hydra]) #composer[data-dual]:focus-within { border-color: transparent; }
+body[data-theme="atelier"][data-hydra] .composer { box-shadow: 0 20px 46px -10px #000c, -16px 0 38px -20px var(--pair-a), 16px 0 38px -20px var(--pair-b); }
+body[data-theme="atelier"][data-hydra] .composer:focus-within { box-shadow: 0 0 0 3px color-mix(in srgb, var(--pair-a) 14%, transparent), 0 22px 50px -8px #000d, -20px 0 42px -16px var(--pair-a), 20px 0 42px -16px var(--pair-b); }
+body[data-theme="atelier"][data-hydra] .composer .send:not(:disabled) { background: linear-gradient(135deg, var(--pair-a), var(--pair-b)); color: #0b0e16; box-shadow: 0 6px 18px -4px color-mix(in srgb, var(--pair-b) 45%, transparent), inset 0 1px 0 #ffffff55; }
+body[data-hydra] .hydra-chip::before { content: ''; flex: none; width: 14px; height: 6px; border-radius: 3px; background: linear-gradient(90deg, var(--pair-a), var(--pair-b)); }
+.messages > .hydra-inline { border-color: transparent; background: linear-gradient(var(--bg-surface), var(--bg-surface)) padding-box, linear-gradient(90deg, color-mix(in srgb, var(--pair-a, var(--accent)) 60%, var(--border-subtle)), color-mix(in srgb, var(--pair-b, var(--accent)) 60%, var(--border-subtle))) border-box; }
+.cx-card { position: relative; }
+.cx-card::before { content: ''; position: absolute; top: 10px; bottom: 10px; left: -1px; width: 3px; border-radius: 3px; background: linear-gradient(180deg, var(--pair-a, var(--accent)), var(--pair-b, var(--accent))); }
+
+/* Dual → Hydra: two squares in the pair's colours meet over the composer and join into one, half of each colour in a
+   gradient; it turns and shrinks, a ring opens and the Hydra mark appears. */
+.hydra-fusion { position: fixed; z-index: 60; width: 0; height: 0; pointer-events: none; }
+.hydra-fusion > * { position: absolute; left: 0; top: 0; }
+.hydra-fusion-a, .hydra-fusion-b { width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 4px; opacity: 0; animation: hydra-fusion-side 900ms cubic-bezier(.55, 0, .25, 1) forwards; }
+.hydra-fusion-a { --from: -54px; background: var(--pair-a); box-shadow: 0 0 14px var(--pair-a); }
+.hydra-fusion-b { --from: 54px; background: var(--pair-b); box-shadow: 0 0 14px var(--pair-b); }
+.hydra-fusion-ring { width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: radial-gradient(circle, transparent 45%, color-mix(in srgb, var(--pair-a) 70%, var(--pair-b)) 46%, var(--pair-b) 70%, transparent 72%); opacity: 0; animation: hydra-fusion-ring 1100ms ease-out forwards; }
+.hydra-fusion .hydra-mark { width: 34px; height: 34px; margin: -17px 0 0 -17px; color: color-mix(in srgb, var(--pair-a) 50%, var(--pair-b)); opacity: 0; animation: hydra-fusion-mark 1250ms cubic-bezier(.3, 1.4, .5, 1) forwards; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--pair-a) 50%, var(--pair-b))); }
+.hydra-fusion .hydra-mark circle:nth-of-type(1) { fill: var(--pair-a); }
+.hydra-fusion .hydra-mark circle:nth-of-type(2) { fill: color-mix(in srgb, var(--pair-a) 50%, var(--pair-b)); }
+.hydra-fusion .hydra-mark circle:nth-of-type(3) { fill: var(--pair-b); }
+.hydra-fusion-core { width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 4px; background: linear-gradient(90deg, var(--pair-a), var(--pair-b)); box-shadow: -6px 0 14px var(--pair-a), 6px 0 14px var(--pair-b); opacity: 0; animation: hydra-fusion-core 900ms cubic-bezier(.55, 0, .25, 1) forwards; }
+@keyframes hydra-fusion-side {
+  0% { opacity: 0; transform: translateX(var(--from)); }
+  14% { opacity: 1; }
+  46% { opacity: 1; transform: translateX(calc(var(--from) / 6.75)); }
+  52%, 100% { opacity: 0; transform: translateX(calc(var(--from) / 6.75)); }
+}
+@keyframes hydra-fusion-core { 0%, 44% { opacity: 0; transform: scaleX(2); } 50% { opacity: 1; transform: scaleX(2); } 64% { opacity: 1; transform: rotate(45deg) scale(1.1); } 78%, 100% { opacity: 0; transform: rotate(90deg) scale(.3); } }
+@keyframes hydra-fusion-ring { 0%, 62% { opacity: 0; transform: scale(.3); } 70% { opacity: .9; } 100% { opacity: 0; transform: scale(5.5); } }
+@keyframes hydra-fusion-mark { 0%, 56% { opacity: 0; transform: scale(.3); } 72% { opacity: 1; transform: scale(1.2); } 82% { opacity: 1; transform: scale(1); } 92% { opacity: 1; transform: translateY(-4px); } 100% { opacity: 0; transform: translateY(-10px); } }
+@media (prefers-reduced-motion: reduce) { .hydra-fusion { display: none; } }

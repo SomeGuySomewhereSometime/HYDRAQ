@@ -105,6 +105,8 @@ export class DualUI{
   toggle.dataset.tip=pair?'Dual ativo: os dois modelos respondem à mesma pergunta sem ver a resposta um do outro; na pergunta seguinte, cada um recebe o que o outro disse. Escolher principal ou desligar.':'Dual: fazer a mesma pergunta a dois modelos de clientes diferentes, com histórico partilhado entre perguntas. Só o principal implementa.';
   const mode=record?(record.target==='both'?'both':'one'):pending?'both':null;
   if(mode)composer.dataset.dual=mode;else delete composer.dataset.dual;
+  // The two participants' colours, quietly, on the composer's edge.
+  for(const [index,name] of ['--pair-a','--pair-b'].entries()){if(pair)composer.style.setProperty(name,`var(--c-${pair[index]})`);else composer.style.removeProperty(name);}
   if(review){review.disabled=this.both(conversation);if(review.disabled)review.dataset.tip='Nas perguntas aos dois não há revisão automática. Fala só com o principal para implementar com revisor.';}
   bar.hidden=!pair;
   const target=record?.target||'both',signature=JSON.stringify([record?.id,target,record?.principal,pair,locked,pending,record&&DUAL_KEYS.map(key=>this.memberSettings(record,key)),pending&&this.memberSettings(null,'a')]);
