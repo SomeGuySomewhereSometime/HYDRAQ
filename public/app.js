@@ -282,7 +282,7 @@ claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 
 dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,markdown,elapsed,
-  describeWork:(owner,turn)=>{if(!actions)return null;const work=actions.currentWork(owner,turn);return {now:!work?[]:work.actions?.length?work.actions.map(item=>({text:actions.actionPhrase(item,{live:true,cwd:owner.cwd}),since:item.at})):[{text:work.title,since:null}],summary:activeStatuses.includes(turn.status)?'':actions.summaryLine(actions.requestSummary(owner,turn)),thought:actions.thoughtLabel?.(owner.provider)?actions.latestThought(owner,turn,Infinity):null,thoughtLabel:actions.thoughtLabel?.(owner.provider)||''};},getSyntheses:()=>opinionUI.viewState()?.batches?.filter(batch=>batch.kind==='synthesis')||[],getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
+  describeWork:(owner,turn)=>{if(!actions)return null;const work=actions.currentWork(owner,turn);return {now:!work?[]:work.actions?.length?work.actions.map(item=>({text:actions.actionPhrase(item,{live:true,cwd:owner.cwd}),since:item.at})):[{text:work.title,since:null}],summary:activeStatuses.includes(turn.status)?'':actions.summaryLine(actions.requestSummary(owner,turn)),thought:actions.thoughtLabel?.(owner.provider)?actions.latestThought(owner,turn,Infinity):null,thoughtLabel:actions.thoughtLabel?.(owner.provider)||'',thoughtOpen:actions.thoughtOpen?(live,choice,previous)=>actions.thoughtOpen(owner.provider,live,choice,previous):null};},getSyntheses:()=>opinionUI.viewState()?.batches?.filter(batch=>batch.kind==='synthesis')||[],getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
   loadModels:id=>id==='opencode'?checkOpenCodeModels(false):null,
   applySettings:(provider,settings)=>{const key=`${draftKey(current(),selectedProject)}:${provider}`;settingDrafts.set(key,{...(settingDrafts.get(key)||{}),...settings});}}):null;
 $('#dual-toggle').classList.toggle('hidden',!dualUI);
@@ -891,6 +891,8 @@ function renderMessages(conversation) {
   view.scrollTop = nearBottom ? view.scrollHeight : oldScroll;
 }
 
+// The person opening or closing the reasoning box: { turnId, live, open }.
+let thoughtChoice = null;
 function renderProgress(conversation) {
   // A Hydra round's work, and the publication of its result, show in the task card.
   const turn = conversation?.turns?.find(entry => entry.id === conversation.progress?.turnId);
@@ -939,8 +941,12 @@ function renderProgress(conversation) {
   const thoughtLabel = actions?.thoughtLabel?.(conversation.provider) || '';
   const thought = thoughtLabel ? actions.latestThought(conversation, turn, Infinity) : '';
   if (thought) {
-    const detail = element('details', 'claude-thought'); detail.open = thoughtExpanded;
-    detail.append(element('summary', '', thoughtLabel), element('div', 'claude-thought-text', thought));
+    const detail = element('details', 'claude-thought'), heading = element('summary', '', thoughtLabel);
+    // A choice counts only for this request and phase: agy and Cursor open again on the next request and close at the answer.
+    const choice = thoughtChoice?.turnId === turn.id ? thoughtChoice : null;
+    detail.open = actions.thoughtOpen ? actions.thoughtOpen(conversation.provider, live, choice, thoughtExpanded) : thoughtExpanded;
+    heading.addEventListener('click', () => { thoughtChoice = { turnId: turn.id, live, open: !detail.open }; });
+    detail.append(heading, element('div', 'claude-thought-text', thought));
     view.append(detail);
   }
   const summary = actions && items.length ? actions.summaryLine(actions.requestSummary(conversation, turn)) : '';

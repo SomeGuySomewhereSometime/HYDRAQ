@@ -48,7 +48,7 @@ export function dualPanelState(delivery,turn){
 export class DualUI{
  constructor({api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses=()=>[],markdown,describeWork=null,elapsed=null}){
   Object.assign(this,{api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses,markdown,describeWork,elapsed});
-  this.panels=new PanelKit({toast});this.pending=new Map();this.sequence=0;this.synthesisViews=new Map();this.thoughtsOpen=new Set();
+  this.panels=new PanelKit({toast});this.pending=new Map();this.sequence=0;this.synthesisViews=new Map();this.thoughtsOpen=new Set();this.thoughtChoices=new Map();
   this.dialog=node('dialog','opinion-dialog dual-dialog');this.dialog.setAttribute('aria-labelledby','dual-dialog-title');document.body.append(this.dialog);
   document.getElementById('dual-toggle')?.addEventListener('click',()=>this.configure());
  }
@@ -344,7 +344,13 @@ export class DualUI{
     // What each one is doing now, every action at once with its time; at the end, what the answer took.
     if(work){if(status.live)for(const line of work.now){const entry=this.panels.activity(line.text,'inProgress');if(line.since&&this.elapsed)entry.append(document.createTextNode(' · '),this.elapsed(line.since));panel.foot.append(entry);}else if(work.summary)panel.foot.append(node('span','dual-work-summary',work.summary));}
     else if(status.live&&latest)panel.foot.append(this.panels.activity(latest.type==='reasoning'?'A analisar o pedido':latest.command||latest.title||latest.tool||latest.type,latest.status));
-    if(work?.thought){const detail=node('details','claude-thought');detail.open=this.thoughtsOpen.has(panel.key);detail.addEventListener('toggle',()=>{if(detail.isConnected){if(detail.open)this.thoughtsOpen.add(panel.key);else this.thoughtsOpen.delete(panel.key);}});detail.append(node('summary','',work.thoughtLabel||'Resumo do raciocínio · Claude'),node('div','claude-thought-text',work.thought));panel.foot.append(detail);}
+    if(work?.thought){
+     // agy and Cursor: open while it works, closed at the answer; a click counts for this request and phase.
+     const detail=node('details','claude-thought'),heading=node('summary','',work.thoughtLabel||'Resumo do raciocínio · Claude'),choice=this.thoughtChoices.get(panel.key);
+     detail.open=work.thoughtOpen?work.thoughtOpen(status.live,choice?.turn===turn?.id?choice:null,this.thoughtsOpen.has(panel.key)):this.thoughtsOpen.has(panel.key);
+     heading.addEventListener('click',()=>this.thoughtChoices.set(panel.key,{turn:turn?.id,live:status.live,open:!detail.open}));
+     detail.addEventListener('toggle',()=>{if(detail.isConnected){if(detail.open)this.thoughtsOpen.add(panel.key);else this.thoughtsOpen.delete(panel.key);}});detail.append(heading,node('div','claude-thought-text',work.thought));panel.foot.append(detail);
+    }
     if(!status.live&&delivery.status==='failed'&&record.active&&round===record.rounds.at(-1)&&round.targets.length>1&&round.targets.every(k=>round.deliveries[k].conversationId===record.members[k].conversationId)&&!this.running(conversation)){
      const retry=node('button','review-panel-stop dual-retry',`Reenviar ao ${shortName(delivery.provider)}`);retry.type='button';
      retry.dataset.tip=`Envia a mesma pergunta só ao ${shortName(delivery.provider)}, sem a resposta do outro a esta ronda. O que já foi entregue não se repete.`;

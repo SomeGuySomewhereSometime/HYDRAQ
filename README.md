@@ -319,6 +319,7 @@ O cartão de progresso mostra a ação em curso, os comentários públicos do cl
 - **Ações deste pedido:** todas as ações, cada uma com a duração e o estado (concluída, com erro, recusada, sem conclusão confirmada).
   - A duração indicada pelo cliente (Codex, agy) aparece simples. A medida pela HYDRAQ entre os eventos recebidos leva «≈» (o Cursor não indica horas), e a hora de fim é guardada uma só vez.
 - **Raciocínio:** quando o cliente envia texto do raciocínio, o cartão mostra o mais recente, expansível («Resumo do raciocínio · Claude», «Resumo do raciocínio · Antigravity», «Raciocínio · Cursor»), também no Dual e nos participantes do Hydra; os anteriores ficam no painel Atividade. Não entra nas passagens para outros modelos.
+  - No agy e no Cursor, a caixa está aberta enquanto o pedido corre e fecha quando a resposta fica pronta. Se a fechares ou abrires, a tua escolha vale até ao fim dessa fase; o pedido seguinte volta a abrir. No Claude, começa fechada e fica como a deixaste.
   - Ações antigas sem horas ficam sem duração, e nenhum tempo continua a correr depois de uma interrupção ou de uma perda de ligação.
   - Os clientes guardam as últimas 200 ações por conversa; um pedido maior diz que as primeiras já não estão guardadas.
 - **Resumo no fim:** por exemplo «Leu 6 ficheiros · alterou 2 ficheiros · 3 comandos (1 falhou) · 1 pesquisa no projeto · 1 alteração recusada · 1 min 12 s». Só conta o que foi confirmado: o mesmo ficheiro lido várias vezes conta uma vez, e as recusas e as pesquisas na web ficam à parte.

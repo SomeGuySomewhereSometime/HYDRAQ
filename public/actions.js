@@ -129,9 +129,19 @@ export function reasoningText(item) {
   return (Array.isArray(item.summary) ? item.summary.join('\n\n') : text(item.summary)).trim();
 }
 // Clients whose reasoning text HYDRAQ keeps, and what it is: Claude and agy send summaries, Cursor its thoughts.
-const THOUGHTS = { claude: ['Resumo do raciocínio', 'Claude'], antigravity: ['Resumo do raciocínio', 'Antigravity'], cursor: ['Raciocínio', 'Cursor'] };
+// agy and Cursor show their reasoning open while the request runs (as asked for both).
+const THOUGHTS = { claude: { label: 'Resumo do raciocínio · Claude' }, antigravity: { label: 'Resumo do raciocínio · Antigravity', openWhileLive: true }, cursor: { label: 'Raciocínio · Cursor', openWhileLive: true } };
 /** The heading for a client's reasoning, or '' for one whose text is not shown. */
-export const thoughtLabel = provider => THOUGHTS[provider]?.join(' · ') || '';
+export const thoughtLabel = provider => THOUGHTS[provider]?.label || '';
+export const thoughtOpensLive = provider => Boolean(THOUGHTS[provider]?.openWhileLive);
+/**
+ * Whether the reasoning box is open: the person's choice while the request stays in the same phase (running or
+ * finished); otherwise open while a client like agy works and closed once the answer is ready; else as it was.
+ */
+export function thoughtOpen(provider, live, choice, previous) {
+  if (choice && choice.live === live) return choice.open;
+  return thoughtOpensLive(provider) ? live : previous;
+}
 /** The latest reasoning with text in a request, ending with what arrived last. */
 export function latestThought(conversation, turn, size = 600) {
   const thought = reasoningText(turnActions(conversation, turn).findLast(item => item.type === 'reasoning' && reasoningText(item)) || {});

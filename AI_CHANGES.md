@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 130
+Versão atual: 131
 
 ## Resumo atual
+
+- Raciocínio aberto enquanto o agy e o Cursor trabalham (entrada 131): a caixa do resumo abre sozinha enquanto o pedido corre e fecha quando a resposta fica pronta. Fechá-la ou abri-la vale até ao fim dessa fase; o pedido seguinte volta a abrir. O Claude fica como estava (começa fechada). Cartão, Dual e Hydra. Página 23/23, suite 526/526. Ativado na 4318 por reinício autorizado (PID 986600 → 1026460), com o estado igual; commit sem push.
 
 - Ativação das entradas 126–129 (entrada 130): a 4318 foi reiniciada com autorização. O estado ficou igual (93 conversas, as mesmas impressões em todas as secções) e os cinco clientes ligaram-se. A página servida é igual à do disco, com o novo `actions.js`, e o servidor devolve os novos campos do progresso. Separadores abertos antes do reinício precisam de recarregar. Commit sem push.
 
@@ -1841,3 +1843,24 @@ Versão atual: 130
   - o progresso devolvido traz `startedAt` e `thought`, ou seja, o código novo está ativo.
 - Por confirmar: um pedido real na 4318 com o Claude, o Grok e o Flash. Os ensaios reais anteriores correram em instâncias isoladas.
 - Separadores abertos antes do reinício precisam de recarregar. Commit sem push.
+
+### 131 — 2026-10-28 — Claude
+
+- Pedido, depois de testar na 4318: no agy, a caixa do raciocínio deve estar aberta enquanto a resposta final não chega, poder ser fechada, e fechar quando a resposta fica pronta. A seguir: «mas grok pode também ir mostrando o que aparece em raciocínio». O Claude não foi pedido e fica como estava.
+- `public/actions.js`: a tabela de clientes com raciocínio marca o agy e o Cursor para abrir enquanto trabalham (`thoughtOpensLive`). Uma regra comum (`thoughtOpen`) decide:
+  - a escolha da pessoa vale enquanto o pedido estiver na mesma fase (a correr, ou terminado);
+  - sem escolha, a caixa está aberta enquanto corre e fechada no fim;
+  - nos outros clientes, fica como estava.
+- `public/app.js` (cartão), `public/dual.js` (painel), `public/claudex.js` e `lib/claudex.mjs` (participante do Hydra): usam a regra. Um clique no título guarda a escolha desse pedido; um pedido novo volta a abrir.
+- `validation/thought-open-ui.mjs` **23/23**, clientes simulados, sem erros de JavaScript:
+  - agy e Cursor: aberta a trabalhar e com um resumo novo; fechada pela pessoa, continua fechada; fecha na resposta; aberta depois do fim, continua aberta; o pedido seguinte volta a abrir.
+  - Claude: fechada a trabalhar e fica como a pessoa a deixa.
+  - Dual com o agy: aberta e depois fechada no fim.
+  - Hydra: agy aberto a trabalhar e fechado no fim, Claude fechado.
+- Outras verificações: Claude 13/13, Hydra 56/56, progresso detalhado 24/24, suite **526/526**.
+- Ativação, com autorização («faz»):
+  - A 4318 parada (sem pedidos, aprovações, terminais nem tarefas do Hydra ativas) foi reiniciada: PID 986600 → 1026460, scope `hydraq-20261028T160100Z`, mesmo Node, pasta e ambiente.
+  - Antes e depois: 95 conversas e as mesmas impressões em todas as secções (conversas, pareceres, automático, Colaboração, projetos, Dual e Hydra). Os cinco clientes ligaram-se.
+  - Os 19 ficheiros servidos de `public/` são iguais aos do disco; só `public/starfall/` fica de fora, como esperado.
+  - O detalhe do Hydra servido já traz `thoughtOpensLive` (falso no Claude). Não há nenhuma tarefa do Hydra com o agy para o ver verdadeiro; esse caso está coberto só pela validação simulada.
+  - Commit sem push.
