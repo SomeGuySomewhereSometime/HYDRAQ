@@ -13,7 +13,7 @@ test('progresso não mistura ações antigas nem apresenta comandos com erro com
   assert.equal(summary.counts.failed,1);
   assert.equal(summary.counts.running,1);
   assert.equal(summary.actions.length,2);
-  assert.equal(summary.title,'A executar um comando');
+  assert.equal(summary.title,'A correr node teste.mjs');
   assert.equal(summary.completedSteps,1);
   assert.equal('percentage' in summary,false);
 });
@@ -34,4 +34,15 @@ test('só apresenta como comentário os textos públicos identificados como comm
     {role:'assistant',turnId:'turn',phase:'final_answer',text:'Resultado final'},
   ]});
   assert.equal(summary.commentary,'Vou executar os testes.');
+});
+
+test('sem ação em curso não se deduz «a pensar»: texto a chegar, decisão pendente ou trabalho sem detalhe',()=> {
+ const base={cwd:'/p',items:[],messages:[]};
+ assert.equal(summarizeProgress({...base,turns:[{id:'t',status:'running'}]}).title,'Codex a trabalhar · sem atividade detalhada');
+ assert.equal(summarizeProgress({...base,turns:[{id:'t',status:'running'}],messages:[{role:'assistant',turnId:'t',streaming:true,text:'Olá'}]}).title,'A escrever a resposta');
+ assert.equal(summarizeProgress({...base,turns:[{id:'t',status:'waiting'}]}).title,'A aguardar a tua decisão');
+ // Only a reasoning event the client sent itself counts as thinking.
+ assert.equal(summarizeProgress({...base,turns:[{id:'t',status:'running'}],items:[{id:'r',turnId:'t',type:'reasoning',status:'inProgress'}]}).title,'A pensar');
+ const parallel=summarizeProgress({...base,turns:[{id:'t',status:'running',startedAt:'2026-10-28T10:00:00Z'}],items:[{id:'a',turnId:'t',type:'mcpToolCall',server:'Claude Code',tool:'Read',parameters:{file_path:'/p/a.js'},status:'inProgress'},{id:'b',turnId:'t',type:'commandExecution',command:'npm test',status:'inProgress'}]});
+ assert.equal(parallel.title,'2 ações em curso');assert.equal(parallel.detail,'A ler a.js · A correr npm test');assert.equal(parallel.startedAt,'2026-10-28T10:00:00Z');
 });

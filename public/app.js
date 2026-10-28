@@ -14,6 +14,8 @@ import { Layout, Tooltips, AppearanceMenu, ClientColors, APPEARANCES, COLUMNS } 
 // A server started before the dual routes does not serve dual.js: the composer then works without Dual.
 const claudexModule = await import('./claudex.js').catch(() => null);
 const dualModule = await import('./dual.js').catch(() => null);
+// Readable actions, durations and the request summary; a server started before it existed leaves the old card.
+const actions = await import('./actions.js').catch(() => null);
 const { isReadMode: dualRead, dualSendLabel } = dualModule || {};
 
 const $ = selector => document.querySelector(selector);
@@ -276,10 +278,11 @@ const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:curre
 const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
 claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area:collaborationUI,toast,markdown,openConversation:id=>choose(id,selectedProject,false,true),
   openTask:id=>{const task=state?.claudex?.records.find(record=>record.id===id),member=task&&Object.values(task.members||{}).find(entry=>state.conversations.some(c=>c.id===entry.conversationId));if(member)choose(member.conversationId);else claudexUI.choose(id);},
-  changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}}}):null;
+  elapsed,changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}}}):null;
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 
-dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,markdown,getSyntheses:()=>opinionUI.viewState()?.batches?.filter(batch=>batch.kind==='synthesis')||[],getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
+dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,markdown,elapsed,
+  describeWork:(owner,turn)=>{if(!actions)return null;const work=actions.currentWork(owner,turn);return {now:!work?[]:work.actions?.length?work.actions.map(item=>({text:actions.actionPhrase(item,{live:true,cwd:owner.cwd}),since:item.at})):[{text:work.title,since:null}],summary:activeStatuses.includes(turn.status)?'':actions.summaryLine(actions.requestSummary(owner,turn)),thought:actions.thoughtLabel?.(owner.provider)?actions.latestThought(owner,turn,Infinity):null,thoughtLabel:actions.thoughtLabel?.(owner.provider)||''};},getSyntheses:()=>opinionUI.viewState()?.batches?.filter(batch=>batch.kind==='synthesis')||[],getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
   loadModels:id=>id==='opencode'?checkOpenCodeModels(false):null,
   applySettings:(provider,settings)=>{const key=`${draftKey(current(),selectedProject)}:${provider}`;settingDrafts.set(key,{...(settingDrafts.get(key)||{}),...settings});}}):null;
 $('#dual-toggle').classList.toggle('hidden',!dualUI);
@@ -898,27 +901,55 @@ function renderProgress(conversation) {
   // A request missing from the transcript (still in a handoff, say) leaves the card in its old place above it.
   const home = hydraHost.parentElement === transcript ? transcript : hydraHost;
   if(anchor){if(anchor.nextElementSibling!==view)anchor.after(view);}else if(view.nextElementSibling!==home)home.before(view);
-  const signature = JSON.stringify([conversation?.id,progress]);
+  const items = actions && turn ? actions.turnActions(conversation, turn) : [];
+  const signature = JSON.stringify([conversation?.id,progress,items.map(item=>[item.id,item.status,item.completedAt,item.durationMs,item.permissionDenied]),conversation?.messages?.some(m=>m.turnId===turn?.id&&m.streaming)]);
   if (signature === progressSignature) return;
   progressSignature = signature;
-  const expanded = Boolean(view.querySelector('details')?.open);
+  const expanded = Boolean(view.querySelector('.progress-details')?.open);
+  const thoughtExpanded = Boolean(view.querySelector('.claude-thought')?.open);
   view.replaceChildren();
   if (!progress) return;
   const nearBottom=transcript.scrollHeight-transcript.scrollTop-transcript.clientHeight<120;
   view.dataset.status = progress.status;
+  const live = activeStatuses.includes(progress.status), cwd = conversation.cwd;
   const heading = element('div', 'progress-heading');
   const symbol = { completed:'✓', failed:'!', interrupted:'■', uncertain:'?' }[progress.status] || '◌';
   heading.append(element('span', 'progress-symbol', symbol), element('strong', '', progress.title));
-  const counts = progress.counts;
-  const countText = [`${counts.completed} ${counts.completed === 1 ? 'ação concluída' : 'ações concluídas'}`, ...(counts.running ? [`${counts.running} em curso`] : []), ...(counts.failed ? [`${counts.failed} com erro`] : []), ...(counts.declined ? [`${counts.declined} ${counts.declined === 1 ? 'recusada' : 'recusadas'}`] : [])].join(' · ');
-  heading.append(element('span', 'progress-counts', countText));
+  if (actions) {
+    // The request's own time: running while it runs, its length once it ends; never after an interruption.
+    const work = actions.currentWork(conversation, turn), clock = element('span', 'progress-clock');
+    if (live && work?.since) clock.append(elapsed(work.since));
+    const total = live && progress.startedAt ? elapsed(progress.startedAt) : null, length = actions.requestSummary(conversation, turn).durationMs;
+    if (total) clock.append(document.createTextNode(clock.childNodes.length ? ' · pedido ' : 'pedido '), total);
+    else if (length !== null && progress.status === 'completed') clock.textContent = actions.formatDuration(length);
+    if (clock.childNodes.length) heading.append(clock);
+  } else {
+    const counts = progress.counts;
+    heading.append(element('span', 'progress-counts', [`${counts.completed} ${counts.completed === 1 ? 'ação concluída' : 'ações concluídas'}`, ...(counts.running ? [`${counts.running} em curso`] : []), ...(counts.failed ? [`${counts.failed} com erro`] : []), ...(counts.declined ? [`${counts.declined} ${counts.declined === 1 ? 'recusada' : 'recusadas'}`] : [])].join(' · ')));
+  }
   view.append(heading);
-  if (progress.detail) view.append(element('p', 'progress-detail', progress.detail));
+  // Several actions at once are all shown, each with its own time.
+  const running = actions && live ? actions.activeActions(conversation, turn) : [];
+  if (running.length > 1) {
+    const list = element('ul', 'progress-running');
+    for (const item of running) { const entry = element('li', '', actions.actionPhrase(item, { live: true, cwd })); if (item.at) entry.append(document.createTextNode(' · '), elapsed(item.at)); list.append(entry); }
+    view.append(list);
+  } else if (progress.detail) view.append(element('p', 'progress-detail', progress.detail));
   if (progress.commentary && progress.status !== 'completed') view.append(element('p', 'progress-commentary', `${providerName(conversation.provider)}: ${progress.commentary}`));
-  if (progress.steps.length || progress.actions.length) {
+  const thoughtLabel = actions?.thoughtLabel?.(conversation.provider) || '';
+  const thought = thoughtLabel ? actions.latestThought(conversation, turn, Infinity) : '';
+  if (thought) {
+    const detail = element('details', 'claude-thought'); detail.open = thoughtExpanded;
+    detail.append(element('summary', '', thoughtLabel), element('div', 'claude-thought-text', thought));
+    view.append(detail);
+  }
+  const summary = actions && items.length ? actions.summaryLine(actions.requestSummary(conversation, turn)) : '';
+  if (summary && !live) view.append(element('p', 'progress-summary', summary));
+  const timeline = actions ? items.filter(item => item.type !== 'reasoning') : progress.actions;
+  if (progress.steps.length || timeline.length) {
     const details = element('details', 'progress-details');
     details.open = expanded;
-    details.append(element('summary', '', progress.steps.length ? `Plano e ações · ${progress.completedSteps} de ${progress.steps.length} passos marcados como concluídos` : 'Ver ações deste pedido'));
+    details.append(element('summary', '', progress.steps.length ? `Plano e ações · ${progress.completedSteps} de ${progress.steps.length} passos marcados como concluídos` : `Ações deste pedido · ${timeline.length}`));
     if (progress.explanation) details.append(element('p', '', progress.explanation));
     if (progress.steps.length) {
       const list = element('ol', 'progress-plan');
@@ -932,21 +963,42 @@ function renderProgress(conversation) {
       }
       details.append(list);
     }
-    if (progress.actions.length) {
+    if (timeline.length) {
       const list = element('ul', 'progress-actions');
-      for (const action of [...progress.actions].reverse()) {
+      const labels = { completed:'Concluída', inProgress:'Em curso', failed:'Com erro', declined:'Recusada', unfinished:'Sem conclusão confirmada', interrupted:'Interrompida', cancelled:'Cancelada' };
+      for (const action of [...timeline].reverse()) {
         const item = element('li');
-        item.dataset.status = action.status;
-        const label = { completed:'Concluída', inProgress:'Em curso', failed:'Com erro', declined:'Recusada', unfinished:'Sem conclusão confirmada', interrupted:'Interrompida', cancelled:'Cancelada' }[action.status] || action.status;
-        item.append(element('span', '', action.detail || action.type), element('small', '', label));
+        if (actions) {
+          // A running action in a finished request did not finish: said so, and no time is claimed for it.
+          const state = actions.actionState(action), shown = !live && state === 'inProgress' ? 'unfinished' : state, duration = actions.actionDuration(action);
+          item.dataset.status = shown;
+          const text = element('span', '', actions.actionPhrase(action, { cwd })), detail = element('small', '', labels[shown] || shown);
+          if (duration) { const time = element('time', 'progress-duration', `${duration.measured ? '≈ ' : ''}${actions.formatDuration(duration.ms)}`); time.dataset.tip = duration.measured ? 'Medido pela HYDRAQ entre os eventos recebidos' : 'Duração indicada pelo cliente'; detail.prepend(time, document.createTextNode(' · ')); }
+          else if (live && state === 'inProgress' && action.at) detail.prepend(elapsed(action.at), document.createTextNode(' · '));
+          item.append(text, detail);
+        } else {
+          item.dataset.status = action.status;
+          item.append(element('span', '', action.detail || action.type), element('small', '', labels[action.status] || action.status));
+        }
         list.append(item);
       }
       details.append(element('h4', '', 'Ações observadas'), list);
+      // Clients keep their latest 200 actions per conversation: a longer request has lost its first ones, and says so.
+      if (actions && conversation.items.length >= 200 && conversation.items[0]?.turnId === turn.id) details.append(element('p', 'progress-detail', 'As primeiras ações deste pedido já não estão guardadas: o cliente guarda as últimas 200 por conversa.'));
     }
     view.append(details);
   }
   if(nearBottom)transcript.scrollTop=transcript.scrollHeight;
 }
+
+/** A running time, kept current by the clock below; only live things carry one. */
+function elapsed(since) {
+  const time = element('time', 'progress-elapsed');
+  time.dataset.elapsedSince = since; time.dateTime = since;
+  time.textContent = actions ? actions.formatDuration(Math.max(0, Date.now() - Date.parse(since))) : '';
+  return time;
+}
+setInterval(() => { if (!actions) return; for (const time of document.querySelectorAll('[data-elapsed-since]')) time.textContent = actions.formatDuration(Math.max(0, Date.now() - Date.parse(time.dataset.elapsedSince))); }, 1000);
 
 function formatTokens(value) { return new Intl.NumberFormat('pt-PT').format(value); }
 
@@ -1102,9 +1154,10 @@ function renderActivity(conversation) {
       details.dataset.id = item.id;
       details.dataset.status = item.status || 'inProgress';
       details.open = open.has(item.id);
-      details.append(element('summary','',`${providerName(item.provider)}${item.parentToolUseId ? ' · Subagente' : ''} · ${itemDescription(item)}`));
+      const owner = owners.find(entry => entry.items.some(own => own.id === item.id)), duration = actions?.actionDuration(item);
+      details.append(element('summary','',`${providerName(item.provider)}${item.parentToolUseId ? ' · Subagente' : ''} · ${actions ? actions.actionPhrase(item, { cwd: owner?.cwd }) : itemDescription(item)}`));
       const statusText = item.permissionDenied ? (item.provider === 'antigravity' ? 'Recusada pelo agy' : 'Recusada') : (statusLabels[item.status] || item.status || 'Em execução');
-      details.append(element('small','',`${statusText}${item.exitCode !== undefined && item.exitCode !== null ? ` · saída ${item.exitCode}` : ''}`));
+      details.append(element('small','',`${statusText}${item.exitCode !== undefined && item.exitCode !== null ? ` · saída ${item.exitCode}` : ''}${duration ? ` · ${duration.measured ? '≈ ' : ''}${actions.formatDuration(duration.ms)}` : ''}`));
       let output = item.aggregatedOutput || item.text || '';
       if (!output && item.changes) output = item.changes.map(change => `${change.path}\n${change.diff || ''}`).join('\n\n');
       if (!output && item.summary) output = Array.isArray(item.summary) ? item.summary.join('\n') : String(item.summary);

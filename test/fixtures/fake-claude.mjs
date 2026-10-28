@@ -79,6 +79,46 @@ createInterface({ input: process.stdin }).on('line', line => {
   writeFileSync(stateFile, JSON.stringify({ count }));
   writeFileSync(`.fake-claude-last-${sessionId}`, text);
   emit({ type: 'system', subtype: 'init', session_id: sessionId, model: resolved, permissionMode: mode });
+  const scenario = /claude-(?:summary|tasks)(?:-[a-z]+)?$/.exec(text)?.[0];
+  if (scenario?.startsWith('claude-summary')) {
+    const id=`summary-${count}`, summary=scenario==='claude-summary-long'?'Resumo disponibilizado. '.repeat(2000):'Vou comparar os resultados públicos.';
+    const stream=event=>emit({type:'stream_event',session_id:sessionId,event});
+    stream({type:'message_start',message:{id}});
+    stream({type:'content_block_start',index:0,content_block:{type:'thinking',thinking:''}});
+    stream({type:'content_block_delta',index:0,delta:{type:'thinking_delta',thinking:summary.slice(0,7)}});
+    stream({type:'content_block_delta',index:0,delta:{type:'thinking_delta',thinking:summary.slice(7)}});
+    stream({type:'content_block_delta',index:0,delta:{type:'signature_delta',signature:'SIGNATURE-NOT-FOR-DISPLAY'}});
+    if(scenario==='claude-summary-hold'){holding=true;return;}
+    stream({type:'content_block_stop',index:0});
+    stream({type:'content_block_delta',index:1,delta:{type:'text_delta',text:'Resposta pública.'}});
+    const complete={type:'assistant',session_id:sessionId,message:{id,content:[{type:'thinking',thinking:scenario==='claude-summary-empty'?'':summary,signature:'SIGNATURE-NOT-FOR-DISPLAY'},{type:'text',text:'Resposta pública.'},{type:'redacted_thinking',data:'REDACTED-NOT-FOR-DISPLAY'}]}};
+    emit(complete);emit(complete);
+    emit({type:'assistant',session_id:sessionId,parent_tool_use_id:'child-task',message:{id:'child-summary',content:[{type:'thinking',thinking:'CHILD-NOT-FOR-DISPLAY'}]}});
+    result('Resposta pública.');return;
+  }
+  if(scenario?.startsWith('claude-tasks')){
+    let seq=0;
+    const task=(name,input,content,{error=false,native=null,parent=null,repeat=false}={})=>{
+      const id=`task-${count}-${++seq}`;
+      emit({type:'assistant',session_id:sessionId,parent_tool_use_id:parent,message:{id:'msg-'+id,content:[{type:'tool_use',id,name,input}]}});
+      const response={type:'user',session_id:sessionId,parent_tool_use_id:parent,tool_use_result:native,message:{content:[{type:'tool_result',tool_use_id:id,is_error:error,content}]}};
+      if(scenario==='claude-tasks-pending'){holding=true;return;}
+      emit(response);if(repeat)emit(response);
+    };
+    if(scenario==='claude-tasks-start'){
+      task('TaskCreate',{subject:'Ler o ficheiro'},'Task #1 created successfully: Ler o ficheiro',{native:{task:{id:'1',subject:'Ler o ficheiro',status:'pending'}},repeat:true});
+      task('TaskCreate',{subject:'Responder'},'Task #2 created successfully: Responder');
+      task('TaskUpdate',{taskId:'1',status:'in_progress'},'Updated task #1 status');
+      task('TaskUpdate',{taskId:'1',status:'completed'},'Permission denied',{error:true});
+      task('TaskUpdate',{taskId:'1',status:'completed'},'Task not updated',{native:{success:false}});
+      task('TaskCreate',{subject:'Tarefa do subagente'},'Task #3 created successfully: Tarefa do subagente',{parent:'child-task'});
+    }else if(scenario==='claude-tasks-finish'){
+      task('TaskUpdate',{taskId:'1',status:'completed'},'Updated task #1 status',{repeat:true});
+      task('TaskUpdate',{taskId:'2',status:'deleted'},'Updated task #2 status');
+    }else if(scenario==='claude-tasks-todo')task('TodoWrite',{todos:[{content:'Etapa antiga',status:'completed'},{content:'Etapa atual',status:'in_progress'}]},'Todos have been modified successfully');
+    else if(scenario==='claude-tasks-pending'){task('TaskCreate',{subject:'Não confirmada'},'');return;}
+    say(`tasks-answer-${count}`,'Tarefas observadas.');result('Tarefas observadas.');return;
+  }
   if (text === 'slow') { holding=true;say('slow-'+count,'A trabalhar…');setTimeout(()=>{if(holding){holding=null;say('slow-done-'+count,'Concluído.');result('Concluído.');}},180);return;}
   if (text === 'hold') { holding = true; say(`msg-${count}`, 'A trabalhar…'); return; }
   if (text === 'subagent-tools') {

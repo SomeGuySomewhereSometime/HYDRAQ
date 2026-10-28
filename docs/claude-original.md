@@ -49,6 +49,12 @@ Validado com o Claude Code interativo (2.1.309 e 2.1.310), aberto com o comando 
 
 O cliente principal aceita `AskUserQuestion`. As perguntas aparecem na conversa com as opções do Claude, escolha múltipla quando pedida e um campo para resposta própria. **Responder** envia `answers` (pergunta → rótulo, vários rótulos separados por vírgulas ou o texto escrito); **Não responder** recusa a ferramenta; **Parar tarefa** interrompe. Uma resposta incompleta é recusada sem resolver o pedido. Revisores, pareceres e o revisor da colaboração continuam sem esta ferramenta.
 
+## Resumos e plano na HYDRAQ
+
+Os processos da HYDRAQ pedem `--thinking-display summarized`. Quando o Claude disponibiliza um resumo, a página mostra **Resumo do raciocínio · Claude**, separado da resposta, no progresso, no Dual e no participante do Hydra. O texto recebido fica inteiro, incluindo depois de recarregar; assinaturas e blocos `redacted_thinking` não são guardados. Estes resumos não entram nas mensagens de passagem para outros modelos.
+
+As operações confirmadas `TaskCreate` e `TaskUpdate` atualizam os passos do plano; `TodoWrite` continua suportado. Uma chamada recusada, falhada ou ainda sem resultado não altera o plano. As tarefas pendentes acompanham a sessão; as concluídas em pedidos anteriores ficam fora do plano do novo pedido. A disponibilidade destas ferramentas depende do Claude e do modo escolhido: a HYDRAQ apresenta o que ele confirma, sem criar tarefas por dedução ou mudar as suas permissões.
+
 ## Isolamento
 
 Cada processo Claude da HYDRAQ recebe `--settings {"crossSessionInbound":"refuse"}`. Sem isto, outra sessão Claude do computador podia enviar uma mensagem a um processo parado da HYDRAQ e iniciar um turno que a HYDRAQ não pediu (com consumo de quota e contexto invisível na conversa). O ambiente dos processos perde também a identidade de uma sessão Claude que tenha iniciado a HYDRAQ (`CLAUDE_CODE_SESSION_ID`, `CLAUDE_CODE_CHILD_SESSION`, socket e token de mensagens): com elas, o terminal original não grava os seus turnos.

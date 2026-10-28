@@ -160,7 +160,7 @@ try {
   await page.locator('#messages .message.assistant', { hasText: 'Plano comum' }).waitFor({ timeout: 8000 });
   check('published result follows the card in the conversation', await page.evaluate(() => { const card = document.querySelector('#messages > #hydra-inline'), answer = [...document.querySelectorAll('#messages > .message.assistant')].find(e => e.textContent.includes('Plano comum')); return Boolean(card && answer && card.compareDocumentPosition(answer) & Node.DOCUMENT_POSITION_FOLLOWING); }) && !await page.locator('#hydra-inline .cx-result').isVisible() && await page.locator('#messages .message.user:not(.hydra-request)', { hasText: 'Planear um organizador offline.' }).count() === 0);
   // The card's buttons follow the result shown in the conversation without waiting for the next poll (1,2 s).
-  await page.waitForFunction(() => /Nova tarefa a partir deste progresso/.test(document.querySelector('#send').textContent), null, { timeout: 700 }).catch(() => {});
+  await page.waitForFunction(() => /Nova tarefa a partir deste progresso/.test(document.querySelector('#send').textContent), null, { timeout: 1000 }).catch(() => {});
   check('finished task offers a new task from its progress', /Nova tarefa a partir deste progresso/.test(await page.locator('#send').textContent()));
   const before = await page.evaluate(() => localStorage.getItem('hydraq.conversation'));
   await page.locator('#prompt').fill('Aprofundar a exportação.');

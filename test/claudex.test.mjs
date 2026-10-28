@@ -376,7 +376,9 @@ test('atividade usa apenas ferramentas pendentes do turno atual e leitura guarda
    {type:'mcpToolCall',tool:'old',turnId:'old-turn',status:'inProgress'},
    {type:'mcpToolCall',tool:'done',turnId:c.turnId,status:'completed'},
    {type:'reasoning',turnId:c.turnId,status:'inProgress'}];
-  assert.deepEqual(ctx.cx.detail(r.id).participants[role].activity,[{name:'Read',at},{name:'Terminal',at}]);
+  // In words for the page; the other participant never receives it (it is not in the dialogue).
+  assert.deepEqual(ctx.cx.detail(r.id).participants[role].activity,[{name:'A ler',tool:'Read',at},{name:'A correr private command',tool:'Terminal',at}]);
+  assert.doesNotMatch(JSON.stringify(r.messages),/private command/);
   c.items[0].status='completed';assert.equal(ctx.cx.detail(r.id).participants[role].activity.length,1);
   c.status='completed';assert.deepEqual(ctx.cx.detail(r.id).participants[role].activity,[]);
  }

@@ -85,8 +85,29 @@ createInterface({input:process.stdin}).on('line',line=>{
   update({sessionUpdate:'tool_call',toolCallId,kind:'edit',title:'Edit edited.txt',status:text==='edit-split'?'in_progress':'completed',...(text==='edit' ? {locations:[{path:'edited.txt'}]} : {}),content:[{type:'diff',path:'edited.txt',oldText:null,newText:'EDITED'}]});
   if(text==='edit-split')update({sessionUpdate:'tool_call_update',toolCallId,status:'completed'});
  }
+ // The same finished update twice: the end recorded must be the first.
+ if(text==='repeat-update'){
+  const toolCallId='read-'+(++count);
+  update({sessionUpdate:'tool_call',toolCallId,kind:'read',title:'Read notas.md',status:'in_progress',locations:[{path:'notas.md'}],rawInput:{path:'notas.md'}});
+  setTimeout(()=>update({sessionUpdate:'tool_call_update',toolCallId,status:'completed'}),120);
+  setTimeout(()=>{update({sessionUpdate:'tool_call_update',toolCallId,status:'completed'});say('Lido.');done(m.id);},270);
+  return;
+ }
  if(text==='many')for(let i=0;i<205;i++)update({sessionUpdate:'tool_call',toolCallId:'cmd-'+i,kind:'execute',title:'command-'+i,status:'completed',rawInput:{command:'command-'+i},rawOutput:{exitCode:0}});
- update({sessionUpdate:'agent_thought_chunk',content:{type:'text',text:'PRIVATE-THOUGHT'}});
+ // Like cursor-agent with Grok 4.7: the list goes as a request it does not wait for (a full list, then `merge` with
+ // only the tasks that changed); thoughts around a tool. The answer says how HYDRAQ replied.
+ if(text==='todos'){
+  const replies=[],todo=(todos,merge)=>request('cursor/update_todos',{toolCallId:'todo-'+count,todos,merge},reply=>replies.push(reply.error?'erro':'ok'));
+  update({sessionUpdate:'agent_thought_chunk',content:{type:'text',text:'Vou criar '}});update({sessionUpdate:'agent_thought_chunk',content:{type:'text',text:'a lista.'}});
+  update({sessionUpdate:'tool_call',toolCallId:'todo-tool',kind:'other',title:'Update TODOs: Ler notas.md, Contar, Responder',status:'completed',rawInput:{_toolName:'updateTodos'}});
+  todo([{id:'1',content:'Ler notas.md',status:'in_progress'},{id:'2',content:'Contar',status:'pending'},{id:'3',content:'Responder',status:'pending'}],false);
+  todo([{id:'1',content:'Ler notas.md',status:'completed'},{id:'2',content:'Contar',status:'in_progress'}],true);
+  update({sessionUpdate:'agent_thought_chunk',content:{type:'text',text:'Falta responder. '+process.env.CURSOR_API_KEY.slice(0,9)}});update({sessionUpdate:'agent_thought_chunk',content:{type:'text',text:process.env.CURSOR_API_KEY.slice(9)}});
+  setTimeout(()=>{say('Feito, respostas '+replies.join(','));done(m.id);},40);return;
+ }
+ // The notification form is still read.
+ if(text==='todos-next'){emit({method:'cursor/update_todos',params:{todos:[{id:'2',status:'completed'}],merge:true}});say('Seguinte.');done(m.id);return;}
+ update({sessionUpdate:'agent_thought_chunk',content:{type:'text',text:'GROK-THOUGHT'}});
  const answer=text.startsWith('[HYDRAQ · pedido interno')?'RESUMO-CURSOR':`Resposta ${saved.prompts.length} ${model} ${effort} ${context} fast=${fast} mode=${mode} contexto=${text.includes('<hydraq_handoff>')}`;
  say(answer);done(m.id);
 });

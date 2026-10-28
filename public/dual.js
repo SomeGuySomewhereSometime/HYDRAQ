@@ -46,9 +46,9 @@ export function dualPanelState(delivery,turn){
 }
 
 export class DualUI{
- constructor({api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses=()=>[],markdown}){
-  Object.assign(this,{api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses,markdown});
-  this.panels=new PanelKit({toast});this.pending=new Map();this.sequence=0;this.synthesisViews=new Map();
+ constructor({api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses=()=>[],markdown,describeWork=null,elapsed=null}){
+  Object.assign(this,{api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses,markdown,describeWork,elapsed});
+  this.panels=new PanelKit({toast});this.pending=new Map();this.sequence=0;this.synthesisViews=new Map();this.thoughtsOpen=new Set();
   this.dialog=node('dialog','opinion-dialog dual-dialog');this.dialog.setAttribute('aria-labelledby','dual-dialog-title');document.body.append(this.dialog);
   document.getElementById('dual-toggle')?.addEventListener('click',()=>this.configure());
  }
@@ -340,8 +340,11 @@ export class DualUI{
     if(context){const summary=context.querySelector('summary');summary.textContent=`Contexto do ${shortName(round.deliveries[other(part.key)]?.provider||roundMembers(record,round)[other(part.key)].provider)} enviado com este pedido · ${coverageLabels[delivery.coverage]||'sem registo'}`;panel.body.append(context);}
     const last=[...(owner?.messages||[])].reverse().find(m=>m.role==='assistant'&&m.requestId===delivery.requestId);panel.text=last?.text||'';panel.copy.hidden=!panel.text;
     panel.body.setAttribute('aria-label','Resposta de '+(names[delivery.provider]||delivery.provider));
-    const items=owner?.items?.filter(i=>turn?.id&&i.turnId===turn.id)||[],latest=items.at(-1);
-    if(status.live&&latest)panel.foot.append(this.panels.activity(latest.type==='reasoning'?'A analisar o pedido':latest.command||latest.title||latest.tool||latest.type,latest.status));
+    const items=owner?.items?.filter(i=>turn?.id&&i.turnId===turn.id)||[],latest=items.at(-1),work=owner&&turn?this.describeWork?.(owner,turn):null;
+    // What each one is doing now, every action at once with its time; at the end, what the answer took.
+    if(work){if(status.live)for(const line of work.now){const entry=this.panels.activity(line.text,'inProgress');if(line.since&&this.elapsed)entry.append(document.createTextNode(' · '),this.elapsed(line.since));panel.foot.append(entry);}else if(work.summary)panel.foot.append(node('span','dual-work-summary',work.summary));}
+    else if(status.live&&latest)panel.foot.append(this.panels.activity(latest.type==='reasoning'?'A analisar o pedido':latest.command||latest.title||latest.tool||latest.type,latest.status));
+    if(work?.thought){const detail=node('details','claude-thought');detail.open=this.thoughtsOpen.has(panel.key);detail.addEventListener('toggle',()=>{if(detail.isConnected){if(detail.open)this.thoughtsOpen.add(panel.key);else this.thoughtsOpen.delete(panel.key);}});detail.append(node('summary','',work.thoughtLabel||'Resumo do raciocínio · Claude'),node('div','claude-thought-text',work.thought));panel.foot.append(detail);}
     if(!status.live&&delivery.status==='failed'&&record.active&&round===record.rounds.at(-1)&&round.targets.length>1&&round.targets.every(k=>round.deliveries[k].conversationId===record.members[k].conversationId)&&!this.running(conversation)){
      const retry=node('button','review-panel-stop dual-retry',`Reenviar ao ${shortName(delivery.provider)}`);retry.type='button';
      retry.dataset.tip=`Envia a mesma pergunta só ao ${shortName(delivery.provider)}, sem a resposta do outro a esta ronda. O que já foi entregue não se repete.`;

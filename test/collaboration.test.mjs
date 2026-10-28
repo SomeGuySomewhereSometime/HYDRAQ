@@ -186,6 +186,23 @@ test('entrega falhada ao principal não cobre memória nova nem perde resultado 
  const c=clients.principal.conversations[0];assert.match(c.messages.findLast(m=>m.role==='user').projectContext,/NOVA-NAO-ENTREGUE/);assert.match(clients.principal.lastPrompt,/TRABALHO-CONSERVADO/);assert.equal(clients.executor.conversations[0].turns.length,1);
 });
 
+test('falha tratada dentro da fila: confirmar logo a seguir espera pelo fim da paragem e não grava ao mesmo tempo',async t=>{
+ const {hub,clients,create,send}=await setup(t),s=await create();
+ await send(s,'COL_WORKER_HOLD');await wait(()=>clients.executor.conversations[0]?.messages.some(m=>m.text==='PARCIAL-REAL-DO-TESTE'));
+ const original=clients.principal.send.bind(clients.principal);clients.principal.send=async(...args)=>{if(args[3]?.internal==='collaboration-result')throw Error('Entrega falhou');return original(...args);};
+ // Stopping the clients takes a while, as real processes do; «uncertain» is visible before it ends. Before the
+ // fix, the late stop closed the principal in the middle of the next request.
+ const close=clients.principal.close.bind(clients.principal);clients.principal.close=async()=>{await new Promise(r=>setTimeout(r,200));return close();};
+ await clients.executor.finish(clients.executor.conversations[0],'TRABALHO-CONSERVADO');await wait(()=>hub.collaboration.session(s.id).status==='uncertain');
+ clients.principal.send=original;await hub.collaboration.acknowledge(s.id);
+ assert.ok(!hub.collaboration.error,hub.collaboration.error);assert.equal(hub.collaboration.session(s.id).status,'interrupted');
+ // The next request is still running when the old stop would have ended: it must keep running.
+ const next=await send(s,'COL_PARENT_HOLD'),principal=()=>clients.principal.conversations.find(c=>c.turns.some(t=>t.requestId===hub.collaboration.session(s.id).cycles.at(-1)?.nativeRequestId));
+ await wait(()=>principal()?.status==='running');await new Promise(r=>setTimeout(r,350));
+ assert.equal(principal().status,'running');assert.ok(!hub.collaboration.error,hub.collaboration.error);assert.ok(next);
+ await clients.principal.finish(principal(),'Resposta direta');await wait(()=>hub.collaboration.session(s.id).status==='completed');
+});
+
 test('índice comum usa só estado da colaboração, exclui a própria origem e permite importar para conversa',async t=>{
  const {dir,hub,clients,normal,create,send}=await setup(t),p=await hub.createProject({name:'A',root:dir,revision:0}),s=await create({projectId:p.id});await send(s);await wait(()=>hub.collaboration.session(s.id).status==='completed');
  const c=await hub.create({projectId:p.id,revision:hub.projects.data.revision,provider:'codex',model:'gpt-test',effort:'low'});

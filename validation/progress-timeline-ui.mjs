@@ -31,7 +31,7 @@ try{
   check(provider+' no card at top of conversation',await page.locator('.conversation-panel > #progress-panel').count()===0);
   check(provider+' public commentary visible',await panel.locator('.progress-commentary').textContent().then(t=>t.includes('Vou verificar as fontes de '+provider)));
   await panel.locator('summary').click();c.items[0].status='completed';client.changed();
-  await page.waitForFunction(()=>document.querySelector('#progress-panel .progress-counts')?.textContent.includes('1 ação concluída'));
+  await page.waitForFunction(()=>document.querySelector('#progress-panel .progress-actions li')?.dataset.status==='completed');
   check(provider+' actions stay open after update',await panel.locator('details').evaluate(el=>el.open));
   c.messages.push({id:'steer-'+provider,role:'user',kind:'steer',delivery:'accepted',turnId:c.turnId,requestId:'steer-'+provider,text:'Orientação adicional.',at:new Date().toISOString()});client.changed();
   await page.getByText('Orientação adicional.',{exact:true}).waitFor();
@@ -49,7 +49,7 @@ try{
  check('internal request card follows its note',await page.locator('.handoff-note').evaluate(el=>el.nextElementSibling?.id==='progress-panel'&&!document.querySelector('#progress-panel').classList.contains('hidden')));
  // Without its request in the transcript, the card keeps its old place above it instead of disappearing.
  ic.messages.splice(ic.messages.findIndex(m=>m.requestId==='internal-now'),1);clients.claude.changed();
- check('card without its request stays above the transcript',await page.waitForFunction(()=>{const p=document.querySelector('.conversation-panel > #progress-panel');return p&&p.nextElementSibling?.id==='hydra-inline'&&!p.classList.contains('hidden')&&p.textContent.includes('1 em curso');},null,{timeout:5000}).then(()=>true,()=>false));
+ check('card without its request stays above the transcript',await page.waitForFunction(()=>{const p=document.querySelector('.conversation-panel > #progress-panel');return p&&p.nextElementSibling?.id==='hydra-inline'&&!p.classList.contains('hidden')&&p.querySelector('strong')?.textContent==='A ler';},null,{timeout:5000}).then(()=>true,()=>false));
  clients.claude.finish(ic,'Proposta.');
  const dc=await clients.codex.create({cwd:root,model:'test',effort:'low',sandbox:'read-only'});
  const {dual}=await hub.startDual(dc.id,{provider:'claude',model:'test',effort:'low'});

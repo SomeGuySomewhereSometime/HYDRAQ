@@ -1,8 +1,18 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 125
+Versão atual: 130
 
 ## Resumo atual
+
+- Ativação das entradas 126–129 (entrada 130): a 4318 foi reiniciada com autorização. O estado ficou igual (93 conversas, as mesmas impressões em todas as secções) e os cinco clientes ligaram-se. A página servida é igual à do disco, com o novo `actions.js`, e o servidor devolve os novos campos do progresso. Separadores abertos antes do reinício precisam de recarregar. Commit sem push.
+
+- Colaboração: falha tratada dentro da fila (entrada 129). Quando um passo da Colaboração falhava (por exemplo, a entrega ao principal), a paragem dos clientes e a gravação corriam fora da fila. Um «Reconhecer» e um pedido novo podiam começar a meio dela. Ou as duas gravações chocavam (a Colaboração ficava bloqueada), ou a paragem atrasada fechava o principal a meio do pedido novo, que ficava «incerto». Era a causa dos testes instáveis da entrada 128; o erro já existia, os novos tempos só o tornaram mais frequente. Teste novo que reproduz a falha sempre no código antigo. Colaboração 13/13 corridas, suite 526/526. Falta reiniciar a 4318 e fazer commit (126–129).
+
+- Cursor e agy: raciocínio, tarefas e tempos (entrada 128): o raciocínio do Grok passa a ficar guardado e visível (antes era deitado fora), com a chave da conta oculta. A lista de tarefas do Grok, que nunca chegava ao plano (o Cursor envia-a como pedido e a HYDRAQ recusava-o), passa a ser o plano, com as atualizações parciais (`merge`) aplicadas. O agy mostra os resumos do raciocínio que guarda no seu transcript e as suas próprias durações. O cartão, o Dual e o Hydra mostram o raciocínio destes clientes como o do Claude (entrada 127). Ensaio real Grok 4.7 + Gemini 3.8 Flash 16/16. A instabilidade dos testes da Colaboração foi resolvida na entrada 129.
+
+- Claude: resumos e tarefas no progresso (entrada 127): concluída pelo Codex a parte do adaptador Claude deixada a meio. Guarda os resumos de `--thinking-display summarized` sem duplicação nem cortes de texto e mostra-os separados da resposta, no cartão, Dual e Hydra. Tarefas confirmadas viram passos do plano. Corrige a limitação da entrada 126: o Claude pode enviar resumos. 523 testes; página 13/13; dois ensaios Sonnet, 6/6 verificações. Restantes clientes ficam para o Claude. Precisa de reinício da 4318; sem commit.
+
+- Mais informação enquanto o modelo trabalha (entrada 126): o cartão de progresso mostra o passo atual por palavras («A ler `notas.md`», «A correr `wc -l notas.md`», «Hydra · a ler o diálogo»), o tempo da ação e do pedido, as ações em paralelo e, no fim, um resumo que só conta o que foi confirmado. Lista todas as ações com a duração do cliente ou medida («≈»). Nada de «a pensar» deduzido. A mesma descrição vale para o painel Atividade, o Dual e o Hydra. 517 testes; página 24/24; ensaio real 25/25 (Sol, Sonnet, Flash, Argon). Precisa de reinício da 4318; sem commit.
 
 - Visual do Hydra e do Dual (entrada 125): as cores dos dois clientes em gradiente na caixa, no chip, no envio (Atelier) e nos cartões; no Dual, mais discreto. A passagem do Dual ao Hydra tem uma fusão curta (cerca de 1,25 s, sem animação com «reduzir movimento»), verificada em vídeo, fotograma a fotograma. Só a página mudou: ativo ao recarregar. 510 testes; visual 18/18; commit sem push.
 
@@ -1682,3 +1692,152 @@ Versão atual: 125
   - Só mudaram ficheiros que a página já servia, por isso basta recarregar a página, sem reinício.
   - A animação só existe na passagem do Dual para o Hydra; entrar no Hydra a partir do modo Normal muda as cores sem animação.
   - Commit sem push; `output/` fica fora.
+
+### 126 — 2026-10-28 — Claude
+
+- Pedido do utilizador (ponto 6): mais informação enquanto o modelo trabalha. O plano foi revisto pelo Codex e os seus ajustes foram incorporados:
+  - nada de «a pensar» deduzido;
+  - duração do cliente separada do tempo medido;
+  - dados originais intactos;
+  - contagens só do que foi confirmado;
+  - ações em paralelo à vista;
+  - «ver todas» completo.
+- O utilizador indicou os modelos dos ensaios: Sonnet e Opus 5.5, GPT-6.1 Sol e Gemini 3.8 Flash; Argon em um ou dois.
+- **Módulo comum `public/actions.js`:** usado pelo servidor (progresso e Hydra) e pela página (cartão, Atividade, Dual e Hydra). Só lê os campos que cada cliente grava; os tipos e parâmetros originais não mudam, porque servem também às permissões, aos factos e às passagens.
+  - **Descrição legível:** cada ação passa a ter um tipo (ler, procurar, listar, alterar, comando, web, abrir, subagente, Hydra, consultar o projeto, perguntar, plano, raciocínio, ferramenta) e um pormenor, para cada cliente:
+    - Codex: o que o comando faz (`commandActions`), sem o invólucro `/bin/bash -lc`;
+    - Claude: Read, Grep, Glob, Edit, Bash e WebFetch;
+    - agy: `read_file` com as linhas, `run_command` e `call_mcp_tool`;
+    - Cursor e OpenCode: o tipo ACP (o «webSearch» com que o OpenCode marca pesquisas no projeto conta como pesquisa no projeto);
+    - ferramentas do Hydra e de contexto, em qualquer cliente.
+  - **Duração:** a do cliente quando a dá (o `durationMs` do Codex, os tempos nativos do OpenCode); senão, o tempo entre os eventos recebidos pela HYDRAQ, marcado «≈». Sem horas, ou com a ação interrompida, não há duração. Abaixo de 0,1 s, mostra «< 0,1 s».
+  - **Resumo:** conta ficheiros distintos lidos e alterados, comandos (com os que falharam), pesquisas no projeto separadas da web, alterações e ações recusadas, erros e a duração do pedido.
+  - **Estado atual:**
+    - as ações em curso, todas, com o seu tempo;
+    - «A escrever a resposta» quando chega texto;
+    - «A aguardar a tua decisão» com uma decisão pendente;
+    - «A pensar» só com um evento de raciocínio do próprio cliente;
+    - senão, «<cliente> a trabalhar · sem atividade detalhada». O nome do cliente diz, no Dual, de quem é o cartão.
+- **Servidor:**
+  - agy (`lib/antigravity.mjs`) e Cursor/OpenCode por ACP (`lib/cursor.mjs`): guardam a hora de fim uma só vez, mesmo com o evento repetido.
+  - Histórico do OpenCode (`lib/opencode-history.mjs`): usa os tempos nativos da ferramenta, se existirem.
+  - `lib/progress.mjs`: título e pormenor pela descrição comum, com as horas de início e fim do pedido.
+  - `lib/claudex.mjs`: a atividade dos participantes passa a ser legível (`name`), mantendo o nome técnico (`tool`).
+    - Isto revê a escolha da entrada 95 de não mostrar comandos nem argumentos nos cartões do Hydra.
+    - A atividade só existe no detalhe da página e não chega ao outro modelo; o teste confirma que o diálogo não a contém.
+  - `lib/http.mjs`: serve `actions.js`.
+- **Página:**
+  - **Cartão de progresso** (`public/app.js`):
+    - mostra o passo atual com o seu tempo e o tempo do pedido, a correr só enquanto o pedido corre;
+    - com várias ações em curso, lista-as todas;
+    - no fim, mostra o resumo;
+    - em «Ações deste pedido» lista todas as ações das conversas, com a duração («≈» quando medida) e o estado; uma ação ainda em curso num pedido terminado fica «Sem conclusão confirmada», sem tempo;
+    - avisa quando os clientes já descartaram as primeiras ações (guardam as últimas 200 por conversa).
+  - **Painel Atividade:** mesmas palavras e durações.
+  - **Dual** (`public/dual.js`): o passo atual de cada painel com o tempo e, no fim, o resumo de cada resposta.
+  - **Hydra** (`public/claudex.js`): as ações em curso de cada participante, com o tempo.
+  - **Página sem o módulo:** a página carrega `actions.js` de forma opcional. Um servidor ainda não reiniciado não o serve, e a página mantém o cartão anterior, sem erros.
+- **Testes:**
+  - `test/actions.test.mjs` (4): formatos reais de cada cliente, leituras repetidas do mesmo ficheiro, recusas, pesquisas no projeto e na web, duração do cliente e duração medida, histórico sem horas, interrupção, ações em paralelo.
+  - `test/progress.test.mjs`: estados sem «a pensar» deduzido e ações em paralelo.
+  - Fim guardado uma vez com o evento repetido: `test/antigravity.test.mjs` e `test/cursor.test.mjs`, com os modos «repeat-step» e «repeat-update» dos clientes simulados. Ambos falham sem a condição de guardar uma vez.
+  - Atualizados para as palavras novas: progresso do Codex (`integration`), subagente do agy e atividade do Hydra.
+- **Validações:**
+  - `validation/progress-detail-ui.mjs` (24 verificações):
+    - ações em paralelo, os tempos a correr e o tempo do pedido;
+    - os estados «a trabalhar» e «a escrever»;
+    - o resumo com um ficheiro lido duas vezes contado uma vez;
+    - nenhum tempo a correr depois do fim;
+    - as 45 ações de um pedido longo e o aviso das primeiras já descartadas;
+    - a interrupção, o painel Atividade, o Dual e o Hydra;
+    - a página sem `actions.js`;
+    - sem transbordo horizontal no Clássico e no Mono.
+  - Adaptadas às palavras novas: `progress-timeline-ui`, `claudex-ui` e `hydra-mode-ui` (janela do botão depois do resultado alargada de 0,7 s para 1 s, que continua abaixo da verificação periódica de 1,2 s).
+- **Verificação:**
+  - Suite sequencial **517 testes: 517 aprovados**.
+    - Numa corrida com a máquina carregada por outro trabalho (média de 12), falharam 5 testes de tempo (Colaboração, OpenCode, Claude).
+    - No último commit, nas mesmas condições, também falharam 3 deles.
+    - Com a carga mais baixa, passou tudo.
+  - Página: progresso detalhado **24/24**, progresso **46/46**, `claudex-ui` **56/56**, modo Hydra **67/67**, Hydra na conversa **46/46**, síntese **36/36**, visual **18/18**, Mono **62/62**, mensagens/terminal **73/73**, sem erros de JavaScript.
+  - `git diff --check` aprovado.
+- **Ensaio real** (`validation/progress-live.mjs`; um pedido a cada modelo para ler `notas.md` e contar as linhas com um comando, pasta temporária): **25/25**.
+  - Modelos: Codex GPT-6.1 Sol, Claude Sonnet 5.5, Gemini 3.8 Flash e Gemini 4 Argon (um pedido), todos com raciocínio leve.
+  - Os quatro descreveram as ações como «Ler notas.md» e «Correr wc -l notas.md», com durações e o resumo «Leu 1 ficheiro · 1 comando · …».
+  - Durante o trabalho, o cartão mostrou «A ler notas.md», «A correr wc -l notas.md», «A escrever a resposta» e «<cliente> a trabalhar · sem atividade detalhada».
+  - O cartão real de cada conversa foi fotografado e o projeto ficou sem alterações.
+  - O ensaio revelou duas coisas, corrigidas depois e cobertas por testes: o Codex mede comandos rápidos como 0 ms (passa a «< 0,1 s») e embrulha os comandos em `/bin/bash -lc` (passa a ser mostrado só o comando).
+  - Provas em `.hydraq/progress-live-2026-10-28/` e `.hydraq/progress-detail-2026-10-28/`.
+- **Limitações:**
+  - O Claude e o agy não enviam o raciocínio, por isso nunca aparece «A pensar» com eles.
+  - O Cursor dá pouco pormenor em algumas ferramentas.
+  - Os tempos do agy, do Cursor e do Claude são medidos pela HYDRAQ.
+  - Precisa de reiniciar a 4318 para servir `actions.js` e o servidor novo. Sem commit nem push.
+
+### 127 — 2026-10-28 — Codex
+
+- Pedido: concluir apenas a parte do cliente Claude que ficou a meio; deixar Cursor/Grok, agy e o restante trabalho para o Claude. Alterações pré-existentes preservadas.
+- `lib/claude.mjs`: recebe os resumos de `--thinking-display summarized`, junta os fragmentos por mensagem/bloco e reconcilia o bloco final sem duplicar. Guarda o texto inteiro, separado das respostas; não guarda assinaturas, blocos ocultos nem resumos de subagentes. O estado termina com o bloco, resultado ou interrupção do processo.
+- `TaskCreate`/`TaskUpdate` confirmados atualizam o plano; `TodoWrite` continua suportado. Pedidos sem resultado, falhados ou de subagentes não alteram os passos. A lista acompanha a sessão e o reinício; tarefas concluídas em pedidos anteriores ficam fora do novo plano.
+- Página: «Resumo do raciocínio · Claude» expansível no cartão, no Dual e no participante do Hydra. Mantém a expansão durante atualizações; o texto continua disponível no painel Atividade. As passagens para outros modelos continuam sem os resumos.
+- Verificação: suite completa **523/523**; **78/78** testes afetados e **14/14** do Claude após a última revisão. Seis testes novos em `test/claude-progress.test.mjs`; página isolada `validation/claude-progress-ui.mjs` **13/13**, sem erros de JavaScript. `git diff --check` aprovado.
+- Ensaios reais Sonnet 5.5 low, só em pastas temporárias: três resumos (758 caracteres, guardados sem duplicação), e duas tarefas criadas e concluídas. **6/6** verificações; ficheiros do ensaio intactos. Provas em `.hydraq/claude-progress-2026-10-28/`.
+- Disponibilidade das tarefas: a sessão normal em Planear não ofereceu TaskCreate/TaskUpdate. No ensaio das tarefas, só Read, TaskCreate e TaskUpdate foram disponibilizados explicitamente; as permissões e ferramentas de produção não foram alargadas. O plano aparece quando o cliente realmente usa e confirma estas ferramentas.
+- Não alteradas as partes do Cursor/Grok ou do agy nesta entrada. Falta reiniciar a 4318 e fazer commit; nenhum deles foi executado.
+
+### 128 — 2026-10-28 — Claude
+
+- Pedido: mostrar mais do que o Cursor (Grok 4.7) e o agy enviam enquanto trabalham: deixar de deitar fora o raciocínio do Grok, mostrar o do agy e as listas de tarefas («faz para o resto apenas cursor e agy»). A parte do Claude ficou com o Codex (entrada 127); construído sobre ela, sem a alterar fora dos pontos abaixo.
+- Ensaios de observação antes de alterar (pastas temporárias, nada no projeto):
+  - O Grok envia o raciocínio em texto (`agent_thought_chunk`, cerca de 460 caracteres num pedido curto, muitas vezes em inglês). A lista de tarefas vem em `cursor/update_todos` como **pedido JSON-RPC** que o cursor-agent não espera (`sendNonBlockingExtensionNotification`); a HYDRAQ só a lia como notificação e respondia «método não suportado», por isso o plano do Cursor nunca aparecia. A 2.ª atualização traz `merge:true` só com as tarefas mudadas.
+  - O agy não manda o raciocínio no stream. Guarda os resumos em `brain/<conversa>/.system_generated/logs/transcript_full.jsonl` (`PLANNER_RESPONSE.thinking`), com o mesmo `step_index` do stream, cumulativo na conversa. Os passos do modelo sem texto chegam só como `agent_response` DONE com `duration_seconds` e `thinking_tokens`. As ferramentas trazem `duration_seconds`. Sem lista de tarefas: o Flash escreveu a lista na resposta. O agy injeta em cada pedido uma mensagem a pedir a configuração do plugin «Data Agent Kit».
+- `lib/cursor.mjs`:
+  - Raciocínio guardado como `reasoning` (`summarySource: 'cursor-thought'`), uma entrada por cada vez que o Grok pensa (outra mensagem, ferramenta ou lista termina-a). Passa pelo mesmo `streamText` das respostas: uma chave partida entre fragmentos fica «[CHAVE OCULTA]».
+  - `cursor/update_todos` aceite como pedido (resposta `{}`) e como notificação. A lista da sessão fica em `c.todos`; `merge` atualiza por id; `cancelled` sai. O plano usa `taskPlan` (as concluídas em pedidos anteriores ficam de fora) e o pedido seguinte começa com as abertas. A ferramenta passa a «Atualizar a lista de tarefas: …».
+- `lib/antigravity.mjs`:
+  - `duration_seconds` das ferramentas como duração nativa (a primeira recebida).
+  - Cada passo do modelo com `thinking_tokens` vira `reasoning` (`summarySource: 'antigravity-transcript'`). Sem texto público, leva a duração do agy; com texto não, porque a escrita entra nesse tempo.
+  - O resumo é lido do transcript: só linhas completas acrescentadas desde o arranque do processo, só leitura (`O_NOFOLLOW`), até 8 MB de cada vez. Leituras 250 ms depois de cada passo e no fim (250 ms e 2 s). Pasta `brainDirectory`, por omissão ao lado de `settings.json`.
+- Página (`public/actions.js`, `public/app.js`, `public/dual.js`, `public/claudex.js`, `lib/claudex.mjs`): o raciocínio deixou de ser só do Claude. Uma tabela única dá «Resumo do raciocínio · Claude», «Resumo do raciocínio · Antigravity» e «Raciocínio · Cursor»; no Hydra, o agy também mostra o seu.
+- `validation/claudex-ui.mjs`: a linha da ferramenta em curso aceita «< 0,1 s» (falhava quando chegava em menos de uma décima).
+- Testes: Cursor (raciocínio em duas partes com a chave oculta, lista com `merge` respondida sem erro, plano no pedido seguinte, notificação ainda lida); agy (resumo escrito antes e depois do passo, durações, 2.º pedido no mesmo processo sem reler o anterior, transcript intacto). 525 testes: 524 aprovados; falha o da Colaboração indicado abaixo.
+- Página: progresso detalhado 24/24, linha temporal 46, Claude 13/13, Hydra 56/56, modo Hydra 67/67.
+- Ensaio real `validation/thoughts-live.mjs` **16/16**: Grok 4.7 (raciocínio guardado e visível durante o pedido, plano com os 3 passos) e Gemini 3.8 Flash em dois pedidos na mesma conversa (cada resumo igual ao do mesmo passo no transcript, numeração contínua, durações do agy, cartão com o texto). Projeto intacto. Provas em `.hydraq/thoughts-live-2026-10-28/`.
+- Limitações:
+  - O cartão mostra só o raciocínio mais recente; no Grok vem em partes curtas, as anteriores ficam no painel Atividade.
+  - O resumo do agy chega no fim de cada passo, nunca enquanto pensa, e o Gemini não o escreve em todos os passos (no ensaio: 3 de 6 passos com tokens de raciocínio).
+  - **Testes da Colaboração instáveis com as alterações por gravar:** no commit, `test/collaboration.test.mjs` passou 5 em 5. Com o trabalho atual falhou 5 em 12, quase sempre «entrega falhada ao principal…» («Estado não chegou»), às vezes outros (gravação do estado). Também falha sem o campo `thought` desta entrada, com o `lib/progress.mjs` e o `public/actions.js` da entrada 126. `summarizeProgress` ficou 3× mais lento (0,16 ms contra 0,055 ms numa conversa de 200 ações), pouco para explicar 6 s. Causa por encontrar antes do commit.
+- Falta reiniciar a 4318 e fazer commit (entradas 126–128); nenhum deles foi executado.
+
+### 129 — 2026-10-28 — Claude
+
+- Pedido: investigar os testes da Colaboração que falhavam às vezes com as alterações por gravar (entrada 128).
+- Medição: no commit, `test/collaboration.test.mjs` passou 5 em 5; com as alterações, falhou 5 em 12. Falhava sobretudo «entrega falhada ao principal…» com «Estado não chegou», e às vezes com `ENOENT` ao renomear `state.json.tmp` ou «O histórico de colaboração mudou no disco».
+- Causa, mostrada pelo registo de tempos no código antigo:
+  - `kick()` corria `advance()` na fila, mas o erro ia para `fatal()` fora dela (`serial(...).catch(e => this.fatal(e))`).
+  - `fatal()` marca logo a sessão como `uncertain` e só depois espera por `stopClients()` e `persist()`.
+  - Durante essa espera, um «Reconhecer» e um pedido novo corriam até ao fim. Depois a paragem atrasada fechava os clientes, apanhando o principal a meio do pedido novo («incerto», a sessão nunca concluía), e gravava por cima. Se as duas gravações se sobrepusessem, a segunda falhava e a Colaboração ficava bloqueada (`this.error`).
+  - O mesmo em `autoConfirm()`.
+- As alterações das entradas 126–128 só mudaram os tempos; o erro existia antes. A correção não as altera.
+- `lib/collaboration.mjs`: o erro de `advance()` é tratado dentro da mesma tarefa da fila. O de `autoConfirm()` entra na fila. Uma operação pedida depois espera pelo fim da paragem e da gravação. `stopClients()` não usa a fila, por isso não há espera circular.
+- `test/collaboration.test.mjs`: teste novo em que fechar o principal demora 200 ms e o pedido seguinte continua em curso.
+  - No código antigo falha sempre (3 em 3: o principal fica `uncertain` a meio).
+  - Com a correção passa sempre.
+- Verificação: Colaboração 13 corridas seguidas sem falhas (34 testes cada); suite completa **526/526**.
+- Falta reiniciar a 4318 e fazer commit (entradas 126–129); nenhum deles foi executado.
+
+### 130 — 2026-10-28 — Claude
+
+- Pedido: reiniciar a 4318 e fazer commit das entradas 126–129 (inclui a 127 do Codex).
+- Antes do reinício, a 4318 (PID 654474) estava parada:
+  - nenhuma conversa a correr;
+  - sem autorizações, bloqueios de pasta, passagens ou conversas no terminal;
+  - Colaboração parada, nenhuma tarefa Hydra ativa;
+  - nenhuma opinião, síntese ou ronda do Dual em curso.
+- Reinício: SIGTERM só ao PID; o servidor parou em 1,4 s e os 13 processos filhos terminaram. Relançado com o mesmo executável, pasta e ambiente (em memória, sem `INVOCATION_ID`) no scope `hydraq-20261028T135254Z` (PID 986600).
+- Depois do reinício:
+  - os cinco clientes ligados;
+  - 93 conversas, e as impressões de conversas, opiniões, automáticas, Colaboração, catálogo de projetos, Dual e Hydra iguais às de antes;
+  - `index.html`, `app.js`, `actions.js` (novo, antes 404), `dual.js`, `claudex.js`, `style.css` e `composer.js` servidos iguais ao disco;
+  - o progresso devolvido traz `startedAt` e `thought`, ou seja, o código novo está ativo.
+- Por confirmar: um pedido real na 4318 com o Claude, o Grok e o Flash. Os ensaios reais anteriores correram em instâncias isoladas.
+- Separadores abertos antes do reinício precisam de recarregar. Commit sem push.

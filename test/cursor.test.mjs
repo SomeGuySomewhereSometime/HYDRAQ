@@ -21,6 +21,26 @@ async function setup(t,env={}) {
  return {directory,credentialFile,client,options,clients,log:async()=> (await readFile(path.join(directory,'prompts.log'),'utf8')).trim().split('\n').map(JSON.parse)};
 }
 
+test('Grok: raciocínio por partes com a chave oculta, lista de tarefas com merge e plano no pedido seguinte',async t=>{
+ const {client,directory}=await setup(t);await client.connect();
+ const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low'});
+ await client.send(c.id,'todos','todos-1');await waitFor(()=>c.status==='completed');
+ const turn=c.turns.at(-1),thoughts=c.items.filter(i=>i.turnId===turn.id&&i.type==='reasoning');
+ // A tool between thoughts ends the first: two thoughts, each whole.
+ assert.deepEqual(thoughts.map(i=>i.summary),['Vou criar a lista.','Falta responder. [CHAVE OCULTA]']);
+ assert.ok(thoughts.every(i=>i.status==='completed'&&i.summarySource==='cursor-thought'));
+ assert.ok(!JSON.stringify(c).includes('TEST-CURSOR-SECRET'));
+ // The second update only had two tasks: the third stays.
+ assert.deepEqual(turn.plan.steps,[{step:'Ler notas.md',status:'completed'},{step:'Contar',status:'inProgress'},{step:'Responder',status:'pending'}]);
+ const tool=c.items.find(i=>i.nativeId==='todo-tool');assert.equal(tool.planDetail,'Atualizar a lista de tarefas: Ler notas.md, Contar, Responder');
+ // Both list requests answered without error, and nothing waits for a decision.
+ assert.equal(c.messages.at(-1).text,'Feito, respostas ok,ok');assert.equal(client.snapshot().approvals.length,0);
+ assert.equal(client.snapshot().conversations[0].progress.thought,'Falta responder. [CHAVE OCULTA]');
+ // Next request: what was finished before leaves the plan; the open tasks and this request's change stay.
+ await client.send(c.id,'todos-next','todos-2');await waitFor(()=>c.status==='completed');
+ assert.deepEqual(c.turns.at(-1).plan.steps,[{step:'Contar',status:'completed'},{step:'Responder',status:'pending'}]);
+});
+
 test('aviso de pagamento recebido como end_turn é falha e nunca resposta final confirmada',async t=>{
  const {client,directory}=await setup(t);await client.connect();
  const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low',sandbox:'plan'});
@@ -50,7 +70,9 @@ test('catálogo Grok, 500K/Fast off, troca de parâmetros e retoma sem duplicar 
  const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low'});
  assert.equal(c.fast,false);assert.equal(c.context,'500k');
  await client.send(c.id,'first','r1');await waitFor(()=>c.status==='completed');const sid=c.threadId;
- assert.match(c.messages.at(-1).text,/500k fast=false mode=agent/);assert.ok(!JSON.stringify(c).includes('PRIVATE-THOUGHT'));
+ assert.match(c.messages.at(-1).text,/500k fast=false mode=agent/);
+ // The thought is kept as reasoning, never in the answer.
+ const thought=c.items.find(i=>i.type==='reasoning');assert.equal(thought.summary,'GROK-THOUGHT');assert.equal(thought.status,'completed');assert.ok(!c.messages.some(m=>m.text.includes('GROK-THOUGHT')));
  await client.send(c.id,'second','r2',{context:'256k',fast:true,effort:'medium'});await waitFor(()=>c.status==='completed');assert.equal(c.threadId,sid);
  await client.close();const resumed=new Cursor(options);clients.push(resumed);await resumed.load();await resumed.connect();
  const loaded=resumed.conversation(c.id);await resumed.send(c.id,'third','r3');await waitFor(()=>loaded.status==='completed');
@@ -118,4 +140,12 @@ test('passagem Claude → Cursor → Claude e regresso conserva contexto/Fast e 
  assert.equal(target.handoffSummaries.at(-1).text,'RESUMO-CURSOR');
  await hub.send(source.id,'back','d',{provider:'cursor',handoffMode:'quick'});await waitFor(()=>!hub.handoff&&target.status==='completed');
  assert.equal(target.threadId,sid);assert.equal(target.fast,true);assert.equal(target.context,'500k');assert.equal(target.sandbox,'plan');
+});
+
+test('atualização repetida do Cursor: a hora de fim é a primeira em que terminou, guardada uma vez',async t=>{
+ const {client,directory}=await setup(t);await client.connect();
+ const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low',sandbox:'plan'});
+ await client.send(c.id,'repeat-update','repeat');await waitFor(()=>c.status==='completed');
+ const item=c.items.find(i=>i.nativeKind==='read'),ms=Date.parse(item.completedAt)-Date.parse(item.at);
+ assert.equal(item.status,'completed');assert.ok(ms>=80&&ms<230,`fim aos ${ms} ms, não na atualização repetida`);
 });

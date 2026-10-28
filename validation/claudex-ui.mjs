@@ -23,7 +23,7 @@ try{
  await call('claude','read_dialogue');
  const nativeClaude=hub.claudex.native(r,'claude');nativeClaude.items.push({type:'mcpToolCall',tool:'Read',turnId:nativeClaude.turnId,status:'inProgress',at:new Date().toISOString()});
  await page.locator('.cx-participant[data-client=claude] .cx-tool-activity').waitFor();
- check('live tool shown',await page.locator('.cx-participant[data-client=claude] .cx-tool-activity').textContent()==='Em execução: Read');
+ check('live tool shown, in words and with its time',/^A ler · (< )?\d/.test(await page.locator('.cx-participant[data-client=claude] .cx-tool-activity').textContent()));
  check('confirmed dialogue read shown',/Última leitura: mensagem 3 · \d/.test(await page.locator('.cx-participant[data-client=claude] .cx-last-read').textContent()));
  check('unread participant distinguished',await page.locator('.cx-participant[data-client=codex] .cx-last-read').textContent()==='Ainda não leu o diálogo');
  nativeClaude.items.at(-1).status='completed';await page.locator('.cx-participant[data-client=claude] .cx-tool-activity').waitFor({state:'detached'});

@@ -305,7 +305,7 @@ test('progresso recebe plano, comentário e ações; steer conclui o mesmo turno
   await hydraq.send(chat.id,'progress','progress-1');
   await waitFor(()=>hydraq.snapshot().conversations[0].progress?.completedSteps===1);
   const progress=hydraq.snapshot().conversations[0].progress;
-  assert.equal(progress.title,'A alterar ficheiros');
+  assert.equal(progress.title,'A alterar exemplo.mjs');
   assert.equal(progress.counts.completed,1);
   assert.equal(progress.counts.running,1);
   assert.equal(progress.steps.length,3);

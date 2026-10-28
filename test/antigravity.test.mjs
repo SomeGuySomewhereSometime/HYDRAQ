@@ -17,7 +17,7 @@ const waitFor=async predicate=>{const deadline=Date.now()+4000;while(!predicate(
 async function setup(t) {
   const directory=await mkdtemp(path.join(os.tmpdir(),'hydraq-agy-test-'));
   const settingsFile=path.join(directory,'settings.json');
-  const options={dataDir:path.join(directory,'state'),defaultCwd:directory,settingsFile,executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-agy.mjs')],env:{...process.env,GEMINI_API_KEY:'must-be-removed',ANTHROPIC_API_KEY:'must-be-removed'}};
+  const options={dataDir:path.join(directory,'state'),defaultCwd:directory,settingsFile,executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-agy.mjs')],env:{...process.env,GEMINI_API_KEY:'must-be-removed',ANTHROPIC_API_KEY:'must-be-removed',FAKE_AGY_BRAIN:path.join(directory,'brain')}};
   const client=new Antigravity(options);
   await client.load();await client.connect();
   const cleanupClients=[client];
@@ -128,7 +128,7 @@ test('classifica alterações de ficheiros, pesquisa web, subagentes, modo accep
   assert.equal(assistantMessages[1].requestId,'rich-1');
   const progress=client.snapshot().conversations[0].progress;
   assert.equal(progress.counts.completed,3);
-  assert.equal(progress.actions.find(a=>a.type==='subagent').detail,'Codebase Researcher');
+  assert.equal(progress.actions.find(a=>a.type==='subagent').detail,'Delegar num subagente Codebase Researcher');
 });
 
 test('troca para Claude e retoma após reinício pelo ID nativo, sem mover a conversa para Codex',async t=> {
@@ -241,4 +241,34 @@ test('HTTP escolhe cliente por conversa e encaminha autorizações Codex pelo id
   assert.equal((await post(`/api/conversations/${agyChat.body.id}/send`,{text:'claude',requestId:'agy-http'})).status,200);
   await waitFor(()=>agy.conversation(agyChat.body.id).status==='completed');
   assert.equal(codex.conversations.length,1);assert.equal(agy.conversations.length,1);
+});
+
+test('passo repetido pelo agy: a hora de fim é a primeira em que terminou, guardada uma vez',async t=>{
+ const{client,directory}=await setup(t),c=await chat(client,directory);
+ await client.send(c.id,'repeat-step','repeat');await waitFor(()=>c.status==='completed');
+ const item=c.items.find(i=>i.tool==='read_file'),ms=Date.parse(item.completedAt)-Date.parse(item.at);
+ assert.equal(item.status,'completed');assert.ok(ms>=80&&ms<230,`fim aos ${ms} ms, não no passo repetido`);
+});
+
+test('agy: resumos do raciocínio lidos do seu transcript, durações nativas, sem reler pedidos anteriores',async t=>{
+ const{client,directory}=await setup(t),c=await chat(client,directory);
+ await client.send(c.id,'think','think-1');await waitFor(()=>c.status==='completed');
+ const thoughts=()=>c.items.filter(i=>i.turnId===c.turns.at(-1).id&&i.type==='reasoning');
+ // The summary written before its step and the one written after the answer are both kept.
+ await waitFor(()=>thoughts().length===2&&thoughts().every(i=>i.summary));
+ const [before,answer]=thoughts();
+ assert.equal(before.summary,'Vou ler as notas 1.');assert.equal(answer.summary,'A contagem bate certo 1.');
+ assert.ok(thoughts().every(i=>i.summarySource==='antigravity-transcript'&&i.status==='completed'));
+ // Thinking before a tool has agy's own time; before the answer, writing is in that time, so none is shown.
+ assert.equal(before.durationMs,2500);assert.equal(before.thinkingTokens,40);assert.equal(answer.durationMs,undefined);assert.equal(answer.completedAt,undefined);
+ assert.equal(c.items.find(i=>i.tool==='read_file').durationMs,250);
+ assert.equal(client.snapshot().conversations[0].progress.thought,'A contagem bate certo 1.');
+ assert.ok(!c.messages.some(m=>m.text.includes('A contagem bate certo')));
+ // Same process, next request: only its own summaries; the transcript is never changed.
+ const transcript=path.join(directory,'brain',c.threadId,'.system_generated','logs','transcript_full.jsonl'),written=await readFile(transcript,'utf8');
+ await client.send(c.id,'think','think-2');await waitFor(()=>c.status==='completed');
+ await waitFor(()=>thoughts().length===2&&thoughts().every(i=>i.summary));
+ assert.deepEqual(thoughts().map(i=>i.summary),['Vou ler as notas 2.','A contagem bate certo 2.']);
+ assert.equal(before.summary,'Vou ler as notas 1.');
+ assert.ok((await readFile(transcript,'utf8')).startsWith(written));
 });

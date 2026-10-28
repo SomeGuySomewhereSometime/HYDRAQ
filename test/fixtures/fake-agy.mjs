@@ -1,5 +1,6 @@
 import { createInterface } from 'node:readline';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, appendFileSync } from 'node:fs';
+import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 const args=process.argv.slice(2);
 const emit=event=>process.stdout.write(JSON.stringify(event)+'\n');
@@ -58,6 +59,32 @@ createInterface({input:process.stdin}).on('line',line=> {
     const outcome=calls.map(([name,parameters],i)=>name+':'+(tool(nativeId,{...step,step_index:count*10+1+i,state:'DONE',step_type:'tool',tool_name:name,tool_info:{parameters,output:'ok'}})?'ok':'recusada'));
     if(text==='guard-hold-write')return;
     setTimeout(()=>emit({event:'result',result:{conversation_id:nativeId,status:'SUCCESS',response:outcome.join(' ')}}),10);
+    return;
+  }
+  // Like agy: thinking summaries only in its transcript, a step that thought before a tool and one before the answer.
+  if(text==='think') {
+    const logs=process.env.FAKE_AGY_BRAIN&&path.join(process.env.FAKE_AGY_BRAIN,nativeId,'.system_generated','logs');
+    const write=entry=>{if(!logs)return;mkdirSync(logs,{recursive:true});appendFileSync(path.join(logs,'transcript_full.jsonl'),JSON.stringify({source:'MODEL',type:'PLANNER_RESPONSE',status:'DONE',...entry})+'\n');};
+    const base=count*10;
+    write({step_index:base+1,thinking:`Vou ler as notas ${count}.`,tool_calls:[{name:'read_file'}]});
+    emit({event:'step_update',step_update:{...step,step_index:base+1,state:'DONE',step_type:'agent_response',duration_seconds:2.5,usage:{thinking_tokens:40}}});
+    const s={...step,step_index:base+2,step_type:'tool',tool_name:'read_file',tool_info:{parameters:{Path:process.cwd()+'/notas.md'}}};
+    emit({event:'step_update',step_update:{...s,state:'ACTIVE'}});
+    emit({event:'step_update',step_update:{...s,state:'DONE',duration_seconds:0.25,tool_info:{...s.tool_info,output:'4 lines'}}});
+    emit({event:'step_update',step_update:{...step,step_index:base+3,state:'DONE',step_type:'agent_response',duration_seconds:1,usage:{thinking_tokens:0}}});
+    emit({event:'step_update',step_update:{...step,step_index:base+4,state:'ACTIVE',step_type:'agent_response',text_delta:'Quatro linhas.'}});
+    emit({event:'step_update',step_update:{...step,step_index:base+4,state:'DONE',step_type:'agent_response',duration_seconds:3,usage:{thinking_tokens:30}}});
+    setTimeout(()=>{write({step_index:base+3,content:'sem raciocínio'});write({step_index:base+4,thinking:`A contagem bate certo ${count}.`,content:'Quatro linhas.'});},60);
+    setTimeout(()=>emit({event:'result',result:{conversation_id:nativeId,status:'SUCCESS',response:'Quatro linhas.'}}),100);
+    return;
+  }
+  // agy sends the same finished step again: the end recorded must be the first.
+  if(text==='repeat-step') {
+    const s={...step,step_index:count*10+1,step_type:'tool',tool_name:'read_file',tool_info:{parameters:{Path:process.cwd()+'/notas.md'}}};
+    emit({event:'step_update',step_update:{...s,state:'ACTIVE'}});
+    setTimeout(()=>emit({event:'step_update',step_update:{...s,state:'DONE',tool_info:{...s.tool_info,output:'ok'}}}),120);
+    setTimeout(()=>emit({event:'step_update',step_update:{...s,state:'DONE',tool_info:{...s.tool_info,output:'ok'}}}),270);
+    setTimeout(()=>emit({event:'result',result:{conversation_id:nativeId,status:'SUCCESS',response:'Lido.'}}),320);
     return;
   }
   if(text==='multi-partial-hold') {
