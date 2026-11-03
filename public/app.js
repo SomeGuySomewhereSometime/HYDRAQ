@@ -5,7 +5,7 @@ import { captureDraftIntent, draftMode, followupOptions, followupDescriptions } 
 import { elicitationForm } from './elicitation.js';
 import { ImageAttachments } from './attachments.js';
 import { ComposerDrafts, draftKey } from './drafts.js';
-import { ProjectUI, conversationGroups } from './projects.js';
+import { ProjectUI, conversationGroups, chooseFolder } from './projects.js';
 import { ProjectMemoryUI } from './project-memory.js';
 import { CollaborationUI } from './collaboration.js';
 import { ModelPicker } from './model-picker.js';
@@ -16,7 +16,11 @@ const claudexModule = await import('./claudex.js').catch(() => null);
 const dualModule = await import('./dual.js').catch(() => null);
 // Readable actions, durations and the request summary; a server started before it existed leaves the old card.
 const actions = await import('./actions.js').catch(() => null);
-const { isReadMode: dualRead, dualSendLabel } = dualModule || {};
+const providerStatusModule = await import('./provider-status.js').catch(() => null);
+const dictationModule = await import('./dictation.js').catch(() => null);
+const companionModule = await import('./companion.js').catch(() => null);
+const { companionRequest = () => null, companionTranscriptOwners = (_all, _current, group) => group } = companionModule || {};
+const { isReadMode: dualRead, dualSendLabel, memberKeys: multiKeys, targetKeys: multiTargets } = dualModule || {};
 
 const $ = selector => document.querySelector(selector);
 const element = (tag, className, text) => {
@@ -82,7 +86,7 @@ function diffContent(target, text) {
 let state;
 let token;
 // Assigned once the composer helpers exist; read through optional chaining before that.
-let dualUI, claudexUI;
+let dualUI, claudexUI, dictationUI, companionUI;
 let selected = localStorage.getItem('hydraq.conversation') || null;
 let selectedProject = localStorage.getItem('hydraq.project') || null;
 let projectOverview = !selected && localStorage.getItem('hydraq.projectView') === 'true';
@@ -131,6 +135,7 @@ const activeStatuses = ['starting', 'running', 'waiting'];
 const layout = new Layout();
 new Tooltips();
 const imageAttachments = new ImageAttachments({composer:$('#composer'),getKey:()=>composerKey(),getToken:()=>token,isBusy:()=>anyBusy() || sending,changed:()=>renderSend(),toast});
+dictationUI = dictationModule ? new dictationModule.Dictation({composer:$('#composer'),input:$('#prompt'),getKey:composerKey,getToken:()=>token,changed:()=>{if(state)renderSend();},toast}) : null;
 const statusLabels = { idle: 'Pronta', starting: 'A iniciar…', running: 'A trabalhar…', waiting: 'A aguardar a tua resposta', completed: 'Concluída', interrupted: 'Interrompida', failed: 'Falhou', uncertain: 'Estado por confirmar', inProgress: 'Em execução' };
 const effortLabels = { default: 'Automático', none: 'Sem raciocínio', minimal: 'Mínimo', low: 'Leve', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo', ultra: 'Ultra' };
 
@@ -172,8 +177,17 @@ async function checkOpenCodeModels(force=false){
 }
 const modelPicker=new ModelPicker({select:$('#model'),getCatalog:()=>providerState('opencode').catalog,refresh:checkOpenCodeModels,toast});
 function providerName(id = providerId()) { return providerNames[id] || id; }
+function conversationFolder(conversation) { return conversation?.workspaceOrigin || conversation?.cwd || ''; }
 function composerKey() { return draftKey(current(),selectedProject); }
 function project() { return state?.projectCatalog?.projects.find(p=>p.id===(current()?.organization?.projectId || (!current()?selectedProject:null))); }
+function companionProject() {
+  const direct = project();
+  if (direct && !direct.archived) return direct;
+  const folder = (conversationFolder(current()) || $('#cwd')?.value || '').replace(/\/$/, '');
+  const projects = (state?.projectCatalog?.projects || []).filter(p => !p.archived);
+  if (!folder) return null;
+  return projects.filter(p => folder === p.root || folder.startsWith(p.root === '/' ? '/' : `${p.root}/`)).sort((a, b) => b.root.length - a.root.length)[0] || null;
+}
 function settingsKey(conversation = current()) { return `${draftKey(conversation,selectedProject)}:${providerId()}`; }
 function members(conversation = current()) { return conversation ? state.conversations.filter(entry => entry.group === conversation.group) : []; }
 function switching(conversation = current()) { return Boolean(conversation && !dualUI?.record(conversation) && providerId() !== conversation.provider); }
@@ -181,7 +195,7 @@ function switching(conversation = current()) { return Boolean(conversation && !d
 function steerTarget(conversation = current()) { return dualUI?.record(conversation) || conversation?.claudexTask ? null : conversation; }
 // Hydra: a ClaudeX, Geminex or Claudini task shown inside the conversation. A new conversation keeps
 // the chosen pair until its first request; afterwards the conversation is the task's group.
-const HYDRA_PAIRS = [['codex', 'claude'], ['codex', 'antigravity'], ['claude', 'antigravity']];
+const HYDRA_PAIRS = [['codex', 'claude'], ['codex', 'antigravity'], ['claude', 'antigravity'], ['codex', 'claude', 'antigravity']];
 const hydraDrafts = new Map();
 const pairName = claudexModule?.pairName || (() => 'Hydra');
 function hydraTask(conversation = current()) { return conversation?.claudexTask ? state?.claudex?.records.find(record => record.id === conversation.claudexTask) || { id: conversation.claudexTask } : null; }
@@ -245,6 +259,17 @@ function dualMemberSettings(record, key) {
   const draft = settingDrafts.get(`${draftKey(current(), selectedProject)}:${provider}`) || {};
   return { model: draft.model || member.model, effort: draft.effort || member.effort, ...(provider === 'cursor' ? { context: draft.context ?? member.context ?? null, fast: draft.fast ?? member.fast ?? false } : {}) };
 }
+// Quotas follow the next request's selected models, including both participants.
+function quotaSelections() {
+  if (claudexUI && (hydraOn() || collaborationUI.view === 'claudex')) {
+    const roles = hydraOn() ? hydraPair() : claudexUI.roles();
+    return (roles || []).map(provider => ({provider,model:claudexUI.controls[provider+'Model']?.value,effort:claudexUI.controls[provider+'Effort']?.value,mode:'Hydra'}));
+  }
+  const record = dualUI?.record(current()), pending = dualUI?.pendingFor();
+  if (record) return multiKeys(record).map(key => ({provider:record.members[key].provider,...dualMemberSettings(record,key),mode:'Multi'}));
+  const principal = {provider:providerId(),model:$('#model').value,effort:$('#effort').value};
+  return pending ? [{...principal,mode:'Multi'},...(pending.participants||[pending]).map(p=>({...p,mode:'Multi'}))] : [principal];
+}
 function shortPath(value) {
   const path = String(value || '').replace(/^\/home\/[^/]+(?=\/|$)/, '~');
   const parts = path.split('/');
@@ -259,6 +284,7 @@ function saveComposerDraft() {
 }
 function choose(id, projectId=selectedProject, overview=false, internal=false) {
   if(sending&&!internal){toast('Aguarda a confirmação do envio antes de mudar de conversa.');return;}
+  dictationUI?.cancel();
   saveComposerDraft();
   collaborationUI.show('conversations',false);
   layout.closeDrawers();
@@ -266,7 +292,7 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
   if(current()?.provider)selectedProvider=current().provider;
   else selectedProvider=draftProviders.get(composerKey()) || project()?.defaults?.provider || selectedProvider;
   const draft=composerDrafts.get(composerKey());$('#prompt').value=draft.text;composerIntent=draft.intent;
-  $('#cwd').value=current()?.cwd||project()?.root||draft.cwd||state?.defaultCwd||'';
+  $('#cwd').value=conversationFolder(current())||project()?.root||draft.cwd||'';
   if(id)localStorage.setItem('hydraq.conversation',id);else localStorage.removeItem('hydraq.conversation');
   if(selectedProject)localStorage.setItem('hydraq.project',selectedProject);else localStorage.removeItem('hydraq.project');
   localStorage.setItem('hydraq.projectView',String(overview));
@@ -275,11 +301,14 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
 }
 const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{accept(await api('/api/state'));render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id)});
 const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:current,getProject:project,getKey:composerKey,getProvider:providerId,toast,renderImages:(target,images)=>imageAttachments.renderMessage(target,images),changed:()=>render()});
+const providerStatus = providerStatusModule && $('#provider-status') ? new providerStatusModule.ProviderStatus({root:$('#provider-status'),api,getState:()=>state,getProvider:providerId,getSelections:quotaSelections,accept,render,toast}) : null;
+if ($('#provider-status')) $('#provider-status').hidden = !providerStatus;
 const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
 claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area:collaborationUI,toast,markdown,openConversation:id=>choose(id,selectedProject,false,true),
   openTask:id=>{const task=state?.claudex?.records.find(record=>record.id===id),member=task&&Object.values(task.members||{}).find(entry=>state.conversations.some(c=>c.id===entry.conversationId));if(member)choose(member.conversationId);else claudexUI.choose(id);},
-  elapsed,changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}}}):null;
+  elapsed,changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}providerStatus?.render();}}):null;
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
+companionUI = companionModule ? new companionModule.CompanionUI({ api, getState: () => state, getProject: companionProject, markdown, getSourceGroup: () => current()?.organization?.projectId === companionProject()?.id ? current()?.group || current()?.id || null : null, getSelectedProvider: providerId, getToken: () => token, chooseConversation: id => choose(id), choose: id => choose(id), toast }) : null;
 
 dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,markdown,elapsed,
   describeWork:(owner,turn)=>{if(!actions)return null;const work=actions.currentWork(owner,turn);return {now:!work?[]:work.actions?.length?work.actions.map(item=>({text:actions.actionPhrase(item,{live:true,cwd:owner.cwd}),since:item.at})):[{text:work.title,since:null}],summary:activeStatuses.includes(turn.status)?'':actions.summaryLine(actions.requestSummary(owner,turn)),thought:actions.thoughtLabel?.(owner.provider)?actions.latestThought(owner,turn,Infinity):null,thoughtLabel:actions.thoughtLabel?.(owner.provider)||'',thoughtOpen:actions.thoughtOpen?(live,choice,previous)=>actions.thoughtOpen(owner.provider,live,choice,previous):null};},getSyntheses:()=>opinionUI.viewState()?.batches?.filter(batch=>batch.kind==='synthesis')||[],getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
@@ -294,7 +323,7 @@ function populateEfforts(value) {
     option.value = effort;
     return option;
   }));
-  $('#effort').value = value || model?.defaultEffort || '';
+  $('#effort').value = model?.efforts?.includes(value) ? value : model?.defaultEffort || model?.efforts?.[0] || '';
   $('#model-description').textContent = model?.description || '';
   $('#model').dataset.tip = `Modelo do próximo pedido${model?.description ? `: ${model.description}` : '.'}`;
 }
@@ -387,11 +416,9 @@ function renderSettings(conversation) {
     populateEfforts();
   }
   if (conversation) {
-    $('#cwd').value = conversation.cwd;
+    $('#cwd').value = conversationFolder(conversation);
   } else if(project()) {
     $('#cwd').value = project().root;
-  } else if (!$('#cwd').value) {
-    $('#cwd').value = state.defaultCwd;
   }
   if (settingsOwner !== owner || catalogChanged || (!draftSettings(conversation) && settingsBaseline !== baseline)) {
     const draft = draftSettings(conversation);
@@ -460,6 +487,14 @@ function renderSidebar() {
 
 // Inline marks replies use; links open only http(s) and mailto addresses.
 const inlinePattern = /\\([\\`*_{}\[\]()#+\-.!~|>])|(`+)([\s\S]*?[^`])\2(?!`)|\*\*(?=\S)([\s\S]*?\S)\*\*|__(?=\S)([\s\S]*?\S)__(?!\w)|~~(?=\S)([\s\S]*?\S)~~|(?<![\w*\\])\*(?=[^\s*])([^*\n]*?[^\s*\\])\*(?![\w*])|(?<![\w_\\])_(?=[^\s_])([^_\n]*?[^\s_])_(?![\w_])|\[([^\]\n]+)\]\(((?:https?:\/\/|mailto:)[^\s)]+)\)|<(https?:\/\/[^\s>]+)>|(https?:\/\/[^\s<>"'`]*[^\s<>"'`.,;:!?)\]}»])/g;
+async function openPlanDocument(owner,documentId){
+  try{
+    const document=await api(`/api/conversations/${encodeURIComponent(owner.id)}/plan-documents/${encodeURIComponent(documentId)}`);
+    const dialog=element('dialog','opinion-dialog plan-file-dialog'),heading=element('div','opinion-dialog-heading'),title=element('h2','',document.name||'Plano do Cursor'),close=element('button','secondary-button','Fechar');close.type='button';close.addEventListener('click',()=>dialog.close());heading.append(title,close);
+    const download=element('button','secondary-button','Descarregar Markdown');download.type='button';download.addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([document.text],{type:'text/markdown;charset=utf-8'})),a=element('a');a.href=url;a.download='cursor-plan-'+document.id+'.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+    const body=markdown(document.text);dialog.append(heading,element('p','plan-file-path',document.path),download,body);dialog.addEventListener('close',()=>dialog.remove(),{once:true});window.document.body.append(dialog);dialog.showModal();
+  }catch(error){toast(error.message);}
+}
 function link(parent, href, label) {
   const anchor = element('a');
   inlineText(anchor, label, false);
@@ -781,7 +816,7 @@ function hydraRequest({ message, record }) {
 }
 
 function renderMessages(conversation) {
-  const group = members(conversation);
+  const group = companionTranscriptOwners(state?.conversations || [], conversation, members(conversation));
   const liveTask = hydraOn() ? hydraTask(conversation)?.id || claudexUI?.selected || null : null;
   const hydra = claudexUI?.transcript(group, liveTask) || { tasks: [], entries: [], shown: new Set(), signature: '' };
   const opinionState=opinionUI.viewState();
@@ -796,7 +831,8 @@ function renderMessages(conversation) {
   if (!hydraHost.isConnected) view.before(hydraHost);
   opinionUI.mountArchive(view,conversation);
   // Hydra rounds, and the copy of the request published with the result, give way to the task's requests and card.
-  const hidden = message => hydra.tasks.length && message.internal === 'claudex' || message.source === 'claudex-publication' && message.role === 'user' && hydra.shown.has(message.requestId?.replace(/^cx-result:/, ''));
+  // A task's internal requests stay hidden also once the task itself has been deleted.
+  const hidden = message => message.internal === 'claudex' || message.source === 'claudex-publication' && message.role === 'user' && hydra.shown.has(message.requestId?.replace(/^cx-result:/, ''));
   const timeline = [...group.flatMap(owner => owner.messages.filter(message => !hidden(message)).map(message => ({ message, owner }))), ...hydra.entries.map(entry => ({ message: { internal: 'hydra', at: entry.at, entry }, owner: conversation }))].sort((a, b) => a.message.at.localeCompare(b.message.at));
   let placed = false;
   if (!timeline.length && !group.some(entry => entry.handoffState)) {
@@ -818,18 +854,20 @@ function renderMessages(conversation) {
       continue;
     }
     if (message.internal) { const note = internalMessage(message, owner); markTurn(note, message, owner); view.append(note); continue; }
-    if (previousOwner && previousOwner !== owner.id && !dualUI?.anyRecord(conversation)) view.append(element('div', 'provider-divider', `Continuação no ${providerName(owner.provider)}`));
+    const delegated = companionRequest(owner, message);
+    if (previousOwner && previousOwner !== owner.id && !delegated && !dualUI?.anyRecord(conversation)) view.append(element('div', 'provider-divider', `Continuação no ${providerName(owner.provider)}`));
     previousOwner = owner.id;
     const article = element('article', `message ${message.role}${message.kind === 'steer' ? ' steering-message' : ''}`);
     article.dataset.provider = owner.provider;
+    if (delegated) article.classList.add('companion-delegated-message');
     article.dataset.timelineIndex=index;
     markTurn(article, message, owner);
     const header = element('div', 'message-header');
     const automaticReturn=Boolean(opinionUI.submission(message,owner));
-    const avatar = element('span', 'avatar', message.role === 'user' ? (automaticReturn?'H':'TU') : '');
+    const avatar = element('span', 'avatar', message.role === 'user' ? (delegated || automaticReturn?'H':'TU') : '');
     if (message.role !== 'user') avatar.append(icon());
     header.append(avatar);
-    header.append(element('span','',message.role === 'user' ? (automaticReturn?'HYDRAQ · Avaliação do parecer':message.kind === 'steer' ? 'Tu · Orientação' : message.source === 'terminal' ? 'Tu · '+providerName(owner.provider)+' original' : 'Tu') : providerName(owner.provider)));
+    header.append(element('span','',delegated ? (message.role === 'user' ? `${delegated.name} · Pedido da mascote → ${providerName(owner.provider)}` : `${providerName(owner.provider)} · Resposta à mascote ${delegated.name}`) : message.role === 'user' ? (automaticReturn?'HYDRAQ · Avaliação do parecer':message.kind === 'steer' ? 'Tu · Orientação' : message.source === 'terminal' ? 'Tu · '+providerName(owner.provider)+' original' : 'Tu') : providerName(owner.provider)));
     if (message.model) {
       const modelName = providerState(owner.provider).models?.find(model => model.id === message.model)?.name || message.model;
       header.append(element('span', 'message-model', [modelName, effortLabels[message.effort] || message.effort, message.source === 'terminal' && message.role !== 'user' ? providerName(owner.provider)+' original' : null].filter(Boolean).join(' · ')));
@@ -842,6 +880,16 @@ function renderMessages(conversation) {
       header.append(copyButton(message.text, user ? (message.kind === 'steer' ? 'Copiar a orientação' : 'Copiar o pedido') : 'Copiar resposta completa', user ? 'Não foi possível copiar o pedido.' : 'Não foi possível copiar a resposta.'));
     }
     article.append(header);
+    if (delegated && message.role === 'user') {
+      const turn = owner.turns?.find(t => t.requestId === delegated.requestId);
+      const labels = {starting:'A enviar',running:'Em execução',waiting:'Aguarda autorização',completed:'Concluído',failed:'Falhou',uncertain:'Resultado incerto',interrupted:'Interrompido'};
+      const note = element('div', 'companion-delegated-note', `${labels[turn?.status] || 'Pedido delegado'} · Só leitura`);
+      if (owner.id !== conversation?.id) {
+        const open = element('button', 'text-button', 'Abrir tarefa'); open.type = 'button';
+        open.addEventListener('click', () => choose(owner.id)); note.append(open);
+      }
+      article.append(note);
+    }
     if (message.role === 'user') {
       const content = element('div','message-content');
       if(!opinionUI.renderSubmission(content,message))content.append(element('p','',message.text));
@@ -865,6 +913,8 @@ function renderMessages(conversation) {
       if (turn?.usage && finalMessage && owner.provider!=='opencode') article.append(element('p', 'message-usage', `Entrada: ${formatTokens(turn.usage.inputTokens)} · Em cache: ${formatTokens(turn.usage.cachedInputTokens)} (${turn.usage.cachePercent}%) · Sem cache: ${formatTokens(turn.usage.uncachedInputTokens)}`));
       else if (turn?.nativeTurnUsage && finalMessage) article.append(element('p', 'message-usage', `Neste pedido — Entrada: ${formatTokens(turn.nativeTurnUsage.input_tokens)} · Leitura de cache: ${formatTokens(turn.nativeTurnUsage.cache_read_tokens)} · Saída: ${formatTokens(turn.nativeTurnUsage.output_tokens)} · Raciocínio: ${formatTokens(turn.nativeTurnUsage.thinking_tokens)}`));
     }
+    const planIds=[...(message.planDocumentIds||[]),...(message.planDocumentId?[message.planDocumentId]:[])];
+    if(planIds.length){const files=element('div','native-plan-files');for(const id of new Set(planIds)){const button=element('button','secondary-button','Abrir ficheiro do plano');button.type='button';button.dataset.planDocument=id;button.addEventListener('click',()=>openPlanDocument(owner,id));files.append(button);}article.append(files);}
     const diagnosticTurn=owner.turns?.find(t=>message.requestId&&t.requestId===message.requestId||message.turnId&&t.id===message.turnId);
     if(diagnosticTurn?.diagnostics?.length&&!owner.messages.slice(owner.messages.indexOf(message)+1).some(m=>!m.internal&&(m.requestId&&m.requestId===diagnosticTurn.requestId||m.turnId&&m.turnId===diagnosticTurn.id)))article.append(diagnosticsView(diagnosticTurn.diagnostics));
     if (message.kind === 'steer') {
@@ -1240,6 +1290,7 @@ function renderApprovals(conversation) {
       card.append(element('h3','',request.params.name || 'Rever o plano do Cursor'));
       if (request.params.overview) card.append(element('p','',request.params.overview));
       const plan=element('div','cursor-plan');plan.append(markdown(request.params.plan));card.append(plan);
+      const owner=state.conversations.find(c=>c.id===request.conversationId),document=owner?.turns.find(t=>t.id===request.params.turnId)?.planDocuments?.find(d=>d.id===request.params.planDocumentId||request.params.toolCallId&&d.toolCallId===request.params.toolCallId);if(document){const file=element('button','secondary-button','Abrir ficheiro do plano');file.type='button';file.addEventListener('click',()=>openPlanDocument(owner,document.id));card.append(file);}
       card.append(element('p','','Aceitar o plano mantém as autorizações das ferramentas.'));
       card.append(approvalButton('Aceitar plano',()=>respond({decision:'accept'})),approvalButton('Rejeitar plano',()=>respond({decision:'decline'}),true),approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
     } else if (request.method.endsWith('/requestApproval')) {
@@ -1372,7 +1423,7 @@ function renderSend() {
   $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session() || agyUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain') || Boolean(dual && dualUI.unavailable(conversation));
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
-  $('#send').textContent = sending ? 'A enviar…' : dual && busy ? 'Aguarda o fim da ronda' : dual ? dualSendLabel(dual, { writing: !dualRead(sandboxValue()) }) : pendingDual ? 'Enviar aos dois ↗' : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
+  $('#send').textContent = sending ? 'A enviar…' : dual && busy ? 'Aguarda o fim da ronda' : dual ? dualSendLabel(dual, { writing: !dualRead(sandboxValue()) }) : pendingDual ? `Enviar a ${1+(pendingDual.participants||[pendingDual]).length} participantes ↗` : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
   $('#steer-mode').classList.toggle('hidden', !steering && !expired);
   $('#steer-title').textContent = expired ? 'O turno desta orientação já terminou.' : '↳ Mensagem durante a execução';
   $('#steer-description').textContent = expired ? 'O texto foi guardado. Escolhe usá-lo como novo pedido ou limpa-o.' : followupDescriptions[delivery]?.[1]||'A orientação mantém o pedido atual.';
@@ -1384,13 +1435,15 @@ function renderSend() {
   if ((dual || pendingDual) && !nativeUI.session() && !claudeUI.session() && !openCodeUI.session() && !agyUI.session()) {
     const name = key => providerName(dual.members[key].provider);
     $('#composer-hint').textContent = dual && busy ? (dualUI.running(conversation) ? 'Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.' : workReason(workBlock()) + ' · Este projeto/pasta ou cliente está reservado.')
-      : !dual || dual.target === 'both' ? 'Enter para enviar aos dois · respondem sem ver a resposta um do outro'
-      : `Enter para enviar só ao ${name(dual.target)} · o ${name(dual.target === 'a' ? 'b' : 'a')} recebe esta troca quando voltares a falar com ele`;
+      : !dual || multiTargets(dual).length > 1 ? 'Enter para enviar aos participantes selecionados · respostas independentes nesta ronda'
+      : `Enter para enviar só ao ${name(multiTargets(dual)[0])} · os restantes recebem esta troca quando voltares a falar com eles`;
     // Said before sending: a synthesis meant for the next round that is still being written does not go with it.
     if (dual && !busy && dualUI.pendingSynthesis(conversation)) $('#composer-hint').textContent += ' · A síntese ainda está a ser escrita: se enviares agora, esta ronda segue sem ela.';
   }
   $('#stop').textContent = '■ Parar';
   if (hydraOn()) renderHydraSend();
+  dictationUI?.sync();
+  if(dictationUI?.active)$('#send').disabled=true;
 }
 // In Hydra the composer sends to the task: start, update the request of both, or resume.
 function renderHydraSend() {
@@ -1398,7 +1451,7 @@ function renderHydraSend() {
   $('#send').textContent = sending || claudexUI.sending ? 'A enviar…' : `${claudexUI.send.textContent} ↗`;
   $('#send').disabled = sending || claudexUI.send.disabled || (!text && !view.canResume) || imageAttachments.list().length > 0;
   $('#stop').classList.toggle('hidden', !view.running);
-  $('#stop').textContent = `■ ${view.stopLabel || 'Pausar os dois'}`;
+  $('#stop').textContent = `■ ${view.stopLabel || 'Pausar todos'}`;
   $('#stop').disabled = Boolean(view.stopDisabled);
   $('#steer-mode').classList.add('hidden');
   $('#composer').classList.remove('steering');
@@ -1449,8 +1502,8 @@ function renderHandoffRecovery(conversation) {
   view.dataset.signature = signature; view.replaceChildren();
   if (!owner) return;
   view.append(element('strong','','Rever contexto demasiado grande'),element('p','',`O contexto para o ${providerName(owner.provider)} não cabe no limite. O histórico original fica guardado. Escreve um resumo das instruções, restrições, resultados e pendentes que queres transmitir em sua substituição. Nada será enviado ao guardar; o resumo seguirá com o próximo pedido.`));
-  const label=element('label','','Resumo revisto por ti · até 12 000 caracteres');
-  const input=element('textarea');input.maxLength=12000;input.rows=5;input.placeholder='Objetivo, restrições, trabalho feito, resultados por confirmar e próximos passos…';input.value=recoveryDrafts.get(owner.id)||'';input.addEventListener('input',()=>recoveryDrafts.set(owner.id,input.value));label.append(input);view.append(label);
+  const label=element('label','','Resumo revisto por ti');
+  const input=element('textarea');input.rows=5;input.placeholder='Objetivo, restrições, trabalho feito, resultados por confirmar e próximos passos…';input.value=recoveryDrafts.get(owner.id)||'';input.addEventListener('input',()=>recoveryDrafts.set(owner.id,input.value));label.append(input);view.append(label);
   view.append(approvalButton('Usar este resumo na próxima passagem',async()=>{
     await api(`/api/conversations/${owner.id}/handoff-recovery`,{expectedRecoveryId:owner.handoffRecovery.id,summary:input.value});
     recoveryDrafts.delete(owner.id);
@@ -1536,14 +1589,17 @@ function render() {
   collaborationUI.render();
   claudexUI?.render();
   syncModePanel();
+  providerStatus?.render();
+  companionUI?.sync();
 }
 function renderTopbar(conversation, visibleTitle) {
   const title = conversation ? visibleTitle : projectOverview ? (project()?.name || 'Sem projeto') : 'Nova conversa';
   $('#project-name').textContent = title;
   $('#project-name').dataset.tip = conversation ? `Conversa: ${visibleTitle}` : projectOverview ? 'Visão geral do projeto' : 'Conversa nova: o título surge do primeiro pedido.';
-  const folder = conversation?.cwd || project()?.root || '';
+  const folder = conversationFolder(conversation) || project()?.root || '';
   const editable = !conversation && !project() && !projectOverview;
   $('#cwd').classList.toggle('hidden', !editable);
+  $('#choose-cwd').classList.toggle('hidden', !editable);
   $('#folder-chip').classList.toggle('hidden', editable || !folder);
   $('#folder-label').textContent = project() ? `${project().name} · ${shortPath(folder)}` : shortPath(folder);
   $('#folder-chip').dataset.tip = `${project() ? `Projeto ${project().name}. ` : 'Conversa sem projeto. '}Pasta: ${folder}. ${conversation ? 'A pasta fica fixa nesta conversa.' : 'A pasta do projeto é fixa.'}`;
@@ -1592,6 +1648,7 @@ $('#effort').addEventListener('change',()=> {
   saveSettingsDraft();
   renderCacheInfo(current());
 });
+document.addEventListener('change',event=>{if(event.target.matches('#model, #effort, [id^=cx-]'))providerStatus?.render();});
 $('#context').addEventListener('change',()=>saveSettingsDraft());
 $('#fast').addEventListener('change',()=>saveSettingsDraft());
 $('#sandbox').addEventListener('change',()=> { renderPermissionTips(); saveSettingsDraft(); renderCacheInfo(current()); dualUI?.enforceWrite(!dualRead(sandboxValue())); });
@@ -1710,7 +1767,7 @@ mirrorSelect('Contexto', $('#context'));
 mirrorToggle('Fast', $('#fast'));
 mirrorToggle('Planear', $('#plan-toggle'));
 mirrorToggle('Revisor', $('#review-toggle'));
-mirrorToggle('Dual', $('#dual-toggle'));
+mirrorToggle('Multi', $('#dual-toggle'));
 mirrorSelect('Permissões', $('#sandbox'));
 $('#next-request-grid').replaceChildren(...nextRequest.map(entry => entry.row));
 function syncNextRequest() {
@@ -1810,7 +1867,7 @@ const dualSynthesisField = (() => {
   const field = element('div', 'mode-field mode-synthesis'), value = element('span', 'mode-synthesis-value'), button = element('button', 'mode-chip', 'Configurar…');
   button.type = 'button';
   button.addEventListener('click', () => { const record = dualUI?.record(current()); if (record) dualUI.synthesisDialog(record); });
-  field.append(element('span', 'mode-field-label', 'Síntese do Dual'), value, button);
+  field.append(element('span', 'mode-field-label', 'Síntese do Multi'), value, button);
   return { element: field, sync() {
     const record = dualUI?.record(current()), settings = record?.synthesis;
     field.hidden = !record;
@@ -1845,8 +1902,12 @@ function hydraSetup(pair) {
     card.append(head, model.element, effort.element);
     entries.push({ element: card, sync() { model.sync(); effort.sync(); } });
   }
-  entries.push(chipGroup('Autor da resposta comum', controls.author, { text: option => providerNames[option.value] || option.textContent }));
-  entries.push(chipGroup('Resposta final', controls.consensus, { text: option => option.value === 'true' ? 'Aprovação dos dois' : 'Síntese do autor' }));
+  entries.push(chipGroup('Principal · único implementador', controls.author, { text: option => providerNames[option.value] || option.textContent }));
+  entries.push(chipGroup('Decisão', controls.consensus));
+  entries.push(chipGroup('Tipo de pedido', controls.requestMode));
+  const workspace=chipGroup('Local de trabalho',controls.workspace),workspaceHint=element('p','cx-hint mode-workspace-hint');
+  workspaceHint.id='mode-workspace-hint-'+key.replaceAll('+','-');workspace.element.setAttribute('aria-describedby',workspaceHint.id);
+  entries.push(workspace,{element:workspaceHint,sync(){workspaceHint.textContent=claudexUI.workspaceHint.textContent;}});
   const guards = element('div', 'mode-field mode-guards'), turns = numberField('Proteção · turnos por participante', controls.guardTurns, 'turnos'), minutes = numberField('Proteção · minutos ativos', controls.guardMinutes, 'min');
   guards.append(element('span', 'mode-field-label', 'Proteções · 0 desativa'), turns.element, minutes.element);
   guards.dataset.tip = claudexUI.guardHint.textContent;
@@ -1858,9 +1919,9 @@ function hydraSetup(pair) {
 // Each tile starts with its subtitle, so its name never equals a topbar tab (the Hydra tab).
 const modeTiles = Object.fromEntries([
   ['normal', 'Normal', 'Um cliente', 1, 'Um cliente responde. Podes trocar de cliente a meio da conversa, com passagem de contexto.'],
-  ['dual', 'Dual', 'Dois modelos', 2, 'A mesma pergunta a dois modelos de clientes diferentes, sem verem a resposta um do outro. Só o principal implementa.'],
+  ['dual', 'Multi', 'Até 4 modelos', 4, 'Dois a quatro clientes, todos, um ou um grupo. Respostas independentes por ronda; só o principal implementa.'],
   ['review', 'Revisor', 'Automático', 2, 'Outros modelos reveem automaticamente a resposta ou o código do principal.'],
-  ['hydra', 'Hydra', 'Em diálogo', 3, 'ClaudeX, Geminex ou Claudini: dois clientes investigam juntos, trocam mensagens e preparam uma resposta comum. Só análise, pesquisa e planeamento.'],
+  ['hydra', 'Hydra', 'Em diálogo', 3, 'Dois ou três modelos planeiam juntos. Se pedires alterações, só o principal implementa; todos reveem e testam, na mesma tarefa.'],
 ].map(([mode, label, subtitle, heads, tip]) => {
   const tile = element('button', 'mode-tile');
   tile.type = 'button'; tile.dataset.mode = mode; tile.dataset.tip = tip;
@@ -1881,6 +1942,7 @@ const pairButtons = HYDRA_PAIRS.map(pair => {
   button.addEventListener('click', () => {
     if (hydraTask() || button.getAttribute('aria-pressed') === 'true') return;
     hydraDrafts.set(composerKey(), pair);
+    const record=dualUI?.record(current());if(record)claudexUI?.preset(Object.fromEntries(multiKeys(record).filter(k=>pair.includes(record.members[k].provider)).map(k=>[record.members[k].provider,dualMemberSettings(record,k)])));
     try { localStorage.setItem('hydraq.hydraPair', JSON.stringify(pair)); } catch { /* The choice still applies to this conversation. */ }
     render();
   });
@@ -1908,8 +1970,9 @@ function playFusion(pair) {
 }
 /** The Hydra pair of a Dual, when its two clients make one: Codex, Claude and Gemini only. */
 function dualHydraPair(record) {
-  const clients = record ? [record.members.a.provider, record.members.b.provider] : [];
-  return HYDRA_PAIRS.find(pair => pair.every(role => clients.includes(role))) || null;
+  const clients = record ? multiKeys(record).map(k=>record.members[k].provider) : [];
+  const eligible = HYDRA_PAIRS.filter(pair => pair.every(role => clients.includes(role))).sort((a,b)=>b.length-a.length);
+  return eligible.find(pair=>pair.includes(record?.members[record.principal]?.provider)) || eligible[0] || null;
 }
 function chooseMode(mode) {
   const conversation = current(), task = hydraTask(conversation), pair = hydraPair(conversation);
@@ -1918,10 +1981,12 @@ function chooseMode(mode) {
     if (pair) return;
     // From a Dual, Hydra keeps its pair and the models and reasoning in use, in the same conversation.
     const record = dualUI?.record(conversation), fromDual = dualHydraPair(record);
-    if (record && dualUI.running(conversation)) { toast('Aguarda o fim da ronda do Dual para passar ao Hydra.'); return; }
+    if (record && dualUI.running(conversation)) { toast('Aguarda o fim da ronda do Multi para passar ao Hydra.'); return; }
     hydraDrafts.set(composerKey(), fromDual || lastHydraPair());
-    claudexUI?.preset(fromDual ? Object.fromEntries(['a', 'b'].map(key => [record.members[key].provider, dualMemberSettings(record, key)])) : null);
+    claudexUI?.preset(fromDual ? Object.fromEntries(multiKeys(record).filter(key=>fromDual.includes(record.members[key].provider)).map(key => [record.members[key].provider, dualMemberSettings(record, key)])) : null);
     render();
+    const principal=record?.members[record.principal]?.provider||conversation?.provider;
+    if(principal&&claudexUI.roles().includes(principal)){claudexUI.controls.author.value=principal;syncModePanel();}
     // Measured after the switch: the composer is laid out for Hydra by then.
     if (fromDual) playFusion(fromDual);
     return;
@@ -1933,7 +1998,7 @@ function chooseMode(mode) {
   if (mode === 'normal') { if (!task && dual) $('#dual-toggle').click(); else if (!task && review) $('#review-toggle').click(); return; }
   const source = $(mode === 'dual' ? '#dual-toggle' : '#review-toggle');
   // A pair still working in this folder keeps its clients reserved: say so instead of doing nothing.
-  if (source.disabled) { toast(mode === 'dual' ? `O Dual fica disponível quando terminar o trabalho em curso${workBlock() ? ': ' + workReason(workBlock()) : ''}.` : source.dataset.tip || 'O Revisor não está disponível agora.'); return; }
+  if (source.disabled) { toast(mode === 'dual' ? `O Multi fica disponível quando terminar o trabalho em curso${workBlock() ? ': ' + workReason(workBlock()) : ''}.` : source.dataset.tip || 'O Revisor não está disponível agora.'); return; }
   source.click();
 }
 // The conversation comes back once both participants have stopped; then the chosen mode applies as usual.
@@ -1941,7 +2006,7 @@ async function leaveHydra(task, mode) {
   const id = selected;
   if (!task.released) {
     try { await api(`/api/claudex/${task.id}/stop`, {}); } catch (error) { toast(error.message); return; }
-    toast(`${pairName(task.roles || HYDRA_PAIRS[0])} parado. A conversa volta ao modo anterior quando os dois terminarem.`);
+    toast(`${pairName(task.roles || HYDRA_PAIRS[0])} parado. A conversa volta ao modo anterior quando todos terminarem.`);
   }
   for (const deadline = Date.now() + 20000; Date.now() < deadline && state.conversations.find(c => c.id === id)?.claudexTask === task.id;) await new Promise(resolve => setTimeout(resolve, 250));
   if (selected !== id || current()?.claudexTask) { render(); return; }
@@ -1951,12 +2016,12 @@ function syncModePanel() {
   if (!state) return;
   const conversation = current(), task = hydraTask(conversation), pair = hydraPair(conversation);
   const record = pair ? null : dualUI?.record(conversation), pending = pair || conversation ? null : dualUI?.pendingFor();
-  const dualPair = record ? [record.members.a.provider, record.members.b.provider] : pending ? [providerId(), pending.provider] : null;
+  const dualPair = record ? multiKeys(record).map(k=>record.members[k].provider) : pending ? [providerId(), ...(pending.participants||[pending]).map(p=>p.provider)] : null;
   const review = !pair && Boolean(opinionUI.automaticSetting());
   const active = { normal: !pair && !dualPair && !review, dual: Boolean(dualPair), review, hydra: Boolean(pair) };
   const subtitles = {
     normal: active.normal ? providerName() : 'Um cliente',
-    dual: dualPair ? dualPair.map(id => shortClients[id] || id).join(' + ') : 'Dois modelos',
+    dual: dualPair ? dualPair.map(id => shortClients[id] || id).join(' + ') : 'Até 4 modelos',
     review: review ? [$('#review-toggle').textContent.replace(/^Revisor · /, ''), opinionUI.automaticSummary().replace(/^Revisores: /, '')].filter(Boolean).join(' · ') : 'Automático',
     hydra: pair ? pairName(pair) : 'Em diálogo',
   };
@@ -1964,7 +2029,7 @@ function syncModePanel() {
     tile.setAttribute('aria-pressed', String(active[mode]));
     tile.querySelector('small').textContent = subtitles[mode];
     tile.disabled = sending || (mode === 'dual' && (!dualUI || (!pair && $('#dual-toggle').disabled))) || (mode === 'review' && !pair && $('#review-toggle').disabled) || (mode === 'hydra' && (!claudexUI || !state.claudex || (!pair && Boolean(record) && dualUI.running(conversation))));
-    const heads = mode === 'normal' ? [providerId()] : mode === 'dual' ? dualPair : mode === 'hydra' && pair ? [pair[0], null, pair[1]] : null;
+    const heads = mode === 'normal' ? [providerId()] : mode === 'dual' ? dualPair : mode === 'hydra' && pair ? pair.length===3?pair:[pair[0], null, pair[1]] : null;
     tile.querySelectorAll('.mode-glyph i').forEach((dot, index) => { if (heads?.[index]) dot.dataset.client = heads[index]; else delete dot.dataset.client; });
   }
   $('#mode-panel').dataset.mode = pair ? 'hydra' : dualPair ? 'dual' : review ? 'review' : 'normal';
@@ -1973,14 +2038,14 @@ function syncModePanel() {
   quick.hidden = !record || !claudexUI || !state.claudex;
   quick.disabled = sending || !fromDual || dualUI.running(conversation);
   quick.textContent = fromDual ? `⇢ ${pairName(fromDual)}` : '⇢ Hydra';
-  quick.dataset.tip = !fromDual ? 'O Hydra junta o Codex, o Claude e o Gemini. Este Dual tem outro cliente.' : dualUI.running(conversation) ? 'Aguarda o fim da ronda para passar ao Hydra.' : `Passar ao Hydra ${pairName(fromDual)} com os mesmos dois modelos, nesta conversa. Escreves tu o pedido seguinte.`;
+  quick.dataset.tip = !fromDual ? 'O Hydra junta o Codex, o Claude e o Gemini. Este Multi não contém uma dupla compatível.' : dualUI.running(conversation) ? 'Aguarda o fim da ronda para passar ao Hydra.' : `Passar ao Hydra ${pairName(fromDual)} com os mesmos modelos, nesta conversa. Escreves tu o pedido seguinte.`;
   $('#mode-panel-status').textContent = task && claudexUI ? claudexUI.badge.textContent : '';
   $('#hydra-pairs').hidden = !pair;
   for (const button of pairButtons) {
     const on = Boolean(pair) && button.dataset.pair === pair.join('+');
     button.setAttribute('aria-pressed', String(on));
     button.disabled = sending || Boolean(task && !on);
-    button.dataset.tip = task ? (task.inPlace ? 'A dupla fica fixa até a tarefa terminar. Para outra dupla, volta a Normal ou Dual e escolhe Hydra outra vez.' : 'A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.') : `${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
+    button.dataset.tip = task ? (task.inPlace ? 'A dupla fica fixa até a tarefa terminar. Para outra dupla, volta a Normal ou Multi e escolhe Hydra outra vez.' : 'A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.') : `${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
   }
   const setup = pair && claudexUI ? hydraSetup(pair) : normalSetup;
   if ($('#mode-setup').firstElementChild !== setup.element) $('#mode-setup').replaceChildren(setup.element);
@@ -2053,6 +2118,9 @@ function buildPaletteCommands(query = '') {
   for (const entry of COLUMNS) add('Aparência', `Largura da conversa: ${entry.name}`, entry.description, entry.value === layout.state.column ? 'Ativa' : 'Largura', () => chooseColumn(entry.value));
   add('Ações Rápidas', 'Alternar painel de projetos', 'Mostrar ou esconder a barra lateral esquerda', 'Painel', () => layout.toggle('sidebar'));
   add('Ações Rápidas', 'Alternar painel de atividade e telemetria', 'Mostrar ou esconder o painel lateral direito', 'Painel', () => layout.toggle('inspector'));
+  if (companionUI && companionProject()) {
+    add('Ações Rápidas', 'Abrir mascote do projeto (Live)', `Assistente de voz e memória de ${companionProject().name}`, 'Voz', () => companionUI.togglePanel(true));
+  }
 
   for (const proj of state?.projectCatalog?.projects || []) {
     if (proj.archived) continue;
@@ -2062,7 +2130,7 @@ function buildPaletteCommands(query = '') {
     for (const grp of conversationGroups(state).slice(0, 24)) {
       if (grp.organization?.archived) continue;
       const providers = [...new Set(grp.members.map(m => providerNames[m.provider] || m.provider))].join(' → ');
-      add('Conversas', grp.title, grp.latest.cwd || '', providers, () => choose(grp.latest.id));
+      add('Conversas', grp.title, conversationFolder(grp.latest), providers, () => choose(grp.latest.id));
     }
   }
   return entries;
@@ -2143,18 +2211,24 @@ layout.onChange(state=>{
 });
 layout.apply();
 $('#new-chat').addEventListener('click',()=>choose(null));
+$('#new-loose-chat').addEventListener('click',()=>choose(null,null));
+$('#choose-cwd').addEventListener('click',()=>chooseFolder({api,initial:$('#cwd').value||undefined,onChoose:value=>{$('#cwd').value=value;saveComposerDraft();renderProjectSuggestion();},toast}));
+async function newConversationFolder() {
+  if (selectedProject || $('#cwd').value.trim()) return $('#cwd').value.trim();
+  return (await api('/api/folders/loose',{})).path;
+}
 document.addEventListener('keydown',event=> {
   if (event.key.toLowerCase() === 'n' && !event.ctrlKey && !event.metaKey && !event.altKey && !['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName)) { event.preventDefault(); choose(null); }
 });
 // One request to the chosen recipients of a dual conversation; a new conversation starts dual first.
 async function submitDual({ text, draftImages, imageDraftKey, importedContext, conversationAtSubmit, record, pending }) {
-  if (importedContext) { toast('A importação de contexto ainda não segue nas perguntas Dual. Envia-a com o Dual desligado.'); return; }
-  const target = record ? record.target : 'both', keys = target === 'both' ? ['a', 'b'] : [target];
+  if (importedContext) { toast('A importação de contexto ainda não segue nas perguntas Multi. Envia-a com o Multi desligado.'); return; }
+  const target = record ? (record.target==='both'?'all':record.target) : 'all', roster = record?.members || dualUI.pendingMembers(), keys = multiTargets({members:roster,target},target);
   // Read now, while the composer still shows these choices.
   const settings = Object.fromEntries(keys.map(key => {
-    const provider = record ? record.members[key].provider : key === 'a' ? providerId() : pending.provider;
-    const base = record ? dualMemberSettings(record, key) : key === 'a' ? dualMemberSettings(null, 'a') : { model: pending.model, effort: pending.effort };
-    return [key, { ...base, sandbox: keys.length > 1 ? mapSandbox(sandboxValue(), provider) : sandboxValue() }];
+    const provider = roster[key].provider;
+    const base = record ? dualMemberSettings(record, key) : roster[key];
+    return [key, { model:base.model,effort:base.effort,...(provider==='cursor'?{context:base.context??null,fast:base.fast===true}:{}),sandbox: keys.length > 1 ? mapSandbox(sandboxValue(), provider) : sandboxValue() }];
   }));
   const autoReview = opinionUI.automaticSetting();
   sending = true;
@@ -2163,7 +2237,7 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
   try {
     let conversation = conversationAtSubmit;
     if (!conversation) {
-      conversation = await api('/api/conversations', { provider: providerId(), cwd: $('#cwd').value, ...settings.a, ...(selectedProject ? { projectId: selectedProject, revision: state.projectCatalog.revision } : {}) });
+      conversation = await api('/api/conversations', { provider: providerId(), cwd: await newConversationFolder(), ...settings.a, ...(selectedProject ? { projectId: selectedProject, revision: state.projectCatalog.revision } : {}) });
       const createdIndex = state.conversations.findIndex(entry => entry.id === conversation.id);
       if (createdIndex < 0) state.conversations.unshift(conversation); else state.conversations[createdIndex] = conversation;
       saveComposerDraft();
@@ -2171,12 +2245,19 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
       opinionUI.moveAutomatic(imageDraftKey, draftKey(conversation, selectedProject));
       choose(conversation.id, selectedProject, false, true);
       composerDrafts.records.delete(imageDraftKey);
+      dualUI.pending.set(draftKey(conversation, selectedProject), pending);
+    }
+    if (!record) {
       try { record = (await api(`/api/conversations/${conversation.id}/dual`, pending)).dual; }
-      catch (error) { throw new Error(`O Dual não foi ativado: ${error.message} Nada foi enviado.`); }
+      catch (error) { throw new Error(`O Multi não foi ativado: ${error.message} Nada foi enviado.`); }
       dualUI.consumePending(imageDraftKey);
+      dualUI.consumePending(draftKey(conversation, selectedProject));
     }
     const attachments = await imageAttachments.upload(draftImages, conversation);
-    const result = await api(`/api/dual/${record.id}/send`, { text, requestId: crypto.randomUUID(), target, settings, ...(attachments.length ? { attachments } : {}), ...(keys.length === 1 ? { autoReview } : {}) });
+    const signature=JSON.stringify([record.id,text,target,settings,attachments]);
+    if(dualUI.pendingSend?.signature!==signature)dualUI.pendingSend={signature,requestId:crypto.randomUUID()};
+    const result = await api(`/api/dual/${record.id}/send`, { text, requestId: dualUI.pendingSend.requestId, multiVersion:2, target, settings, ...(attachments.length ? { attachments } : {}), ...(keys.length === 1 ? { autoReview } : {}) });
+    dualUI.pendingSend=null;
     // One recipient failed: the other already has the question, so the draft is not kept; the panel offers a resend.
     const failed = Object.keys(result.errors || {});
     if (failed.length) {
@@ -2190,7 +2271,7 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
     for (const member of keys) settingDrafts.delete(`${key}:${record.members[member].provider}`);
     composerDrafts.clear(key, text);
     if (selected === conversation.id && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
-  } catch (error) { toast(error.message); }
+  } catch (error) { if(error.status)dualUI.pendingSend=null;toast(error.message); }
   finally { sending = false; try { accept(await api('/api/state')); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
 }
 async function submitHydra() {
@@ -2200,7 +2281,9 @@ async function submitHydra() {
   sending = true;
   renderSend();
   try {
-    const task = await claudexUI.requestInline(text.trim(), { projectId: selectedProject, cwd: $('#cwd').value, conversationId: conversationAtSubmit?.id });
+    // Hydra owns its pending request and keeps an automatic folder across retries.
+    const cwd = conversationAtSubmit?.cwd || $('#cwd').value.trim();
+    const task = await claudexUI.requestInline(text.trim(), { projectId: selectedProject, cwd, conversationId: conversationAtSubmit?.id });
     if (!task) return;
     composerDrafts.clear(key, text);
     if (composerKey() === key && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
@@ -2212,10 +2295,11 @@ async function submitHydra() {
       if (member) choose(member, selectedProject, false, true);
       hydraDrafts.delete(key);
     }
-  } finally { sending = false; try { accept(await api('/api/state')); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
+  } catch (error) { toast(error.message); } finally { sending = false; try { accept(await api('/api/state')); } catch { /* SSE reconnect handles transport loss; do not replay writes. */ } render(); }
 }
 $('#composer').addEventListener('submit',async event=> {
   event.preventDefault();
+  if(dictationUI?.active){toast('Termina ou cancela o ditado antes de enviar.');return;}
   if (hydraOn()) { await submitHydra(); return; }
   composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, steerTarget(), chosenDelivery());
   renderSend();
@@ -2229,7 +2313,7 @@ $('#composer').addEventListener('submit',async event=> {
   const settings = { autoReview:opinionUI.automaticSetting(), model: $('#model').value, effort: $('#effort').value, sandbox: sandboxValue(), ...(providerId()==='cursor' ? {context:$('#context').value || null,fast:$('#fast').checked} : {}) };
   const settingsDraftKey = settingsKey(conversationAtSubmit);
   const handoff = switching(conversationAtSubmit) ? { provider: providerId(), handoffMode: $('#handoff-mode').value, sandbox: sandboxValue() } : {};
-  const dualAtSubmit = dualUI?.record(conversationAtSubmit), dualPending = conversationAtSubmit ? null : dualUI?.pendingFor();
+  const dualAtSubmit = dualUI?.record(conversationAtSubmit), dualPending = dualUI?.pendingFor();
   if (!steeringTarget && (dualAtSubmit || dualPending)) { await submitDual({ text, draftImages, imageDraftKey, importedContext, conversationAtSubmit, record: dualAtSubmit, pending: dualPending }); return; }
   sending = true;
   renderSend();
@@ -2244,7 +2328,7 @@ $('#composer').addEventListener('submit',async event=> {
       return;
     }
     if (!conversation) {
-      conversation = await api('/api/conversations',{provider:providerId(),cwd:$('#cwd').value,...settings,sandbox:sandboxValue(),...(selectedProject?{projectId:selectedProject,revision:state.projectCatalog.revision}:{})});
+      conversation = await api('/api/conversations',{provider:providerId(),cwd:await newConversationFolder(),...settings,sandbox:sandboxValue(),...(selectedProject?{projectId:selectedProject,revision:state.projectCatalog.revision}:{})});
       const createdIndex=state.conversations.findIndex(entry=>entry.id===conversation.id);
       if(createdIndex<0)state.conversations.unshift(conversation);else state.conversations[createdIndex]=conversation;
       saveComposerDraft();

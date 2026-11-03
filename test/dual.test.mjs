@@ -52,7 +52,7 @@ test('na mesma ronda nenhum vê a resposta do outro; na seguinte, cada um recebe
  await send(hub,dual,'r2','Qual é o melhor plano?');
  await wait(()=>idle(c)&&idle(second)&&claude.logs.length===2);
  assert.match(codex.logs[1].text,/RESPOSTA-CLAUDE-1/);assert.match(claude.logs[1].text,/RESPOSTA-CODEX-1/);
- assert.match(claude.logs[1].text,/Conversa dual no HYDRAQ/);
+ assert.match(claude.logs[1].text,/Conversa Multi no HYDRAQ/);
  // The shared question is not repeated: it was already in the recipient's own history.
  assert.match(claude.logs[1].text,/o mesmo que recebeste nesta ronda/);
  assert.doesNotMatch(claude.logs[1].text,/Pedido do utilizador: Como resolver o problema X\?/);
@@ -82,7 +82,7 @@ test('falar só com um não acorda o outro; ao voltar, recebe as mensagens que p
 test('com os dois só leitura; escrita só pelo principal',async t=>{
  const{hub,c,codex,claude}=await setup(t);
  const {dual}=await start(hub,c);
- await assert.rejects(send(hub,dual,'w1','Implementa',{settings:{a:{sandbox:'workspace-write'}}}),/Com os dois modelos/);
+ await assert.rejects(send(hub,dual,'w1','Implementa',{settings:{a:{sandbox:'workspace-write'}}}),/Com vários modelos/);
  await assert.rejects(send(hub,dual,'w2','Implementa',{target:'b',settings:{b:{sandbox:'workspace-write'}}}),/Só o principal implementa/);
  assert.equal(codex.logs.length+claude.logs.length,0);assert.equal(hub.dual.record(dual.id).rounds.length,0);
  await send(hub,dual,'w3','Implementa o plano escolhido',{target:'a',settings:{a:{sandbox:'workspace-write'}}});
@@ -133,7 +133,7 @@ test('parar um participante não interrompe o outro; parar a ronda para os dois'
 test('com o Dual ativo não se muda de cliente; desligado, a conversa continua normal',async t=>{
  const{hub,c,codex}=await setup(t);
  const {dual}=await start(hub,c);
- await assert.rejects(hub.send(c.id,'Mudar','switch',{provider:'cursor',model:'test',effort:'low',sandbox:'plan'}),/Desliga o Dual/);
+ await assert.rejects(hub.send(c.id,'Mudar','switch',{provider:'cursor',model:'test',effort:'low',sandbox:'plan'}),/Desliga o Multi/);
  await hub.endDual(dual.id);
  assert.equal(hub.dual.record(dual.id).active,false);
  await assert.rejects(send(hub,dual,'off','Pergunta'),/desligado/);
@@ -210,15 +210,15 @@ test('reinício conserva o que a conversa registou e nunca reenvia',async t=>{
  assert.equal(JSON.parse(await readFile(root+'/state.json','utf8')).records[0].rounds[1].deliveries.a.status,'failed');
 });
 
-test('resposta longa do outro segue como excerto assinalado, nunca como completa',()=>{
+test('respostas longas seguem completas em Multi e Normal',()=>{
  const member=(id,provider,answer)=>({id,provider,cwd:'/p',messages:[{role:'user',requestId:'q',text:'Pergunta'},{role:'assistant',requestId:'q',text:answer}],turns:[{requestId:'q',status:'completed',model:'m',startedAt:'2026-10-24T10:00:00Z',facts:{version:2,files:[],commands:[]}}]});
  const target={id:'t',provider:'claude',cwd:'/p',messages:[],turns:[]};
  const short=buildHandoff({target,members:[target,member('o','codex','curta')],git:[],dual:{other:'Codex',shared:new Map()}});
  assert.equal(short.coverage,'complete');
  const long=buildHandoff({target,members:[target,member('o','codex','x'.repeat(30000))],git:[],budget:20000,dual:{other:'Codex',shared:new Map()}});
- assert.equal(long.coverage,'excerpt');assert.match(long.text,/cortado/);
- // Outside the dual mode the existing handoff keeps its smaller answer excerpts.
- assert.equal(buildHandoff({target,members:[target,member('o','codex','y'.repeat(5000))],git:[]}).coverage,'excerpt');
+ assert.equal(long.coverage,'complete');assert.ok(long.text.includes('x'.repeat(30000)));assert.doesNotMatch(long.text,/cortado/);
+ // Leaving Multi keeps every response whole too.
+ assert.equal(buildHandoff({target,members:[target,member('o','codex','y'.repeat(5000))],git:[]}).coverage,'complete');
 });
 
 test('rotas HTTP do Dual exigem a sessão local e encaminham para o coordenador',async t=>{

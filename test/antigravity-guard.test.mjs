@@ -28,7 +28,7 @@ test('só leitura: leitura, comandos simples e artefactos do agy passam; escrita
 
   for (const line of ['ls -la', 'grep -rn "ensaio" .', 'cat README.md', 'find . -name "*.mjs"', 'rg -n guard lib', 'git status', 'git log --oneline -5', 'git diff HEAD~1', 'head -n 20 lib/x.mjs', 'nl -ba lib/x.mjs', 'du -sh lib']) assert.ok(readOnlyCommand(line), line);
   for (const line of ['touch y.txt', 'rm -rf .', 'ls; rm x', 'cat a | sh', 'ls && touch x', 'echo x > f', 'cat $(which sh)', 'ls `id`', 'find . -delete', 'find . -exec rm {} +', 'rg --pre=sh x', 'sort -o out in', 'sort -uo out in', 'tree -o out', 'git commit -m x', 'git -c core.pager=sh log', 'git diff --output=x', 'git diff --ext-diff', 'git grep -O x', 'git cat-file --filters HEAD:x', 'file -C -m probe.magic', 'file x', 'tree -R', 'sort -u notas.txt', 'sort --compress-program=sh x', 'date -s 2020-01-01', 'python3 -c 1', 'node x', 'sed -i s/a/b/ f', 'ls\nrm x', '', 'ls ' + 'a'.repeat(2001)]) assert.ok(!readOnlyCommand(line), line);
-  assert.equal(answer('run_command', { CommandLine: 'ls -la' }), 'ask');
+  assert.equal(answer('run_command', { CommandLine: 'ls -la' }), 'allow');
   assert.equal(answer('run_command', { CommandLine: 'touch y.txt' }), 'deny');
 
   // The words as bash passes them: quotes inside an option, find's -rm, rg's --hostname-bin, git's abbreviations
@@ -59,11 +59,11 @@ test('o hook corre pelo shell, regista cada passo e só falha fechado nas conver
   await openGuard(directory, 'conv-1234');
   assert.equal(run(call('read_file', { Path: '/p/README.md' }, 2)).decision, 'ask');
   assert.equal(run(call('write_file', { Path: '/p/x.txt' }, 4)).decision, 'deny');
-  assert.equal(run(call('run_command', { CommandLine: 'ls -la' }, 6)).decision, 'ask');
+  assert.equal(run(call('run_command', { CommandLine: 'ls -la' }, 6)).decision, 'allow');
   assert.equal(run(call('run_command', { CommandLine: 'touch y.txt' }, 8)).decision, 'deny');
   assert.equal(run(call('run_command', { CommandLine: "find . -name sentinel.txt -de''lete" }, 9)).decision, 'deny');
   assert.equal(run(call('write_file', { Path: '/p/x' }, 9, 'other-5678')).decision, 'ask', 'outra conversa não é afetada');
-  assert.deepEqual([...guardDecisions(directory, 'conv-1234')], [[2, 'ask'], [4, 'deny'], [6, 'ask'], [8, 'deny'], [9, 'deny']]);
+  assert.deepEqual([...guardDecisions(directory, 'conv-1234')], [[2, 'ask'], [4, 'deny'], [6, 'allow'], [8, 'deny'], [9, 'deny']]);
   const missing = guardCommand({ directory, node: path.join(directory, 'no-node') });
   assert.equal(run(call('read_file', {}), missing).decision, 'deny', 'sem Node, a conversa protegida recusa');
   assert.equal(run(call('read_file', {}, 1, 'other-5678'), missing).decision, 'ask', 'sem Node, as restantes seguem normalmente');

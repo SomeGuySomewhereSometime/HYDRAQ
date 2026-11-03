@@ -1,5 +1,5 @@
 import { createInterface } from 'node:readline';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, appendFileSync, existsSync } from 'node:fs';
 const args = process.argv.slice(2);
 if(process.env.FAKE_CLAUDE_ARGS_LOG)writeFileSync(process.env.FAKE_CLAUDE_ARGS_LOG,JSON.stringify(args));
 const emit = event => process.stdout.write(JSON.stringify(event) + '\n');
@@ -29,6 +29,7 @@ const say = (id, text) => {
 };
 createInterface({ input: process.stdin }).on('line', line => {
   const input = JSON.parse(line);
+  if (input.type === 'control_request' && input.request.subtype === 'get_usage') { emit({type:'control_response',response:{subtype:'success',request_id:input.request_id,response:{rate_limits_available:true,rate_limits:{five_hour:{utilization:14,resets_at:'2026-10-28T18:40:00Z'},seven_day:{utilization:72,resets_at:'2026-11-01T16:00:00Z'}}}}});return;}
   if (input.type === 'control_request' && input.request.subtype === 'initialize') {
     emit({ type: 'control_response', response: { subtype: 'success', request_id: input.request_id, response: {
       models: [
@@ -49,6 +50,7 @@ createInterface({ input: process.stdin }).on('line', line => {
   if (input.type === 'control_response') {
     if (!pending || input.response.request_id !== pending.request) process.exit(4);
     const allowed = input.response.response.behavior === 'allow';
+    if (pending.logged) { appendFileSync(process.env.FAKE_CLAUDE_TOOL_LOG, JSON.stringify(input.response.response) + '\n'); emit({ type: 'user', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: pending.tool, is_error: !allowed, content: 'Fim' }] } }); say(`msg-${count}-b`, 'Fim'); result('Fim'); pending = null; return; }
     if (pending.ask) {
       const answers = input.response.response.updatedInput?.answers, text = allowed ? `Respostas ${JSON.stringify(answers)}` : `Sem respostas: ${input.response.response.message}`;
       emit({ type: 'user', session_id: sessionId, parent_tool_use_id: null, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: pending.tool, is_error: !allowed, content: text }] } });
@@ -144,6 +146,13 @@ createInterface({ input: process.stdin }).on('line', line => {
     emit({ type: 'assistant', session_id: sessionId, parent_tool_use_id: null, message: { id: `msg-${count}`, model: resolved, content: [{ type: 'tool_use', id: tool, name: 'AskUserQuestion', input: { questions } }] } });
     pending = { request: `ask-${count}`, tool, ask: true };
     emit({ type: 'control_request', request_id: pending.request, request: { subtype: 'can_use_tool', tool_name: 'AskUserQuestion', display_name: 'AskUserQuestion', input: { questions }, tool_use_id: tool } });
+    return;
+  }
+  if (text.startsWith('hydra-tool:')) {
+    const asked = JSON.parse(text.slice(11)), tool = `toolu_${count}`;
+    emit({ type: 'assistant', session_id: sessionId, parent_tool_use_id: null, message: { id: `msg-${count}`, model: resolved, content: [{ type: 'tool_use', id: tool, name: asked.name, input: asked.input }] } });
+    pending = { request: `perm-${count}`, tool, logged: true };
+    emit({ type: 'control_request', request_id: pending.request, request: { subtype: 'can_use_tool', tool_name: asked.name, display_name: asked.name, input: asked.input, description: asked.name, tool_use_id: tool } });
     return;
   }
   if (text === 'tool-approval') {

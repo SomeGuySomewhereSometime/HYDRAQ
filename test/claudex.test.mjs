@@ -16,7 +16,7 @@ async function setup(t){
  const hub=new Providers({dataDir:root+'/hub',defaultCwd:root,clients,git:async()=>[]});await hub.load();
  const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  t.after(async()=>{server.closeStreams();await new Promise(r=>server.close(r));await hub.close();await rm(root,{recursive:true,force:true});});
- const cx=hub.claudex,body={text:'Compara soluções e planeia.',requestId:randomUUID(),cwd:root,members:{codex:{model:'test',effort:'low'},claude:{model:'test',effort:'high'}}};
+ const cx=hub.claudex,body={workflow:1,text:'Compara soluções e planeia.',requestId:randomUUID(),cwd:root,members:{codex:{model:'test',effort:'low'},claude:{model:'test',effort:'high'}}};
  const start=async(extra={})=>{const result=await cx.create({...body,...extra});const r=cx.record(result.task.id);await wait(()=>(r.roles||['codex','claude']).every(role=>r.members[role].turns&&cx.native(r,role).status==='running'));return r;};
  const token=(r,role)=>[...cx.leases].find(([,l])=>l.taskId===r.id&&l.role===role)?.[0];
  const call=(r,role,name,args={})=>cx.tool(token(r,role),name,args);
@@ -123,7 +123,7 @@ test('ClaudeX associado a projeto mantém memória de leitura e impede reorganiz
 test('resposta humana a uma pergunta nativa é partilhada e invalida aprovações',async t=>{
  const ctx=await setup(t),r=await ctx.start(),candidate=await prepared(ctx,r);await approve(ctx,r,'codex',candidate);await approve(ctx,r,'claude',candidate);
  const c=ctx.cx.native(r,'claude');ctx.clients.claude.approvals.set('question',{id:'question',method:'claude/askUserQuestion',conversationId:c.id,params:{questions:[{question:'Qual o formato?',header:'Formato',options:[{label:'JSON'}]}]}});
- await ctx.hub.respond('claude:question',{decision:'accept',answers:{Formato:'JSON'}});assert.equal(r.revision,2);assert.deepEqual(r.approvals,{});assert.equal(r.pendingAnswers,0);assert.match(r.messages.at(-1).text,/JSON/);assert.equal(r.result,undefined);
+ await ctx.hub.respond('claude:question',{decision:'accept',answers:{Formato:'JSON'}});assert.equal(r.revision,1);assert.equal(r.messages.at(-1).type,'answer');assert.deepEqual(r.approvals,{});assert.equal(r.pendingAnswers,0);assert.match(r.messages.at(-1).text,/JSON/);assert.equal(r.result,undefined);
 });
 
 
@@ -313,7 +313,7 @@ test('reinício de pausa gravada ainda a drenar não conserva uma espera imposs�
 test('Codex renova o transporte ocioso e retoma a mesma thread com a nova credencial MCP',async t=>{
  const {Hydraq}=await import('../lib/hydraq.mjs'),root=await mkdtemp('/tmp/hydraq-cx-transport-');t.after(()=>rm(root,{recursive:true,force:true}));
  const calls=[],rpc=new EventEmitter();rpc.stop=async()=>calls.push({method:'stop'});rpc.start=async()=>calls.push({method:'start'});
- rpc.call=async(method,params)=>{calls.push({method,params});if(method==='account/read')return {account:{type:'chatgpt'}};if(method==='experimentalFeature/list'||method==='model/list')return {data:[],nextCursor:null};if(method==='config/read')return {config:{}};if(method==='thread/resume')return {thread:{id:params.threadId}};throw Error('RPC inesperado: '+method);};
+ rpc.call=async(method,params)=>{calls.push({method,params});if(method==='account/read')return {account:{type:'chatgpt'}};if(method==='experimentalFeature/list')return {data:[],nextCursor:null};if(method==='model/list')return {data:[{model:'test',displayName:'Teste',supportedReasoningEfforts:[{reasoningEffort:'high'}],defaultReasoningEffort:'high'}],nextCursor:null};if(method==='config/read')return {config:{}};if(method==='thread/resume')return {thread:{id:params.threadId}};throw Error('RPC inesperado: '+method);};
  const client=new Hydraq({dataDir:root,defaultCwd:root,modelMetadataPath:root+'/absent.json',client:rpc});client.changed=()=>{};client.persist=async()=>{};client.connection='connected';client.account={type:'chatgpt'};
  const conversation={id:'cx',threadId:'native-preserved',cwd:root,model:'test',sandbox:'read-only',status:'interrupted',messages:[{text:'Histórico preservado.'}],turns:[]};client.conversations=[conversation];client.loaded.add('cx');client.loaded.add('other-idle');
  const before=structuredClone(conversation);await client.refreshClaudeXTransport('cx');
@@ -388,7 +388,7 @@ for(const pair of [['codex','claude'],['codex','antigravity'],['antigravity','cl
  test('par '+pair.join(' + ')+' coordena caixa, pausa, retoma e aprova sem falso acordo',async t=>{
   const ctx=await setup(t),members=Object.fromEntries(pair.map(role=>[role,{model:'test',effort:'low'}]));
   const r=await ctx.start({roles:pair,members,author:pair[1]});
-  assert.deepEqual(ctx.cx.snapshot().records[0].roles,pair);assert.equal(ctx.cx.snapshot().protocolVersion,3);
+  assert.deepEqual(ctx.cx.snapshot().records[0].roles,pair);assert.equal(ctx.cx.snapshot().protocolVersion,4);
   assert.deepEqual(Object.keys(ctx.cx.detail(r.id).participants),pair);
   assert.deepEqual(ctx.cx.scopes()[0].resources,pair.map(k=>'normal:'+k));
   for(const role of pair){assert.ok(ctx.clients[role].logs[0].settings.contextMcp.names.includes('read_dialogue'));assert.match(ctx.cx.prompt(r,role),new RegExp('o colega é '+pair.find(k=>k!==role)));}

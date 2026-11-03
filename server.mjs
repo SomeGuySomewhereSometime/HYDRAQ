@@ -1,3 +1,4 @@
+import './lib/env.mjs';
 import { cursorCredentialVariables } from './lib/cursor-auth.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -20,6 +20,9 @@ if(args[0]==='models') {
   console.log('\r⠋ Fetching available models...\r\x1b[32mgemini-4-argon-low\x1b[0m\tGemini 4 Argon (Low)\ngemini-4-argon-high\tGemini 4 Argon (High)\nclaude-opus-5-5-high\tClaude Opus 5.5 (High)\nclaude-sonnet-5-5-low\tClaude Sonnet 5.5 (Low)\ncustom-paid\tCustom API');
   process.exit(0);
 }
+if(args.includes('/usage')) {
+  console.log(JSON.stringify({status:'SUCCESS',num_turns:0,command:{name:'usage',data:{groups:[{name:'Gemini Models',buckets:[{id:'gemini-weekly',window:'weekly',remaining_fraction:.97,reset_time:'2026-11-01T20:52:22Z'},{id:'gemini-5h',window:'5h',remaining_fraction:.99,reset_time:'2026-10-28T17:08:46Z'}]}]}}}));process.exit(0);
+}
 if(args.includes('--dangerously-skip-permissions'))process.exit(9);
 if(!args.includes('--sandbox') || !args.includes('--disable-slash-commands'))process.exit(8);
 if(process.env.GEMINI_API_KEY||process.env.ANTHROPIC_API_KEY)process.exit(7);
@@ -27,7 +30,7 @@ const nativeId=args.includes('--conversation')?args[args.indexOf('--conversation
 const model=args[args.indexOf('--model')+1];
 const mode=args.includes('--mode')?args[args.indexOf('--mode')+1]:'request-review';
 let count=0;
-process.on('SIGINT',()=>{if(process.env.FAKE_AGY_STOP==='native'){emit({event:'result',result:{conversation_id:nativeId,status:'ERROR',error:'interrupted',response:''}});process.exit(1);}if(process.env.FAKE_AGY_STOP!=='confirmed')process.exit(1);emit({event:'result',result:{conversation_id:nativeId,status:'CANCELED',response:''}});process.exit(0);});
+process.on('SIGINT',()=>{if(process.env.FAKE_AGY_STOP==='warm'){emit({event:'result',result:{conversation_id:nativeId,status:'CANCELED',response:''}});return;}if(process.env.FAKE_AGY_STOP==='native'){emit({event:'result',result:{conversation_id:nativeId,status:'ERROR',error:'interrupted',response:''}});process.exit(1);}if(process.env.FAKE_AGY_STOP!=='confirmed')process.exit(1);emit({event:'result',result:{conversation_id:nativeId,status:'CANCELED',response:''}});process.exit(0);});
 try{count=JSON.parse(readFileSync('.fake-agy-'+nativeId,'utf8')).count;}catch{}
 const startedAt=process.pid;
 emit({event:'init',conversation_id:nativeId,init:{model,cwd:process.cwd(),permission_mode:mode}});
@@ -54,8 +57,8 @@ createInterface({input:process.stdin}).on('line',line=> {
     return;
   }
   if(text==='hold'||text==='guard-mcp-hold'||process.env.FAKE_AGY_HOLD==='1')return;
-  if(text==='guard-tools'||text==='guard-hold-write'||text==='guard-mcp') {
-    const calls=text==='guard-hold-write'?[['write_file',{Path:process.cwd()+'/x.txt'}]]:text==='guard-mcp'?[['call_mcp_tool',{ServerName:'hydraq',ToolName:'read_dialogue'}],['call_mcp_tool',{ServerName:'hydraq',ToolName:'other_tool'}],['call_mcp_tool',{ServerName:'other',ToolName:'read_dialogue'}],['write_file',{Path:process.cwd()+'/x.txt'}]]:[['read_file',{Path:process.cwd()+'/README.md'}],['run_command',{CommandLine:'ls -la'}],['write_file',{Path:process.cwd()+'/x.txt'}],['write_file',{Path:'/fake-agy/brain/'+nativeId+'/task.md'}],['run_command',{CommandLine:'touch y.txt'}]];
+  if(text==='guard-tools'||text==='guard-hold-write'||text==='guard-mcp'||text==='guard-principal') {
+    const calls=text==='guard-principal'?[['run_command',{CommandLine:'touch x.txt'}],['edit_file',{Path:process.cwd()+'/x.txt'}],['edit_file',{Path:process.cwd()+'/.git/config'}]]:text==='guard-hold-write'?[['write_file',{Path:process.cwd()+'/x.txt'}]]:text==='guard-mcp'?[['call_mcp_tool',{ServerName:'hydraq',ToolName:'read_dialogue'}],['call_mcp_tool',{ServerName:'hydraq',ToolName:'other_tool'}],['call_mcp_tool',{ServerName:'other',ToolName:'read_dialogue'}],['write_file',{Path:process.cwd()+'/x.txt'}]]:[['read_file',{Path:process.cwd()+'/README.md'}],['run_command',{CommandLine:'ls -la'}],['write_file',{Path:process.cwd()+'/x.txt'}],['write_file',{Path:'/fake-agy/brain/'+nativeId+'/task.md'}],['run_command',{CommandLine:'touch y.txt'}]];
     const outcome=calls.map(([name,parameters],i)=>name+':'+(tool(nativeId,{...step,step_index:count*10+1+i,state:'DONE',step_type:'tool',tool_name:name,tool_info:{parameters,output:'ok'}})?'ok':'recusada'));
     if(text==='guard-hold-write')return;
     setTimeout(()=>emit({event:'result',result:{conversation_id:nativeId,status:'SUCCESS',response:outcome.join(' ')}}),10);

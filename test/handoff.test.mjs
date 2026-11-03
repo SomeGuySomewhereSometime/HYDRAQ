@@ -133,7 +133,7 @@ test('resumo falhado não envia nada ao destino; novo envio leva os factos e lim
   assert.match(await lastAgy(target),/Pedido do utilizador: primeiro/);
 });
 
-test('contexto respeita o limite: pedidos do utilizador ficam, respostas longas são cortadas primeiro',()=> {
+test('contexto conserva pedidos e respostas longas sem cortes',()=> {
   const turn=(requestId,status='completed')=>({requestId,id:requestId,status,model:'m',effort:'low',startedAt:requestId});
   const long='x'.repeat(30_000);
   const source={id:'s',provider:'codex',cwd:'/p',turns:[turn('a'),turn('b')],items:[],messages:[
@@ -141,16 +141,33 @@ test('contexto respeita o limite: pedidos do utilizador ficam, respostas longas 
     {role:'user',requestId:'b',text:'segundo pedido'},{role:'assistant',requestId:'b',text:long,phase:'final_answer'}]};
   const target={id:'t',provider:'claude',cwd:'/p',turns:[],messages:[],items:[]};
   const context=buildHandoff({target,members:[source,target],git:null,budget:12_000});
-  assert.ok(context.text.length<=12_000);
+  assert.ok(context.text.length>60000);assert.equal(context.coverage,'complete');assert.ok(context.text.includes(long));
   assert.match(context.text,/restrição: não mexer em auth\.js/);
   assert.match(context.text,/segundo pedido/);
-  assert.match(context.text,/cortado/);
+  assert.doesNotMatch(context.text,/cortado/);
   assert.match(context.text,/Estado git: indisponível/);
   assert.deepEqual(context.keys,['s:a','s:b']);
   assert.equal(buildHandoff({target:source,members:[source],git:[]}),null);
 });
 
-test('contexto essencial demasiado grande bloqueia sem cortar pedidos nem marcar entregas',()=> {
+test('uma publicação do Hydra diz quem aprovou, sem falar em dois nem em unanimidade quando houve maioria',()=> {
+  const text=extra=>{
+    const source={id:'s',provider:'codex',cwd:'/p',items:[],turns:[{requestId:'a',id:'a',status:'completed',model:'m',startedAt:'a',source:'claudex-publication',...extra}],messages:[{role:'user',requestId:'a',text:'pedido'},{role:'assistant',requestId:'a',text:'resultado',phase:'final_answer'}]};
+    return buildHandoff({target:{id:'t',provider:'claude',cwd:'/p',turns:[],messages:[],items:[]},members:[source],git:[]}).text;
+  };
+  const majority=text({agreed:true,claudexOutcome:'agreement',approvedBy:['codex','antigravity'],participants:3});
+  assert.match(majority,/versão exata aprovada por Codex, Antigravity, por maioria/);assert.doesNotMatch(majority,/Codex e Claude|ambos/);
+  const everyone=text({agreed:true,claudexOutcome:'agreement',approvedBy:['codex','claude','antigravity'],participants:3});
+  assert.match(everyone,/aprovada por Codex, Claude Code, Antigravity, publicada/);assert.doesNotMatch(everyone,/maioria/);
+  const divergences=text({agreed:true,claudexOutcome:'divergences',approvedBy:['codex','claude'],participants:3});
+  assert.match(divergences,/Acordo sobre as divergências: Codex, Claude Code aprovaram a descrição exata.*por maioria; não equivale a consenso/);assert.doesNotMatch(divergences,/ambos/);
+  // A turn recorded before these fields does not say who.
+  assert.match(text({agreed:true,claudexOutcome:'agreement'}),/aprovada por todos os participantes/);
+  assert.match(text({agreed:true,claudexOutcome:'divergences'}),/os participantes aprovaram/);
+  assert.match(text({agreed:false,claudexOutcome:'synthesis'}),/Síntese do autor.*sem aprovação obrigatória dos participantes/);
+});
+
+test('contexto essencial acima do antigo orçamento conserva o pedido inteiro',()=> {
   const source={id:'s',provider:'codex',cwd:'/p',turns:[],items:[],messages:[]};
   for(let i=0;i<20;i++){
     const requestId=`r${i}`;
@@ -158,7 +175,7 @@ test('contexto essencial demasiado grande bloqueia sem cortar pedidos nem marcar
     source.messages.push({role:'user',requestId,text:`PEDIDO_${i} ${'x'.repeat(3900)}`});
   }
   const target={id:'t',cwd:'/p',turns:[],items:[],messages:[]};
-  assert.throws(()=>buildHandoff({target,members:[source,target],git:[]}),/contexto essencial excede/);
+  const full=buildHandoff({target,members:[source,target],git:[]});assert.equal(full.coverage,'complete');assert.ok(full.text.length>78000);assert.match(full.text,/PEDIDO_19/);
   assert.equal(unseenTurns(target,[source,target]).length,20);
   source.messages[0].text='x'.repeat(4500)+' RESTRICAO_NO_FIM';
   const context=buildHandoff({target,members:[{...source,turns:source.turns.slice(0,1)}],git:[]});
@@ -192,6 +209,8 @@ test('retoma os três clientes com acesso mais restrito e mantém os IDs nativos
   assert.equal(source.sandbox,'read-only');assert.equal(source.turns.at(-1).sandbox,'read-only');assert.equal(source.threadId,native);
   const policies=(await readFile(path.join(directory,'codex-settings.log'),'utf8')).trim().split('\n').map(line=>JSON.parse(line).sandboxPolicy);
   assert.equal(policies[0].type,'workspaceWrite');assert.deepEqual(policies[0].writableRoots,[directory]);
+  // A loaded thread keeps its folder unless each turn names it, and Codex always lets a turn write in its folder.
+  assert.equal(JSON.parse((await readFile(path.join(directory,'codex-settings.log'),'utf8')).trim().split('\n')[0]).cwd,directory);
   assert.deepEqual(policies.at(-1),{type:'readOnly',networkAccess:false});
   const claudeId=target.threadId, claudePid=claude.session.child.pid;
   await hub.send(target.id,'muda acesso','a4',{sandbox:'accept-edits'});await waitFor(idle(hub));
@@ -340,15 +359,14 @@ test('falha ao persistir a preparação não deixa a aplicação presa numa pass
   assert.equal(claude.conversation(c.id).turns.at(-1).status,'completed');
 });
 
-test('contexto demasiado grande não cria registos de entrega nem pedidos no destinatário',async t=> {
+test('contexto acima do antigo limite é entregue inteiro ao destinatário',async t=> {
   const {directory,hub,codex,claude}=await setup(t);
   const c=await hub.create({provider:'codex',cwd:directory,model:'gpt-test',effort:'low'});
   await hub.send(c.id,'primeiro','b1');await waitFor(idle(hub));
   codex.conversation(c.id).messages.find(m=>m.requestId==='b1').text='x'.repeat(45_000);
   const moved=await hub.send(c.id,'continua','b2',{provider:'claude',model:'haiku',effort:'low',handoffMode:'quick'});await waitFor(idle(hub));
   const target=claude.conversation(moved.conversationId);
-  assert.match(target.handoffState.error,/contexto essencial excede/);
-  assert.equal(target.handoffDeliveries,undefined);assert.equal(target.turns.length,0);
+  assert.equal(target.handoffState,null);assert.equal(target.turns.length,1);assert.ok(target.messages.find(m=>m.role==='user').handoffContext.includes('x'.repeat(45_000)));assert.equal(target.handoffDeliveries[0].coverage,'complete');
 });
 
 test('uma conclusão posterior a uma entrega incerta volta a entrar no contexto',()=> {
@@ -388,7 +406,7 @@ test('passagem conserva plano nativo mesmo sem edições e recupera base curta a
  const source={id:'s',provider:'codex',cwd:'/p',turns:[{id:'t',requestId:'r',status:'completed',startedAt:'2026-01-01',model:'gpt',plan:[{step:'DECISAO-SEM-EDICOES',status:'pending'}],facts:{files:[],commands:[]}}],messages:[{role:'user',requestId:'r',text:'Planeia'},{role:'assistant',requestId:'r',text:'Plano proposto'}],items:[]};
  const target={id:'d',provider:'claude',cwd:'/p',turns:[],messages:[]};const first=buildHandoff({target,members:[source,target],git:[]});assert.match(first.text,/DECISAO-SEM-EDICOES/);
  target.turns.push({requestId:'delivery',status:'completed'});target.handoffDeliveries=[{requestId:'delivery',keys:first.keys,epoch:0}];assert.equal(buildHandoff({target,members:[source,target],git:[]}),null);
- target.contextEpoch=1;const recovered=buildHandoff({target,members:[source,target],git:[]});assert.match(recovered.text,/Base curta após compactação/);assert.match(recovered.text,/DECISAO-SEM-EDICOES/);assert.deepEqual(recovered.keys,[]);
+ target.contextEpoch=1;const recovered=buildHandoff({target,members:[source,target],git:[]});assert.match(recovered.text,/Base após compactação/);assert.match(recovered.text,/DECISAO-SEM-EDICOES/);assert.deepEqual(recovered.keys,[]);
  target.turns.push({requestId:'base',status:'completed'});target.handoffDeliveries.push({requestId:'base',keys:[],epoch:1});assert.equal(buildHandoff({target,members:[source,target],git:[]}),null);
 });
 
@@ -402,5 +420,9 @@ test('compactação repõe base anterior também quando há novidades por entreg
  const source={id:'s',provider:'codex',cwd:'/p',turns:[{id:'t',requestId:'old',status:'completed',model:'gpt',facts:{files:[],commands:[]},startedAt:'2026-01-01'}],messages:[{role:'user',requestId:'old',text:'Restrição anterior importante'},{role:'assistant',requestId:'old',text:'Plano antigo'}],items:[]},target={id:'d',cwd:'/p',turns:[],messages:[]};
  const first=buildHandoff({target,members:[source,target]});target.turns.push({requestId:'received',status:'completed'});target.handoffDeliveries=[{requestId:'received',keys:first.keys,fingerprints:first.fingerprints,epoch:0}];target.contextEpoch=1;
  source.turns.push({requestId:'new',status:'completed',startedAt:'2026-01-02',facts:{files:[],commands:[]}});source.messages.push({role:'user',requestId:'new',text:'Novidade atual'});
- const next=buildHandoff({target,members:[source,target]});assert.match(next.text,/Base curta após compactação/);assert.match(next.text,/Restrição anterior importante/);assert.match(next.text,/Novidade atual/);
+ const next=buildHandoff({target,members:[source,target]});assert.match(next.text,/Base após compactação/);assert.match(next.text,/Restrição anterior importante/);assert.match(next.text,/Novidade atual/);
+});
+
+test('passagem inclui plan.steps e explicação completos, preservando os estados nativos',()=>{
+ const plan={explanation:'Explicação do cliente',steps:[{step:'Passo pendente '+'P'.repeat(5000)+'PASSO-FIM',status:'pending'},{step:'Em curso',status:'inProgress'},{step:'Terminado',status:'completed'}]};const source={id:'source',provider:'cursor',cwd:'/p',messages:[{role:'user',requestId:'r',text:'Planear'},{role:'assistant',requestId:'r',text:'Plano disponível'}],items:[],turns:[{id:'t',requestId:'r',status:'completed',plan,facts:{files:[],commands:[]}}]},target={id:'target',provider:'codex',cwd:'/p',turns:[],messages:[]};const context=buildHandoff({target,members:[source,target],git:[]});assert.match(context.text,/PASSO-FIM/);assert.match(context.text,/Explicação do cliente/);for(const status of ['pending','inProgress','completed'])assert.ok(context.text.includes(status));assert.equal(context.coverage,'complete');
 });

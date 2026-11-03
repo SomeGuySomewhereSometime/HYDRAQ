@@ -1,6 +1,52 @@
 const el = (tag, cls, text) => { const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node; };
 const inside = (root,folder) => folder===root || folder.startsWith(root==='/'?'/':root+'/');
 const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',cursor:'Cursor',opencode:'OpenCode'};
+export function chooseFolder({api, initial, onChoose, toast}) {
+  const dialog=el('dialog','project-dialog folder-picker'),heading=el('div','project-dialog-heading'),body=el('div','project-form');
+  const button=(label,fn)=>{const b=el('button','',label);b.type='button';b.addEventListener('click',fn);return b;};
+  heading.append(el('h2','','Escolher pasta'),button('Fechar',()=>dialog.close()));
+  const location=el('p','folder-picker-path'),list=el('div','folder-picker-list'),notice=el('p'),name=el('input');
+  location.setAttribute('aria-live','polite');
+  name.placeholder='Nome da nova pasta';name.setAttribute('aria-label','Nome da nova pasta');
+  let current='',sequence=0,busy=true,closed=false;
+  const setBusy=value=>{
+    busy=value;create.disabled=select.disabled=busy||!current;
+    list.setAttribute('aria-busy',String(busy));
+    for(const b of list.querySelectorAll('button'))b.disabled=busy;
+  };
+  const load=async folder=>{
+    const turn=++sequence;setBusy(true);notice.textContent='A carregar pastas…';
+    try{
+      const data=await api('/api/folders/browse',{path:folder||undefined});
+      if(closed||turn!==sequence)return;
+      current=data.current;location.textContent=current;list.replaceChildren();
+      if(data.parent!==current)list.append(button('↑ Pasta acima',()=>load(data.parent)));
+      for(const entry of data.folders)list.append(button('📁 '+entry,()=>load((data.current==='/'?'':data.current)+'/'+entry)));
+      if(!data.folders.length)list.append(el('p','','Esta pasta não contém subpastas.'));
+      notice.textContent=data.truncated?'São apresentadas as primeiras 2000 pastas.':'';
+    }catch(error){
+      if(closed||turn!==sequence)return;
+      toast(error.message);notice.textContent=error.message;
+      if(!current&&folder)await load();
+    }finally{if(!closed&&turn===sequence)setBusy(false);}
+  };
+  const create=button('Criar pasta',async()=>{
+    if(busy||!current||closed)return;
+    const value=name.value.trim();
+    if(!value||value==='.'||value==='..'||/[\/\\\x00-\x1f\x7f]/.test(value)){toast('Indica apenas um nome de pasta válido.');return;}
+    setBusy(true);notice.textContent='A criar pasta…';
+    try{
+      const result=await api('/api/folders/create',{path:(current==='/'?'':current)+'/'+value});
+      if(closed)return;
+      name.value='';await load(result.path);
+    }catch(error){if(!closed){notice.textContent=error.message;toast(error.message);}}
+    finally{if(!closed)setBusy(false);}
+  });
+  const select=button('Escolher esta pasta',()=>{if(!busy&&current&&!closed){onChoose(current);dialog.close();}});
+  body.append(location,list,notice,name,create,select);dialog.append(heading,body);document.body.append(dialog);
+  dialog.addEventListener('close',()=>{closed=true;sequence++;dialog.remove();},{once:true});
+  dialog.showModal();load(initial).catch(()=>{});
+}
 export function conversationGroups(state) {
   const map=new Map();
   for(const chat of state.conversations)map.set(chat.group,[...(map.get(chat.group)||[]),chat]);
@@ -40,7 +86,7 @@ export class ProjectUI {
   }
   render(selection){
     this.selection=selection||{};const state=this.getState(),catalog=state.projectCatalog||{projects:[],groups:{},revision:0},groups=conversationGroups(state),query=this.search.value.trim().toLocaleLowerCase('pt');
-    const signature=JSON.stringify([catalog,groups.map(g=>[g.id,g.title,g.latest.updatedAt,g.members.map(c=>c.status)]),(this.getState().dual?.records||[]).filter(r=>r.active).map(r=>[r.groupId,r.members.a.provider,r.members.b.provider]),this.selection,query,this.archived]);
+    const signature=JSON.stringify([catalog,groups.map(g=>[g.id,g.title,g.latest.updatedAt,g.members.map(c=>c.status)]),(this.getState().dual?.records||[]).filter(r=>r.active).map(r=>[r.groupId,Object.values(r.members).map(m=>m.provider)]),this.selection,query,this.archived]);
     if(signature===this.signature)return;this.signature=signature;
     const list=document.querySelector('#conversation-list');list.replaceChildren();document.querySelector('#conversation-count').textContent=String(groups.length).padStart(2,'0');
     const matches=g=>g.title.toLocaleLowerCase('pt').includes(query);
@@ -76,7 +122,7 @@ export class ProjectUI {
     button.title=group.title;button.append(el('strong','',group.title));
     const status=group.members.find(c=>['starting','running','waiting'].includes(c.status))?.status||group.latest.status;
     const dual=this.getState().dual?.records?.find(r=>r.groupId===group.id&&r.active);
-    button.append(el('small','',`${dual?`Dual · ${names[dual.members.a.provider]} + ${names[dual.members.b.provider]}`:[...new Set([...group.members].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(c=>names[c.provider]))].join(' → ')} · ${{completed:'Concluída',running:'A trabalhar',waiting:'Decisão pendente',idle:'Pronta',failed:'Falhou',interrupted:'Interrompida',uncertain:'Por confirmar'}[status]||status}`));
+    button.append(el('small','',`${dual?`Multi · ${Object.values(dual.members).map(m=>names[m.provider]||m.provider).join(' + ')}`:[...new Set([...group.members].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)).map(c=>names[c.provider]))].join(' → ')} · ${{completed:'Concluída',running:'A trabalhar',waiting:'Decisão pendente',idle:'Pronta',failed:'Falhou',interrupted:'Interrompida',uncertain:'Por confirmar'}[status]||status}`));
     const menu=this.button('⋯',()=>this.editGroup(group),'conversation-menu');menu.setAttribute('aria-label',`Organizar ${group.title}`);menu.disabled=Boolean(this.getState().projectCatalog?.error);row.append(button,menu);return row;
   }
   renderOverview(){
@@ -93,7 +139,8 @@ export class ProjectUI {
   editProject(project){
     const state=this.getState(),form=this.modal(project?'Definições do projeto':'Novo projeto');
     const name=this.field(form,'Nome',this.input(project?.name||''));name.required=true;
-    const root=this.field(form,'Pasta local',this.input(project?.root||state.defaultCwd||'',4096));root.required=true;root.readOnly=Boolean(project);root.addEventListener('change',()=>{if(!name.value.trim())name.value=root.value.split('/').filter(Boolean).at(-1)||'Projeto';});
+    const root=this.field(form,'Pasta local',this.input(project?.root||'',4096));root.placeholder='/caminho/do/projeto';root.required=true;root.readOnly=Boolean(project);root.addEventListener('change',()=>{if(!name.value.trim())name.value=root.value.split('/').filter(Boolean).at(-1)||'Projeto';});
+    if(!project){form.append(this.button('Escolher ou criar pasta',()=>chooseFolder({api:this.api,initial:root.value||undefined,onChoose:value=>{root.value=value;root.dispatchEvent(new Event('change'));},toast:this.toast})),el('p','','Se escreveres uma pasta que ainda não existe, será criada ao guardar.'));}
     const provider=this.field(form,'Cliente inicial',this.select([['','Usar preferência atual'],...Object.entries(names)],project?.defaults?.provider||''));
     const defaults=structuredClone(project?.defaults||{}),clients=defaults.clients||{};
     const advanced=el('details');advanced.append(el('summary','','Modelos e raciocínio por cliente'));const fields={};

@@ -272,3 +272,16 @@ test('agy: resumos do raciocínio lidos do seu transcript, durações nativas, s
  assert.equal(before.summary,'Vou ler as notas 1.');
  assert.ok((await readFile(transcript,'utf8')).startsWith(written));
 });
+
+test('depois de interromper, o turno seguinte começa noutro processo e não morre com o antigo',async t=>{
+ // The real agy cancels the turn on SIGINT and keeps its warm process. The forced stop armed for it must not reach the next turn.
+ const previous=process.env.FAKE_AGY_STOP;process.env.FAKE_AGY_STOP='warm';t.after(()=>{if(previous===undefined)delete process.env.FAKE_AGY_STOP;else process.env.FAKE_AGY_STOP=previous;});
+ const {client,directory}=await setup(t);const c=await chat(client,directory);
+ await client.send(c.id,'hold','a');await waitFor(()=>c.threadId&&c.status==='running');const first=client.session.child.pid;
+ await client.interrupt(c.id);await waitFor(()=>c.status==='interrupted');
+ await client.send(c.id,'hold','b');await waitFor(()=>c.status==='running');
+ assert.notEqual(client.session.child.pid,first,'o turno novo tem o seu processo');
+ await new Promise(resolve=>setTimeout(resolve,3600));
+ assert.equal(c.status,'running','o turno novo continua depois do prazo do processo antigo');assert.equal(c.turns.at(-1).status,'running');
+ await client.interrupt(c.id);await waitFor(()=>c.status==='interrupted');
+});

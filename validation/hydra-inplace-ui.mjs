@@ -49,6 +49,7 @@ try {
   const scrollTo = where => page.evaluate(where => { const view = document.querySelector('#messages'); view.scrollTop = where === 'top' ? 0 : view.scrollHeight; view.dispatchEvent(new Event('scroll')); }, where);
   const scrollTop = () => page.evaluate(() => document.querySelector('#messages').scrollTop);
   const atBottom = () => page.evaluate(() => { const view = document.querySelector('#messages'); return view.scrollHeight - view.scrollTop - view.clientHeight < 120; });
+  await page.waitForFunction(()=>document.querySelector('.mode-tile[data-mode="dual"]')?.getAttribute('aria-pressed')==='true');
   check('starts in Dual', await tile('dual').getAttribute('aria-pressed') === 'true');
 
   // Choosing Hydra keeps the conversation; the task card waits at its end.
@@ -60,13 +61,13 @@ try {
   check('card waits at the end of the conversation', (await transcript(page)).at(-1).startsWith('live:'));
   await page.locator('#prompt').fill('Comparar duas abordagens.');
   await page.locator('#send').click();
-  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Em diálogo', null, { timeout: 8000 });
+  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Plano em discussão', null, { timeout: 8000 });
   const first = hub.claudex.records[0];
   check('task runs in place with the Dual sessions', first.inPlace && first.members.codex.conversationId === normal.id && first.members.claude.conversationId === partner.id, first.members);
   check('no new conversation', hub.conversations().length === conversationsBefore && await selected() === normal.id);
   await page.locator('#messages > .hydra-request', { hasText: 'Comparar duas abordagens.' }).waitFor();
   let order = await transcript(page);
-  check('request shown as the person\'s message, card right after it', inOrder(order, 'answer:RESPOSTA-ANTES-DO-HYDRA', 'request:Comparar duas abordagens.', 'live:Em diálogo') && order.at(-1).startsWith('live:'), order);
+  check('request shown as the person\'s message, card right after it', inOrder(order, 'answer:RESPOSTA-ANTES-DO-HYDRA', 'request:Comparar duas abordagens.', 'live:Plano em discussão') && order.at(-1).startsWith('live:'), order);
   check('request labelled with the pair and copyable', /Tu · para o ClaudeX/.test(await page.locator('.hydra-request .message-header').first().textContent()) && await page.locator('.hydra-request .copy-message').count() === 1);
   await until(() => ['codex', 'claude'].every(role => hub.claudex.native(first, role).status === 'running'));
   for (const role of ['codex', 'claude']) await call(first, role, 'initial_position', { text: 'Posição ' + role });
@@ -82,6 +83,8 @@ try {
   order = await transcript(page);
   check('update shown as the person\'s message, card follows it', inOrder(order, 'request:Comparar duas abordagens.', 'request:Requisito novo', 'live:') && /novo requisito para o ClaudeX/.test(await page.locator('.hydra-request', { hasText: 'Requisito novo' }).locator('.message-header').textContent()), order);
   check('update not repeated inside the dialogue', !await page.locator('#hydra-inline .cx-message', { hasText: 'Requisito novo' }).isVisible());
+  // A changed request requires fresh independent intent classification.
+  for (const role of ['codex','claude']) await call(first,role,'initial_position',{text:'Posição atualizada '+role,intent:'read-only',revision:first.revision});
   // Reading earlier messages: updates to the card neither pull the scroll nor close what was opened.
   const scrollable = await page.evaluate(() => { const view = document.querySelector('#messages'); return view.scrollHeight > view.clientHeight + 200; });
   check('transcript long enough to test the scroll', scrollable);
@@ -120,7 +123,7 @@ try {
   await page.waitForTimeout(400);
   check('the publication\'s progress does not float above the conversation', await page.evaluate(id => document.querySelector('#progress-panel').classList.contains('hidden'), published.id));
   check('request and common answer shown once', once(order, 'request:Comparar duas abordagens.') && !order.some(e => e.startsWith('user:Comparar')) && once(order, 'answer:PLANO-COMUM'), order);
-  check('card names the outcome and the contributions', /Hydra · ClaudeX/.test(await page.locator('.cx-card').first().textContent()) && /Acordo confirmado/.test(await page.locator('.cx-card').first().textContent()) && /contributos/.test(await page.locator('.cx-card').first().textContent()));
+  check('card names the outcome and the contributions', /Hydra · ClaudeX/.test(await page.locator('.cx-card').first().textContent()) && /Acordo de todos/.test(await page.locator('.cx-card').first().textContent()) && /contributos/.test(await page.locator('.cx-card').first().textContent()));
   check('settings restored', normal.sandbox === 'workspace-write' && normal.claudexTask === undefined && partner.claudexTask === undefined);
   await page.locator('.cx-card > summary').first().click();
   await page.locator('.cx-card .cx-message', { hasText: 'funciona offline' }).waitFor();
@@ -132,7 +135,7 @@ try {
   await page.locator('#messages > #hydra-inline .cx-main').waitFor();
   await page.locator('#prompt').fill('Segunda tarefa.');
   await page.locator('#send').click();
-  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Em diálogo', null, { timeout: 8000 });
+  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Plano em discussão', null, { timeout: 8000 });
   const second = hub.claudex.records.find(record => record.id !== first.id);
   check('second task in the same conversation', second?.inPlace && second.members.codex.conversationId === normal.id && await selected() === normal.id);
   check('an opened finished card stays open while another task runs', await page.locator('.cx-card').first().evaluate(e => e.open));
@@ -142,7 +145,7 @@ try {
   // From Dual, Normal opens the Dual dialog to turn it off, as without Hydra.
   await page.locator('dialog.dual-dialog[open]').waitFor({ timeout: 10000 });
   check('back in Dual first, then its dialog', second.status === 'interrupted' && await page.locator('#hydra-inline').isHidden() && await page.locator('#messages').isVisible());
-  await page.locator('dialog.dual-dialog[open] button', { hasText: 'Desligar Dual' }).click();
+  await page.locator('dialog.dual-dialog[open] button', { hasText: 'Desligar Multi' }).click();
   await page.waitForFunction(() => document.querySelector('.mode-tile[data-mode="normal"]')?.getAttribute('aria-pressed') === 'true', null, { timeout: 10000 });
   check('normal after leaving: Dual off', await tile('dual').getAttribute('aria-pressed') === 'false' && await page.locator('#model').isVisible());
   await page.locator('#prompt').fill('Continua sem o Hydra.');
@@ -164,10 +167,10 @@ try {
   await page.locator('#messages > #hydra-inline .cx-main').waitFor();
   await page.locator('#prompt').fill('Terceira tarefa.');
   await page.locator('#send').click();
-  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Em diálogo', null, { timeout: 8000 });
+  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Plano em discussão', null, { timeout: 8000 });
   const third = hub.claudex.records.find(record => ![first.id, second.id].includes(record.id));
   await until(() => ['codex', 'claude'].every(role => hub.claudex.native(third, role).status === 'running'));
-  await page.waitForFunction(() => /Pausar os dois/.test(document.querySelector('#stop').textContent) && !document.querySelector('#stop').classList.contains('hidden'), null, { timeout: 8000 });
+  await page.waitForFunction(() => /Pausar todos/.test(document.querySelector('#stop').textContent) && !document.querySelector('#stop').classList.contains('hidden'), null, { timeout: 8000 });
   await page.locator('#stop').click();
   await page.waitForFunction(() => /Retomar a mesma tarefa/.test(document.querySelector('#send').textContent), null, { timeout: 8000 });
   await page.reload(); await page.waitForFunction(() => document.querySelector('#model').value || document.body.dataset.hydra);

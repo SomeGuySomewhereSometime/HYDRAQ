@@ -46,6 +46,7 @@ createInterface({input:process.stdin}).on('line',line=> {
   }
   const result = value => send({id:message.id,result:value});
   if (message.method === 'initialize') result({userAgent:'fake-codex/0.159.0'});
+  if (message.method === 'account/rateLimits/read') result({rateLimits:{limitId:'codex',primary:{usedPercent:25,windowDurationMins:300,resetsAt:1900000000},secondary:{usedPercent:60,windowDurationMins:10080,resetsAt:1900005000}}});
   if (message.method === 'account/read') result({account:{type:process.env.FAKE_AUTH || 'chatgpt',planType:'test'},requiresOpenaiAuth:true});
   if (message.method === 'experimentalFeature/list') result({data:[{name:'reasoning_effort_override',stage:'underDevelopment',enabled:process.env.FAKE_REASONING_UPDATES !== 'false',defaultEnabled:false}]});
   if (message.method === 'model/list') result({data:[

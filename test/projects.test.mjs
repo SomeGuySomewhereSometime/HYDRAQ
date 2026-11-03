@@ -166,14 +166,14 @@ test('passagem conserva o texto importado explicitamente sem repetir memória/at
 });
 
 
-test('orçamento retira só atividade e preserva memória inteira ou bloqueia antes de enviar',async t=>{
+test('pedido longo conserva memória e atividade sem cortes nem recusa por caracteres',async t=>{
  const {hub,clients,project,chat,idle}=await setup(t),p=await project(),source=await chat(p.id),target=await chat(p.id);
  await hub.send(source.id,'Atividade de exemplo','budget-source');await waitFor(idle);
  const text='Antes. Atividade recente de outras conversas. FIM-DA-MEMORIA';await hub.saveProjectMemory(p.id,{revision:0,text});
  const native=clients.codex.conversation(target.id),prepared=await hub.context.prepare(native),size=99000-prepared.text.length+10;
  await hub.send(target.id,'x'.repeat(size),'budget-target');await waitFor(idle);const message=native.messages.find(m=>m.requestId==='budget-target');
- assert.ok(message.projectContext.includes('FIM-DA-MEMORIA'));assert.match(message.projectContext,/Atividade omitida/);assert.equal(native.turns.at(-1).projectDelivery.memoryRevision,1);
- const huge=await chat(p.id),count=clients.codex.conversation(huge.id).turns.length;await assert.rejects(hub.send(huge.id,'x'.repeat(99000),'budget-too-large'),/excedem o limite/);assert.equal(clients.codex.conversation(huge.id).turns.length,count);
+ assert.ok(message.projectContext.includes('FIM-DA-MEMORIA'));assert.doesNotMatch(message.projectContext,/Atividade omitida/);assert.match(message.projectContext,/Atividade recente/);assert.equal(native.turns.at(-1).projectDelivery.memoryRevision,1);
+ const huge=await chat(p.id),count=clients.codex.conversation(huge.id).turns.length;await hub.send(huge.id,'x'.repeat(99000),'budget-too-large');await waitFor(idle);assert.equal(clients.codex.conversation(huge.id).turns.length,count+1);
 });
 
 test('proposta recusa conversa vazia e resultado incerto antes de gastar inferência',async t=>{

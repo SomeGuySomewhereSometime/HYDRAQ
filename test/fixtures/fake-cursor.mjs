@@ -74,6 +74,17 @@ createInterface({input:process.stdin}).on('line',line=>{
    say('ESCOLHIDA-'+out.answers[0].selectedOptionIds.join(','));done(m.id);
   });return;
  }
+ if(['create-plan-output','create-plan-with-final','create-plan-failed'].includes(text)){
+  const plan='PLANO-CURSOR-INICIO\n'+'A'.repeat(Number(process.env.FAKE_CURSOR_PLAN_SIZE||1000))+'\n'+process.env.CURSOR_API_KEY+'\nPLANO-CURSOR-FIM',toolCallId='created-plan';
+  const nativePath=path.join(process.env.CURSOR_CONFIG_DIR,'native-plan.md');writeFileSync(nativePath,plan);
+  say('Vou preparar o plano.');
+  update({sessionUpdate:'tool_call',toolCallId,kind:'other',title:'Create Plan: Plano nativo',status:'in_progress',rawInput:{_toolName:'createPlan',name:'Plano nativo',plan},locations:[{path:nativePath}]});
+  update({sessionUpdate:'tool_call_update',toolCallId,status:text==='create-plan-failed'?'failed':'completed'});
+  if(text==='create-plan-with-final')say(plan);
+  if(text==='create-plan-failed')say('Plano não foi criado.');
+  if(process.env.FAKE_CURSOR_PLAN_EVICT==='1')for(let i=0;i<205;i++)update({sessionUpdate:'tool_call',toolCallId:'after-plan-'+i,kind:'read',title:'Read '+i,status:'completed'});
+  done(m.id);return;
+ }
  if(text==='plan'){
   request('cursor/create_plan',{name:'Plano de teste',plan:'1. Rever\n2. Executar',todos:[]},reply=>{say('PLANO-'+reply.result?.outcome.outcome);done(m.id);});return;
  }

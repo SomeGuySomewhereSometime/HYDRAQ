@@ -7,6 +7,7 @@
   <title>HYDRAQ · Agentes locais</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
+  <link rel="stylesheet" href="/mascot-character.css">
   <script type="module" src="/app.js"></script>
 </head>
 <body data-sidebar="open" data-inspector="open" data-theme="atelier">
@@ -19,6 +20,7 @@
       </svg><span class="brand-mark"><svg class="hydra-mark" viewBox="0 0 32 32" aria-hidden="true"><path class="hydra-necks" d="M16 28V13M16 28c0-6.2-8.4-6.6-8.4-13.4M16 28c0-6.2 8.4-6.6 8.4-13.4"/><circle class="hydra-head" cx="7.6" cy="11.6" r="3.3"/><circle class="hydra-head hydra-head-main" cx="16" cy="8.2" r="3.5"/><circle class="hydra-head" cx="24.4" cy="11.6" r="3.3"/></svg></span><span class="brand-name">HYDRAQ<span class="brand-dot">.</span></span><span class="brand-heads" id="brand-heads" aria-hidden="true"><i data-client="codex"></i><i data-client="antigravity"></i><i data-client="claude"></i><i data-client="cursor"></i><i data-client="opencode"></i></span></a>
       <div class="sidebar-actions">
         <button class="new-chat" id="new-chat" data-tip="Começa uma conversa nova no projeto selecionado. Atalho: N"><span>＋</span> Nova conversa <kbd>N</kbd></button>
+        <button class="new-project" id="new-loose-chat" data-tip="Começa uma conversa independente numa pasta própria.">＋ Conversa sem projeto</button>
         <button class="new-project" id="new-project" data-tip="Cria um projeto com uma pasta fixa, memória própria e conversas organizadas.">＋ Novo projeto</button>
       </div>
       <label class="sr-only" for="project-search">Pesquisar projetos e conversas</label><input id="project-search" class="project-search" type="search" placeholder="Pesquisar projetos e conversas…">
@@ -40,7 +42,7 @@
           <strong id="project-name" data-tip="">Nova conversa</strong>
           <div class="topbar-context">
             <span id="folder-chip" class="folder-chip" tabindex="0" data-tip=""><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7h7l2 2h9v11H3Z M3 7V4h7l2 3"/></svg><span id="folder-label"></span></span>
-            <label class="sr-only" for="cwd">Pasta de trabalho</label><input id="cwd" class="folder-input" placeholder="/caminho/do/projeto" autocomplete="off" spellcheck="false" data-tip="Pasta onde o cliente vai trabalhar. Fica fixa depois do primeiro pedido.">
+            <label class="sr-only" for="cwd">Pasta de trabalho</label><input id="cwd" class="folder-input" placeholder="Pasta automática para esta conversa" autocomplete="off" spellcheck="false" data-tip="Deixa vazio para criar uma pasta própria fora do HYDRAQ, ou escolhe uma pasta. Fica fixa depois do primeiro pedido."><button id="choose-cwd" type="button" class="folder-select" title="Escolher pasta de trabalho">Escolher pasta</button>
             <span id="session-badge" class="status-chip">Uma tarefa. Todo o contexto.</span>
           </div>
         </div>
@@ -49,7 +51,7 @@
           <select id="handoff-mode" data-tip=""><option value="quick" selected>Rápida</option><option value="model">Completa · resumo</option></select>
           <span id="handoff-hint" class="sr-only"></span>
         </div>
-        <nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true" data-tip="Conversas com um cliente de cada vez, com passagem de contexto entre clientes.">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false" data-tip="Equipa: o Codex planeia, o Grok executa e o Claude pode rever.">Colaboração</button><button id="tab-claudex" type="button" aria-controls="claudex-view" aria-selected="false" data-tip="Hydra: dois clientes investigam juntos, trocam mensagens e preparam uma resposta comum (ClaudeX, Geminex ou Claudini). Também disponível nas Conversas, no painel Modo." hidden>Hydra</button></nav>
+        <nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true" data-tip="Conversas com um cliente de cada vez, com passagem de contexto entre clientes.">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false" data-tip="Equipa: o Codex planeia, o Grok executa e o Claude pode rever.">Colaboração</button><button id="tab-claudex" type="button" aria-controls="claudex-view" aria-selected="false" data-tip="Hydra: dois ou três clientes investigam juntos e preparam uma resposta comum; num pedido de alterações, o principal escreve e todos reveem e testam. Também disponível nas Conversas, no painel Modo." hidden>Hydra</button></nav>
         <button id="command-palette-trigger" class="command-trigger atelier-only" type="button" data-tip="Abrir paleta rápida de comandos, conversas, projetos e clientes (Ctrl+K)"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Comandos</span><kbd>⌃K</kbd></button>
         <button id="theme-toggle" class="theme-switch" type="button" data-tip="Escolher a aparência"><span class="appearance-swatch" data-swatch="atelier" aria-hidden="true"></span><span id="theme-label">Atelier</span><svg class="ui-icon theme-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="connection-state" id="connection-state" data-tip="Estado da ligação ao cliente escolhido.">A ligar ao Codex…</div>
@@ -155,7 +157,7 @@
               <section id="followup-queue" class="followup-queue hidden" aria-label="Mensagens em fila"></section>
               <div id="steer-mode" class="steer-mode hidden" role="group" aria-label="Mensagem durante a execução"><div id="steer-title">↳ Mensagem durante a execução</div><label class="sr-only" for="followup-mode">Quando entregar a mensagem</label><select id="followup-mode" class="pill-select" data-tip="Escolhe quando esta mensagem chega ao cliente. As opções dependem do protocolo de cada cliente."></select><span id="steer-description">A orientação mantém o pedido atual.</span><button type="button" id="use-as-request" class="use-as-request hidden">Usar como novo pedido</button></div>
               <label class="sr-only" id="prompt-label" for="prompt">Pedido para o Codex</label>
-              <textarea id="prompt" rows="3" placeholder="Descreve o que queres fazer…" maxlength="100000"></textarea>
+              <textarea id="prompt" rows="3" placeholder="Descreve o que queres fazer…"></textarea>
               <div class="composer-footer">
                 <div class="composer-controls" role="group" aria-label="Opções do próximo pedido">
                   <div id="dual-targets" class="dual-targets" role="group" aria-label="Destinatário do pedido" hidden></div>
@@ -168,7 +170,7 @@
                   <select id="effort" class="pill-select" data-tip="Raciocínio: quanto o modelo pensa antes de responder. Mais raciocínio é mais lento e consome mais utilização."><option>Automático</option></select>
                   <span id="cursor-settings" class="hidden"><span id="context-field"><label class="sr-only" for="context">Contexto</label><select id="context" class="pill-select" data-tip="Janela de contexto do Grok no Cursor."></select></span><label id="fast-field" class="pill-toggle" data-tip="Fast: respostas mais rápidas com maior consumo de utilização do Cursor."><input id="fast" type="checkbox"> Fast</label></span>
                   <button type="button" id="review-toggle" class="pill-toggle" aria-pressed="false" data-tip="Escolher revisor automático">Revisor · Desligado</button>
-                  <button type="button" id="dual-toggle" class="pill-toggle dual-toggle" aria-pressed="false" data-tip="">Dual</button><button type="button" id="dual-hydra" class="pill-toggle dual-hydra" hidden>⇢ Hydra</button>
+                  <button type="button" id="dual-toggle" class="pill-toggle dual-toggle" aria-pressed="false" data-tip="">Multi</button><button type="button" id="dual-hydra" class="pill-toggle dual-hydra" hidden>⇢ Hydra</button>
                   <span class="control-divider" aria-hidden="true"></span>
                   <button type="button" id="plan-toggle" class="pill-toggle plan-toggle" aria-pressed="false" data-tip="">Planear</button>
                   <label class="sr-only" for="sandbox">Permissões</label>
@@ -190,6 +192,7 @@
             <button type="button" role="tab" data-inspector-view="system" aria-selected="false" data-tip="Mostra capacidades dos modelos, cache e disposição">Sistema</button>
           </div>
           <div id="inspector-content" class="inspector-content" tabindex="0" role="region" aria-label="Conteúdo do painel lateral">
+          <section id="provider-status" class="provider-status" aria-label="Limites dos modelos selecionados"></section>
           <section id="turn-usage" class="turn-usage hidden" aria-label="Consumo do último pedido"></section>
           <section id="mode-panel" class="mode-panel" aria-labelledby="mode-panel-title">
             <div class="mode-panel-head"><h3 id="mode-panel-title">Modo</h3><span id="mode-panel-status" class="mode-panel-status"></span></div>

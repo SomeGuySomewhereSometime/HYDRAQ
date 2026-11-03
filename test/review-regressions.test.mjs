@@ -124,11 +124,11 @@ test('gravação guarda uma cópia privada válida e recusa substituir um origin
   await assert.rejects(writeHistory(dir,two));assert.equal(await readFile(path.join(dir,'state.json'),'utf8'),'{broken');assert.equal(await readFile(backup,'utf8'),one);
 });
 
-test('contexto excessivo recupera na mesma sessão só com resumo revisto e entrega confirmada',async t=>{
+test('recuperação antiga conserva revisão explícita e só confirma entrega quando o pedido termina',async t=>{
   const {clients,hub,create}=await setup(t),source=await create('codex');await hub.connect('claude');
   const original='RESTRICAO-ORIGINAL '+ 'x'.repeat(45000);await hub.send(source.id,original,'large');await waitFor(()=>source.status==='completed');
-  const moved=await hub.send(source.id,'continua','handoff',{provider:'claude',model:'haiku',effort:'low',handoffMode:'quick'});await waitFor(()=>!hub.handoff);
-  const target=clients.claude.conversation(moved.conversationId),pending=target.handoffRecovery;
+  const target=await create('claude');target.group=source.group||source.id;
+  const pending=target.handoffRecovery={id:'legacy-recovery',status:'required',keys:[source.id+':large']};
   assert.equal(pending.status,'required');assert.equal(target.turns.length,0);
   await assert.rejects(hub.reviewHandoff(target.id,{expectedRecoveryId:'old',summary:'x'}),/passagem mudou/);
   await hub.reviewHandoff(target.id,{expectedRecoveryId:pending.id,summary:'Objetivo e restrição revistos: preservar auth.js. Trabalho ainda por verificar.'});

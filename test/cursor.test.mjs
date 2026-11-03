@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { Cursor, parseCursorModels } from '../lib/cursor.mjs';
 import { readCursorCredential, withoutCursorCredentials } from '../lib/cursor-auth.mjs';
 import { Providers } from '../lib/providers.mjs';
+import {finalAnswer,buildHandoff} from '../lib/handoff.mjs';
 import { ClaudeCode } from '../lib/claude.mjs';
 
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -97,7 +98,7 @@ test('autorizações nativas, perguntas e planos: respostas únicas, recusa, can
  await hub.send(c.id,'question','q');await waitFor(()=>chat.status==='waiting');request=hub.snapshot().approvals[0];
  await assert.rejects(hub.respond(request.id,{answers:[{questionId:'q',selectedOptionIds:['wrong']}]}),/válidas/);
  await hub.respond(request.id,{answers:[{questionId:'q',selectedOptionIds:['b']}]});await waitFor(()=>chat.status==='completed');assert.equal(chat.messages.at(-1).text,'ESCOLHIDA-b');
- await hub.send(c.id,'plan','plan');await waitFor(()=>chat.status==='waiting');await hub.respond(hub.snapshot().approvals[0].id,{decision:'decline'});await waitFor(()=>chat.status==='completed');assert.equal(chat.messages.at(-1).text,'PLANO-rejected');
+ await hub.send(c.id,'plan','plan');await waitFor(()=>chat.status==='waiting');const pendingPlan=hub.snapshot().approvals[0].params.planDocumentId;assert.ok(pendingPlan);assert.match((await client.readPlanDocument(chat.id,pendingPlan)).text,/1. Rever/);await hub.respond(hub.snapshot().approvals[0].id,{decision:'decline'});await waitFor(()=>chat.status==='completed');assert.ok(chat.messages.some(m=>m.text==='PLANO-rejected'));assert.equal(chat.turns.at(-1).planDocuments[0].approvalStatus,'rejected');assert.match(finalAnswer(chat,'plan'),/rejeitado pelo utilizador/);
  await hub.send(c.id,'question','cancel');await waitFor(()=>chat.status==='waiting');const expired=hub.snapshot().approvals[0].id;await hub.interrupt(c.id);await waitFor(()=>chat.status==='interrupted');
  assert.equal(hub.snapshot().approvals.length,0);await assert.rejects(hub.respond(expired,{decision:'cancel'}),/resolvido/);
  await hub.send(c.id,'question','cancel-response');await waitFor(()=>chat.status==='waiting');await hub.respond(hub.snapshot().approvals[0].id,{decision:'cancel'});await waitFor(()=>chat.status==='interrupted');
@@ -148,4 +149,11 @@ test('atualização repetida do Cursor: a hora de fim é a primeira em que termi
  await client.send(c.id,'repeat-update','repeat');await waitFor(()=>c.status==='completed');
  const item=c.items.find(i=>i.nativeKind==='read'),ms=Date.parse(item.completedAt)-Date.parse(item.at);
  assert.equal(item.status,'completed');assert.ok(ms>=80&&ms<230,`fim aos ${ms} ms, não na atualização repetida`);
+});
+
+test('Cursor entrega Create Plan completo como resposta e ficheiro, sem perder o plano após 200 ações',async t=>{
+ const {client,directory,options,clients,log}=await setup(t,{FAKE_CURSOR_PLAN_SIZE:'150000',FAKE_CURSOR_PLAN_EVICT:'1'});await client.connect();const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low',sandbox:'plan'});await client.send(c.id,'create-plan-output','native-plan');await waitFor(()=>c.status==='completed');const turn=c.turns[0],document=turn.planDocuments[0];assert.equal(turn.planDocuments.length,1);assert.equal(c.items.some(i=>i.parameters?._toolName==='createPlan'),false);assert.equal(c.messages.filter(m=>m.planDocumentId===document.id).length,1);assert.ok(finalAnswer(c,'native-plan').includes('A'.repeat(150000)));assert.match(finalAnswer(c,'native-plan'),/PLANO-CURSOR-FIM/);assert.doesNotMatch(finalAnswer(c,'native-plan'),/TEST-CURSOR-SECRET/);const file=await client.readPlanDocument(c.id,document.id);assert.ok(file.text.includes('A'.repeat(150000)));assert.match(file.text,/PLANO-CURSOR-FIM/);assert.equal((await (await import('node:fs/promises')).stat(file.path)).mode&0o777,0o600);assert.equal(client.snapshot().approvals.length,0);assert.equal(client.snapshot().conversations[0].progress.title,'Plano recebido');await client.persist();const reloaded=new Cursor(options);clients.push(reloaded);await reloaded.load();assert.equal(reloaded.conversation(c.id).messages.filter(m=>m.planDocumentId===document.id).length,1);const target={id:'target',provider:'claude',cwd:directory,messages:[],turns:[]};const context=buildHandoff({target,members:[reloaded.conversation(c.id),target],git:[]});assert.match(context.text,/PLANO-CURSOR-FIM/);assert.equal(context.coverage,'complete');assert.equal((await log()).length,1);
+});
+test('Cursor não duplica um plano já apresentado na resposta nem publica uma criação falhada',async t=>{
+ const {client,directory}=await setup(t);await client.connect();const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low',sandbox:'plan'});await client.send(c.id,'create-plan-with-final','with-final');await waitFor(()=>c.status==='completed');assert.equal((finalAnswer(c,'with-final').match(/PLANO-CURSOR-FIM/g)||[]).length,1);assert.equal(c.messages.some(m=>m.planDocumentIds?.length===1),true);await client.send(c.id,'create-plan-failed','failed-plan');await waitFor(()=>c.status==='completed');assert.doesNotMatch(finalAnswer(c,'failed-plan'),/PLANO-CURSOR-FIM/);
 });

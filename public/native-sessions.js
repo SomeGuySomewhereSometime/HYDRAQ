@@ -274,7 +274,7 @@ export class TerminalSwitch {
     if (provider === 'claude' && !state?.claudeTerminal?.available) return 'unavailable';
     if (provider === 'opencode' && state?.providers?.opencode?.transport !== 'http') return 'unavailable';
     if (provider === 'antigravity' && !state?.antigravityTerminal?.available) return 'unavailable';
-    if (this.dual()?.running(this.current())) return 'Aguarda o fim da ronda dual.';
+    if (this.dual()?.running(this.current())) return 'Aguarda o fim da ronda Multi.';
     if (working.has(target.status) || target.status === 'uncertain') return 'Aguarda que o pedido termine.';
     if (state?.providers?.[provider]?.connection !== 'connected') return `Liga primeiro o ${terminalNames[provider]}.`;
     if (!target.threadId || !target.turns?.length || (provider === 'claude' && !target.sessionStarted)) return 'Envia primeiro um pedido para guardar a sessão.';
@@ -332,7 +332,7 @@ export class TerminalSwitch {
     }
     const name = terminalNames[target.provider], pending = Boolean(this.sections[target.provider].pending);
     this.host.dataset.state = 'open'; this.host.dataset.client = target.provider; delete this.host.dataset.live;
-    const tip = reason || `Continua a mesma sessão no ${name} original, num terminal. Voltas com «Continuar na HYDRAQ», aqui.${record ? ' No Dual, só o principal abre no terminal e o Dual fica em pausa até voltares.' : ''}`;
+    const tip = reason || `Continua a mesma sessão no ${name} original, num terminal. Voltas com «Continuar na HYDRAQ», aqui.${record ? ' No Multi, só o principal abre no terminal e o Multi fica em pausa até voltares.' : ''}`;
     this.host.append(button('open', pending ? `A abrir no terminal · ${name}…` : `Abrir no terminal · ${name}${record ? ' (principal)' : ''}`, tip, Boolean(reason) || pending));
     caption(reason);
   }

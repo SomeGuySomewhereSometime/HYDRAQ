@@ -36,6 +36,7 @@ try {
   await page.goto(url); await page.waitForFunction(() => document.querySelector('#model').value);
   const tile = mode => page.locator(`.mode-tile[data-mode="${mode}"]`);
   check('mode panel above activity', await page.evaluate(() => document.querySelector('#mode-panel').compareDocumentPosition(document.querySelector('.activity-heading')) & Node.DOCUMENT_POSITION_FOLLOWING));
+  await page.waitForFunction(()=>document.querySelector('.mode-tile[data-mode="normal"]')?.getAttribute('aria-pressed')==='true');
   check('normal active by default', await tile('normal').getAttribute('aria-pressed') === 'true');
   check('last request shows duration', /Duração/.test(await page.locator('#turn-usage').textContent()));
   check('terminal offered in the Modo panel', /Abrir no terminal · Codex/.test(await page.locator('#inspector-terminal').textContent()) && await page.locator('#inspector-terminal').isVisible());
@@ -62,7 +63,7 @@ try {
   check('no history toggle any more', await page.locator('#hydra-view').count() === 0);
   check('task card shown in the conversation', await page.locator('#messages > #hydra-inline').isVisible() && await page.locator('#messages .welcome').count() === 0);
   check('hydra tile pressed', await tile('hydra').getAttribute('aria-pressed') === 'true');
-  check('pairs visible', await page.locator('#hydra-pairs').isVisible() && await page.locator('.hydra-pair').count() === 3);
+  check('pairs visible', await page.locator('#hydra-pairs').isVisible() && await page.locator('.hydra-pair').count() === 4);
   check('composer shows only hydra chip', await page.locator('#hydra-chip').isVisible() && !await page.locator('#model').isVisible() && !await page.locator('#review-toggle').isVisible());
   check('send label starts ClaudeX', /Iniciar ClaudeX/.test(await page.locator('#send').textContent()));
   check('settings form hidden inline', !await page.locator('#hydra-inline .cx-settings').isVisible() && !await page.locator('#cx-prompt').isVisible());
@@ -85,12 +86,12 @@ try {
   const numbers = page.locator('.mode-guards input');
   await numbers.nth(0).fill('0'); await numbers.nth(1).fill('0');
   check('guards mirrored', await page.locator('#cx-guardTurns').inputValue() === '0' && await page.locator('#cx-guardMinutes').inputValue() === '0');
-  await page.locator('.mode-field', { hasText: 'Autor da resposta comum' }).locator('.mode-chip', { hasText: 'Claude Code' }).click();
+  await page.locator('.mode-field', { hasText: 'Principal · único implementador' }).locator('.mode-chip', { hasText: 'Claude Code' }).click();
   check('author mirrored', await page.locator('#cx-author').inputValue() === 'claude');
   // Send from the normal composer.
   await page.locator('#prompt').fill('Planear um organizador offline.');
   await page.locator('#send').click();
-  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Em diálogo', null, { timeout: 8000 });
+  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Plano em discussão', null, { timeout: 8000 });
   const r = hub.claudex.records[0];
   check('task created with pair, models, author and guards', r && r.roles.join() === 'codex,claude' && r.members.codex.model === 'test' && r.author === 'claude' && r.guards.turns === 0);
   await page.waitForFunction(() => localStorage.getItem('hydraq.conversation'), null, { timeout: 4000 }).catch(() => {});
@@ -100,8 +101,8 @@ try {
   check('request shown as the person\'s message, then the card', await page.evaluate(() => document.querySelector('#messages > .hydra-request')?.nextElementSibling?.id === 'hydra-inline'));
   check('inline hint not duplicated', !await page.locator('#hydra-inline .cx-actions .cx-hint').isVisible());
   check('composer cleared', await page.locator('#prompt').inputValue() === '');
-  check('send label updates both', /Atualizar o pedido dos dois/.test(await page.locator('#send').textContent()));
-  check('stop pauses both', await page.locator('#stop').isVisible() && /Pausar os dois/.test(await page.locator('#stop').textContent()));
+  check('send label updates both', /Atualizar o pedido de todos/.test(await page.locator('#send').textContent()));
+  check('stop pauses both', await page.locator('#stop').isVisible() && /Pausar todos/.test(await page.locator('#stop').textContent()));
   check('pair fixed after start', await page.locator('.hydra-pair[data-pair="codex+antigravity"]').isDisabled());
   check('sidebar lists the hydra conversation', await page.locator('#conversation-list').getByText(/ClaudeX · Planear um organizador/).count() >= 1);
   const call = (role, name, args = {}) => hub.claudex.tool([...hub.claudex.leases].find(([, l]) => l.taskId === r.id && l.role === role)[0], name, args);
@@ -151,9 +152,10 @@ try {
   // Resume through the composer, finish the task, then a new request opens a new task from its progress.
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.locator('#send').click();
-  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Em diálogo', null, { timeout: 8000 });
+  await page.waitForFunction(() => document.querySelector('.cx-badge')?.textContent === 'Plano em discussão', null, { timeout: 8000 });
   const startedBy = Date.now() + 6000;
   while (!['codex', 'claude'].every(role => hub.claudex.native(r, role).status === 'running')) { if (Date.now() > startedBy) throw Error('Participantes não retomaram'); await page.waitForTimeout(20); }
+  for (const role of ['codex','claude']) await call(role,'initial_position',{text:'Posição atualizada '+role,intent:'read-only',revision:r.revision});
   for (const role of ['codex', 'claude']) await call(role, 'ready_to_conclude', await call(role, 'read_dialogue'));
   const draft = (await call('claude', 'propose_final', { ...await call('claude', 'read_dialogue'), text: 'Plano comum: funcionar offline, exportar e importar JSON.' })).candidate;
   for (const role of ['codex', 'claude']) { const v = await call(role, 'read_dialogue'); await call(role, 'review_final', { candidateId: draft.id, hash: draft.hash, revision: v.revision, reviewedThrough: v.reviewedThrough, decision: 'approve' }); clients[role].finish(hub.claudex.native(r, role), 'Contribuição terminada.'); }
@@ -172,10 +174,10 @@ try {
   check('new task shows the carried progress', await page.locator('#hydra-inline .cx-message', { hasText: 'Progresso anterior incluído' }).count() === 1);
   // Dual while the new pair works in this folder: a new conversation and an explanation, no silent click.
   await tile('dual').click();
-  check('dual blocked by running pair is explained', !await page.locator('#hydra-inline').isVisible() && /O Dual fica disponível/.test(await page.locator('#toast').textContent()) && await page.locator('dialog.dual-dialog[open]').count() === 0);
+  check('dual blocked by running pair is explained', !await page.locator('#hydra-inline').isVisible() && /O Multi fica disponível/.test(await page.locator('#toast').textContent()) && await page.locator('dialog.dual-dialog[open]').count() === 0);
   await page.locator('#conversation-list').getByText(/ClaudeX · Aprofundar a exportação/).first().click();
   await page.locator('#hydra-inline .cx-main').waitFor();
-  await page.waitForFunction(() => /Pausar os dois/.test(document.querySelector('#stop').textContent) && !document.querySelector('#stop').classList.contains('hidden'), null, { timeout: 8000 });
+  await page.waitForFunction(() => /Pausar todos/.test(document.querySelector('#stop').textContent) && !document.querySelector('#stop').classList.contains('hidden'), null, { timeout: 8000 });
   await page.locator('#stop').click();
   await page.waitForFunction(() => /Retomar a mesma tarefa/.test(document.querySelector('#send').textContent), null, { timeout: 8000 });
   // Dual and Revisor tiles open their dialogs from a new conversation.

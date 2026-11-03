@@ -3,7 +3,6 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {randomUUID} from 'node:crypto';
 import {Providers} from '../lib/providers.mjs';
-import {SYNTHESIS_INPUT} from '../lib/opinions.mjs';
 import {OpinionClient} from './fixtures/opinion-client.mjs';
 import {createHttpServer} from '../lib/http.mjs';
 const wait=async f=>{const end=Date.now()+7000;while(!f()){if(Date.now()>end)throw Error('Timeout');await new Promise(r=>setTimeout(r,10));}};
@@ -58,12 +57,8 @@ test('síntese manual: as duas respostas completas, numa sessão à parte, e a s
  assert.equal(shown.kind,'synthesis');assert.equal(shown.prompt,undefined);assert.equal(shown.sourceKey,'dual-synthesis:'+r1.id);
 });
 
-test('nada é cortado em silêncio: respostas acima do limite são recusadas antes do envio',async t=>{
- const env=await setup(t);
- env.clients.codex.answer='a'.repeat(50000);env.clients.claude.answer='b'.repeat(SYNTHESIS_INPUT-49000);
- const r1=await round(env,'r1');
- await assert.rejects(env.hub.synthesizeDual(env.dual.id,{roundId:r1.id,requestId:'s1',...SYNTH}),/acima do limite de 90[\s\u202f]000 de uma síntese\. Nada foi cortado nem enviado/);
- assert.equal(syntheses(env).length,0);assert.equal(env.runtimes.length,0);
+test('síntese conserva entradas e saída acima dos antigos limites de caracteres',async t=>{
+ const env=await setup(t);env.clients.codex.answer='a'.repeat(180000)+'CODEX-FIM';env.clients.claude.answer='b'.repeat(180000)+'CLAUDE-FIM';env.control.answer='s'.repeat(230000)+'SINTESE-FIM';const r1=await round(env,'r1');const result=await env.hub.synthesizeDual(env.dual.id,{roundId:r1.id,requestId:'s1',...SYNTH});await finished(env,result.id);const batch=syntheses(env)[0];assert.ok(batch.prompt.includes('a'.repeat(180000)));assert.ok(batch.prompt.includes('b'.repeat(180000)));assert.match(batch.jobs[0].text,/SINTESE-FIM$/);assert.equal(batch.jobs[0].text.length,230011);
 });
 
 test('desligado, a síntese não chega aos dois; ligado, cada um recebe-a uma vez',async t=>{
@@ -143,14 +138,14 @@ test('falta uma resposta: só uma síntese parcial pedida explicitamente, que di
  await env.hub.sendDual(env.dual.id,{text:'Pergunta',requestId:'r1'});
  await wait(()=>idle(env.c)&&env.c.turns.some(t=>t.requestId==='r1:a'));
  const r1=env.hub.dual.record(env.dual.id).rounds.at(-1);
- await assert.rejects(env.hub.synthesizeDual(env.dual.id,{roundId:r1.id,requestId:'s1',...SYNTH}),/Falta a resposta do Claude · Modelo teste\. Reenvia-lhe a pergunta ou pede uma síntese parcial/);
+ await assert.rejects(env.hub.synthesizeDual(env.dual.id,{roundId:r1.id,requestId:'s1',...SYNTH}),/Faltam respostas de Claude · Modelo teste\. Reenvia-lhe a pergunta ou pede uma síntese parcial/);
  const partial=await env.hub.synthesizeDual(env.dual.id,{roundId:r1.id,requestId:'s2',...SYNTH,partial:true});await finished(env,partial.id);
  const batch=syntheses(env)[0];
- assert.deepEqual(batch.missing,['b']);assert.match(env.runtimes[0].logs[0].text,/síntese é parcial e qual resposta falta/);
+ assert.deepEqual(batch.missing,['b']);assert.match(env.runtimes[0].logs[0].text,/síntese é parcial e identifica todas as respostas em falta/);
  // With both answers, partial is refused: a full synthesis is asked instead.
  env.clients.claude.behavior='success';
  const r2=await round(env,'r2');
- await assert.rejects(env.hub.synthesizeDual(env.dual.id,{roundId:r2.id,requestId:'s3',...SYNTH,partial:true}),/As duas respostas estão completas/);
+ await assert.rejects(env.hub.synthesizeDual(env.dual.id,{roundId:r2.id,requestId:'s3',...SYNTH,partial:true}),/As respostas estão completas/);
 });
 
 test('automático: uma síntese por ronda nova aos dois, marcada antes de arrancar e nunca repetida',async t=>{

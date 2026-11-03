@@ -1,0 +1,55 @@
+import { mkdtemp, mkdir, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import { chromium } from '/home/sauron/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import { Providers } from '../lib/providers.mjs';
+import { OpinionClient } from '../test/fixtures/opinion-client.mjs';
+import { createHttpServer } from '../lib/http.mjs';
+
+const dir=await mkdtemp(path.join(os.tmpdir(),'hydraq-folder-ui-'));
+const app=path.join(dir,'app'),base=path.join(dir,'conversas');await mkdir(app);
+const clients=Object.fromEntries(['codex','claude','antigravity','cursor'].map(id=>[id,new OpinionClient(id,path.join(dir,id))]));
+const hub=new Providers({dataDir:path.join(dir,'state'),defaultCwd:app,clients,git:async()=>[]});
+let server,browser;
+try {
+  await hub.load();await hub.connectAll();
+  server=createHttpServer({hydraq:hub,publicDir:path.resolve('public'),looseFolderBase:base});await new Promise(r=>server.listen(0,'127.0.0.1',r));
+  browser=await chromium.launch({headless:true,executablePath:process.env.HYDRAQ_TEST_CHROMIUM||'/home/sauron/.cache/ms-playwright/chromium-1243/chrome-linux64/chrome'});
+  const page=await browser.newPage({viewport:{width:1440,height:1000}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+  let releaseBrowse,browseStarted,releaseCreate,createStarted;
+  const browsing=new Promise(resolve=>browseStarted=resolve),creating=new Promise(resolve=>createStarted=resolve);
+  let delayBrowse=true,delayCreate=true;
+  await page.route('**/api/folders/browse',async route=>{if(delayBrowse){delayBrowse=false;browseStarted();await new Promise(resolve=>releaseBrowse=resolve);}await route.continue();});
+  await page.route('**/api/folders/create',async route=>{if(delayCreate){delayCreate=false;createStarted();await new Promise(resolve=>releaseCreate=resolve);}await route.continue();});
+  await page.goto(`http://127.0.0.1:${server.address().port}`);await page.waitForFunction(()=>document.querySelector('#connection-state')?.dataset.connected==='true');await page.locator('#new-project').click();
+  await page.getByLabel('Pasta local').fill(dir);
+  await page.getByRole('button',{name:'Escolher ou criar pasta'}).click();
+  await browsing;assert.equal(await page.getByRole('button',{name:'Criar pasta',exact:true}).isDisabled(),true);assert.equal(await page.getByRole('button',{name:'Escolher esta pasta'}).isDisabled(),true);releaseBrowse();
+  await page.locator('.folder-picker-path').getByText(dir,{exact:true}).waitFor();await page.getByLabel('Nome da nova pasta').fill('criada-no-seletor');await page.getByRole('button',{name:'Criar pasta',exact:true}).click();
+  await creating;assert.equal(await page.getByRole('button',{name:'Criar pasta',exact:true}).isDisabled(),true);assert.equal(await page.getByRole('button',{name:'Escolher esta pasta'}).isDisabled(),true);assert.equal(await page.getByRole('button',{name:'↑ Pasta acima'}).isDisabled(),true);releaseCreate();
+  await page.locator('.folder-picker-path').getByText(path.join(dir,'criada-no-seletor'),{exact:true}).waitFor();await page.getByRole('button',{name:'Escolher esta pasta'}).click();assert.equal(await page.getByLabel('Pasta local').inputValue(),path.join(dir,'criada-no-seletor'));
+  const target=path.join(dir,'projetos','novo');
+  await page.getByLabel('Nome',{exact:true}).fill('Projeto novo');await page.getByLabel('Pasta local').fill(target);await page.getByRole('button',{name:'Guardar',exact:true}).click();
+  await page.getByRole('heading',{name:'Projeto novo'}).waitFor();assert.equal(hub.projects.data.projects[0].root,target);
+  await page.locator('#new-loose-chat').click();assert.equal(await page.locator('#cwd').inputValue(),'');
+  await page.locator('#prompt').fill('Primeira conversa independente');await page.locator('#composer').evaluate(form=>form.requestSubmit());
+  await page.waitForFunction(()=>document.querySelector('#folder-label')?.textContent.includes('HYDRAQ')||document.querySelector('#folder-label')?.textContent.includes('conversas'));
+  await page.waitForFunction(()=>document.querySelector('#prompt').value==='');
+  const first=hub.conversations().find(c=>c.cwd.startsWith(base));assert.ok(first);assert.equal(first.organization,undefined);
+  await page.locator('#new-loose-chat').click();await page.locator('#prompt').fill('Segunda conversa independente');await page.locator('#composer').evaluate(form=>form.requestSubmit());
+  await page.waitForFunction(()=>document.querySelector('#prompt').value==='');const paths=hub.conversations().map(c=>c.cwd).filter(c=>c.startsWith(base));assert.equal(new Set(paths).size,2);
+  await page.reload();await page.waitForFunction(()=>document.querySelector('#folder-label')?.textContent.includes('conversas'));assert.deepEqual(errors,[]);
+  // The backend accepts the task but its first HTTP response is lost. A manual retry must recover it.
+  hub.claudex.kick=()=>{};
+  const hydraRequests=[];let loseHydraReply=true;
+  await page.route('**/api/claudex',async route=>{hydraRequests.push(route.request().postDataJSON());const response=await route.fetch();if(loseHydraReply){loseHydraReply=false;await route.abort('failed');}else await route.fulfill({response});});
+  await page.locator('#new-loose-chat').click();await page.locator('.mode-tile[data-mode="hydra"]').click();
+  await page.locator('#prompt').fill('Pedido Hydra com resposta perdida.');await page.locator('#send').click();
+  await page.waitForFunction(()=>!document.querySelector('#send').disabled);
+  assert.equal(hub.claudex.records.length,1);assert.equal(await page.locator('#prompt').inputValue(),'Pedido Hydra com resposta perdida.');
+  await page.locator('#send').click();await page.waitForFunction(()=>localStorage.getItem('hydraq.conversation')&&!document.querySelector('#prompt').value);
+  assert.equal(hydraRequests.length,2);assert.equal(hydraRequests[0].requestId,hydraRequests[1].requestId);assert.equal(hydraRequests[0].cwd,hydraRequests[1].cwd);assert.equal(hub.claudex.records.length,1);
+  assert.equal(new Set(hub.conversations().map(c=>c.cwd).filter(c=>c.startsWith(base))).size,3);assert.deepEqual(errors,[]);
+  console.log('Browser: seletor durante carregamento/criação, projetos, conversas separadas e recuperação Hydra sem duplicação aprovados.');
+} finally {await browser?.close();server?.closeStreams();if(server)await new Promise(r=>server.close(r));await hub.close();await rm(dir,{recursive:true,force:true});}

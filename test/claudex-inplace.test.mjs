@@ -18,7 +18,7 @@ const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const wait=async f=>{const end=Date.now()+6000;while(!f()){if(Date.now()>end)throw Error('Timeout');await new Promise(r=>setTimeout(r,15));}};
 const exists=file=>access(file).then(()=>true,()=>false);
 async function setup(t){
- const dir=await mkdtemp('/tmp/hydraq-cx-inplace-');const clients=Object.fromEntries(['codex','claude','antigravity'].map(role=>{const c=new OpinionClient(role,dir+'/'+role,{behavior:'hold'});c.capabilities={steer:false};return [role,c];}));
+ const dir=await mkdtemp('/tmp/hydraq-cx-inplace-');const clients=Object.fromEntries(['codex','claude','antigravity','cursor'].map(role=>{const c=new OpinionClient(role,dir+'/'+role,{behavior:'hold'});c.capabilities={steer:false};return [role,c];}));
  const hub=new Providers({dataDir:dir+'/hub',defaultCwd:dir,clients,git:async()=>[]});await hub.load();
  const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  t.after(async()=>{server.closeStreams();await new Promise(r=>server.close(r));await hub.close();await rm(dir,{recursive:true,force:true});});
@@ -26,7 +26,7 @@ async function setup(t){
  // A normal conversation with one finished request.
  const normal=async(provider,answer)=>{const chat=await hub.create({provider,cwd:dir,model:'test',effort:'low',sandbox:'workspace-write'});const c=clients[provider].conversation(chat.id);await hub.send(c.id,'Pedido normal '+provider,'n-'+randomUUID());await wait(()=>c.status==='running');clients[provider].finish(c,answer);return c;};
  const choices={codex:{model:'test',effort:'low'},claude:{model:'test',effort:'high'},antigravity:{model:'test',effort:'low'}};
- const begin=async(c,extra={})=>{const result=await cx.create({text:'Analisa em conjunto.',requestId:randomUUID(),conversationId:c.id,members:Object.fromEntries(extra.roles.map(role=>[role,choices[role]])),...extra});const r=cx.record(result.task.id);await wait(()=>r.roles.every(role=>r.members[role].turns&&cx.native(r,role).status==='running'));return r;};
+ const begin=async(c,extra={})=>{const result=await cx.create({workflow:1,text:'Analisa em conjunto.',requestId:randomUUID(),conversationId:c.id,members:Object.fromEntries(extra.roles.map(role=>[role,choices[role]])),...extra});const r=cx.record(result.task.id);await wait(()=>r.roles.every(role=>r.members[role].turns&&cx.native(r,role).status==='running'));return r;};
  return {dir,hub,clients,cx,call,normal,begin};
 }
 // Both participants reach the same text and approve it, then end their turns.
@@ -138,7 +138,7 @@ test('tarefa Hydra numa conversa nova: agy normal pela rota; pausar a meio retir
  const server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  t.after(async()=>{server.closeStreams();await new Promise(r=>server.close(r));await hub.close();await rm(dir,{recursive:true,force:true});});
  const cx=hub.claudex,token=r=>[...cx.leases].find(([,l])=>l.taskId===r.id&&l.role==='antigravity')?.[0];
- const created=await cx.create({text:'Analisa em conjunto.',requestId:randomUUID(),cwd:dir,roles:['codex','antigravity'],members:{codex:{model:'test',effort:'low'},antigravity:{model:'gemini-4-argon',effort:'low'}}});
+ const created=await cx.create({workflow:1,text:'Analisa em conjunto.',requestId:randomUUID(),cwd:dir,roles:['codex','antigravity'],members:{codex:{model:'test',effort:'low'},antigravity:{model:'gemini-4-argon',effort:'low'}}});
  const r=cx.record(created.task.id),c=cx.native(r,'antigravity');
  await wait(()=>c.status==='running'&&agy.session?.route);
  const routeFile=path.join(routeDirectory,c.threadId+'.json'),guardFile=path.join(guardDirectory,c.threadId+'.json'),thread=c.threadId,first=token(r);
@@ -166,3 +166,12 @@ test('conversas do ambiente privado antigo do agy não continuam',async t=>{
  for(const sandbox of ['plan','workspace-write'])await assert.rejects(client.send(c.id,'olá','old-'+sandbox,{sandbox}),/ambiente privado antigo do Hydra, que foi retirado/);
  assert.equal(c.turns.length,0);assert.ok(!client.session,'nenhum processo agy');
 });
+
+ test('Multi de quatro mantém composição, principal e seleção ao entrar e sair do Hydra',async t=>{
+ const ctx=await setup(t),{hub,clients,cx}=ctx,codex=await ctx.normal('codex','NORMAL');
+ const {dual}=await hub.startDual(codex.id,{participants:['claude','antigravity','cursor'].map(provider=>({provider,model:'test',effort:'low'})),principal:'d'});
+ await hub.updateDual(dual.id,{target:['a','c'],multiVersion:2});const before=structuredClone(dual);
+ const r=await ctx.begin(codex,{roles:['codex','claude'],author:'codex'});assert.equal(Object.keys(dual.members).length,4);assert.equal(clients.cursor.logs.length,0);
+ await agree(ctx,r);await wait(()=>r.released);assert.deepEqual(dual.members,before.members);assert.equal(dual.principal,'d');assert.deepEqual(dual.target,['a','c']);assert.equal(dual.active,true);
+ await hub.sendDual(dual.id,{text:'BACK',requestId:'back-four',target:'all',multiVersion:2});await wait(()=>['codex','claude','antigravity','cursor'].every(p=>clients[p].conversations[0].status==='running'));for(const p of ['codex','claude','antigravity','cursor'])clients[p].finish(clients[p].conversations[0],'BACK-'+p);
+ });

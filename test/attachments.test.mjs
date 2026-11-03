@@ -77,7 +77,7 @@ test('entrega imagem original aos quatro clientes e conserva só metadados no hi
       assert.equal(blocks[1].source.media_type,'image/png');assert.deepEqual(Buffer.from(blocks[1].source.data,'base64'),png);
     }else if(provider==='cursor'){
       const blocks=JSON.parse((await readFile(directory+'/cursor.jsonl','utf8')).trim());
-      assert.equal(blocks[1].mimeType,'image/png');assert.deepEqual(Buffer.from(blocks[1].data,'base64'),png);
+      const image=blocks.find(block=>block.type==='image');assert.equal(image.mimeType,'image/png');assert.deepEqual(Buffer.from(image.data,'base64'),png);assert.ok(blocks.some(block=>block.type==='text'&&block.text.includes('apresentação do resultado')));
     }else{
       const prompt=await readFile(path.join(directory,'.fake-agy-last-'+chat.threadId),'utf8');
       const image=await hub.attachments.get(meta.group,meta.id);
