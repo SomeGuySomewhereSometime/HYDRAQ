@@ -31,7 +31,7 @@ const checks=[];let task;
 try{
  await hub.load();await Promise.all(Object.values(clients).map(c=>c.connect()));
  const desired={codex:process.env.HYDRA_CODEX_MODEL||'gpt-6.1-sol',claude:process.env.HYDRA_CLAUDE_MODEL||'opus',antigravity:process.env.HYDRA_AGY_MODEL||'gemini-4-argon'};
- const members=Object.fromEntries(Object.entries(clients).map(([role,c])=>{const m=c.models.find(m=>m.id===desired[role]);if(!m)throw Error(role+': modelo indisponível '+JSON.stringify(c.models.map(m=>({id:m.id,name:m.name}))));if(role==='claude'&&desired[role]==='opus'&&!/opus.*5[.\-]5/i.test((m.name||'')+' '+(m.resolvedModel||'')))throw Error('O catálogo não confirmou Opus 5.5: '+JSON.stringify(m));return [role,{model:m.id,effort:m.efforts.includes('low')?'low':m.defaultEffort}];}));
+ const members=Object.fromEntries(Object.entries(clients).map(([role,c])=>{const m=c.models.find(m=>m.id===desired[role]);if(!m)throw Error(role+': modelo indisponível '+JSON.stringify(c.models.map(m=>({id:m.id,name:m.name}))));if(role==='claude'&&desired[role]==='opus'&&!/opus.*5[.\-]5/i.test((m.name||'')+' '+(m.resolvedModel||'')))throw Error('O catálogo não confirmou Opus 5.5: '+JSON.stringify(m));return [role,{model:m.id,effort:process.env.HYDRA_EFFORT&&m.efforts.includes(process.env.HYDRA_EFFORT)?process.env.HYDRA_EFFORT:m.efforts.includes('low')?'low':m.defaultEffort}];}));
  console.log(JSON.stringify({directory,members}));
  server=createHttpServer({hydraq:hub,publicDir:new URL('../public',import.meta.url).pathname});await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const scenario=process.env.HYDRA_SCENARIO||'implement',author=process.env.HYDRA_AUTHOR||'codex';
@@ -60,7 +60,11 @@ try{
  }
  const initial=await readFile(cwd+'/sum.mjs','utf8');const pauseIn=new Set((process.env.HYDRA_PAUSE_IN||'').split(',').filter(Boolean)),pausedIn=new Set();let realChanged=false,paused=false,userEdit=false,roundAtEdit=0,removed=false;
  const created=await hub.claudex.create({requestId:'live-'+Date.now(),...where,roles:Object.keys(clients),members,author,text,guards:{turns:16,minutes:12},...(process.env.HYDRA_WORKSPACE?{workspace:process.env.HYDRA_WORKSPACE}:{})});task=hub.claudex.record(created.task.id);
- const deadline=Date.now()+12*60000;let signature='';
+ // HYDRA_AGY_SILENCE_MS: a short silence limit for agy, so that a real long step makes the watchdog pause; the trial then resumes, up to twice.
+ if(process.env.HYDRA_AGY_SILENCE_MS)hub.claudex.agySilenceMs=Number(process.env.HYDRA_AGY_SILENCE_MS);
+ const stuckPauses=[];
+ const deadline=Date.now()+(Number(process.env.HYDRA_MINUTES)||12)*60000;let signature='';
+ for(;;){
  while(hub.claudex.active(task)&&Date.now()<deadline){
   const state={status:task.status,phase:task.workflow.phase,seq:task.seq,turns:Object.fromEntries(task.roles.map(k=>[k,task.members[k].turns])),native:Object.fromEntries(task.roles.map(k=>[k,{status:hub.claudex.native(task,k).status,error:hub.claudex.native(task,k).error}])),votes:task.workflow.votes,tests:task.workflow.tests.map(t=>({role:t.role,status:t.status,command:t.command,error:t.error,output:t.status==='failed'?t.output:undefined}))};
   const next=JSON.stringify(state);if(next!==signature){signature=next;console.log(next);await writeFile(out+'/progress.json',JSON.stringify({directory,task:hub.claudex.detail(task.id)},null,2));}
@@ -81,6 +85,13 @@ try{
   if(process.env.HYDRA_USER_EDIT==='1'&&!userEdit&&task.workflow.phase==='finalizing'){userEdit=true;roundAtEdit=task.workflow.round;await writeFile(cwd+'/nota-do-utilizador.txt','editado durante a tarefa\n');console.log(JSON.stringify({userEdit:true}));}
   if(hub.snapshot().approvals.length)throw Error('Decisão nativa pendente: '+JSON.stringify(hub.snapshot().approvals.map(a=>({method:a.method,params:a.params}))));
   await new Promise(r=>setTimeout(r,300));
+ }
+ if(process.env.HYDRA_AGY_SILENCE_MS&&task.status==='paused'&&task.pause?.kind==='stuck'&&stuckPauses.length<2&&Date.now()<deadline){
+  stuckPauses.push({role:task.pause.stuck,phase:task.workflow.phase,reason:task.pause.reason});console.log(JSON.stringify({stuck:task.pause.stuck,phase:task.workflow.phase}));
+  const end=Date.now()+120000;for(;;){try{await hub.claudex.resume(task.id);break;}catch(error){if(Date.now()>end)throw error;await new Promise(r=>setTimeout(r,500));}}
+  continue;
+ }
+ break;
  }
  if(process.env.HYDRA_INJECT_FAILURE==='1')checks.push({name:'falha injetada identificada e corrigida em nova ronda',ok:injected&&task.workflow.round>=2&&task.workflow.tests.some(t=>t.status==='failed')&&task.workflow.tests.filter(t=>t.round===task.workflow.round).every(t=>t.status==='passed')});
  checks.push({name:'concluiu automaticamente',ok:task.status==='completed',error:task.error});
@@ -111,6 +122,7 @@ try{
   const finalizing=task.dispatches.filter(d=>d.phase==='finalizing');
   checks.push({name:'na conclusão os revisores só acordam para votar',ok:task.roles.filter(k=>k!==author).every(k=>finalizing.filter(d=>d.role===k).every(d=>d.candidateId)),detail:finalizing.map(d=>[d.role,Boolean(d.candidateId)])});
  }
+ if(process.env.HYDRA_AGY_SILENCE_MS)checks.push({name:'a vigilância pausou por silêncio, disse quem, e a retoma continuou',ok:stuckPauses.length>0&&stuckPauses.every(p=>p.role&&/está há/.test(p.reason)),detail:stuckPauses});
  if(pauseIn.size)checks.push({name:'pausou e retomou em cada fase pedida',ok:[...pauseIn].every(phase=>pausedIn.has(phase)),detail:{pedidas:[...pauseIn],feitas:[...pausedIn]}});
  if(process.env.HYDRA_CLOSE_GRACE_MS){
   const ended=task.dispatches.filter(d=>d.ended==='watchdog');

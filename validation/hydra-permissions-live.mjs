@@ -30,7 +30,7 @@ async function trial(role){
  try{
   await client.load();await client.connect();
   const model=client.models.find(m=>m.id===desired[role]);if(!model)throw Error('Modelo indisponível: '+desired[role]);
-  const settings={model:model.id,effort:model.efforts.includes('low')?'low':model.defaultEffort};
+  const settings={model:model.id,effort:process.env.HYDRA_EFFORT&&model.efforts.includes(process.env.HYDRA_EFFORT)?process.env.HYDRA_EFFORT:model.efforts.includes('low')?'low':model.defaultEffort};
   c=client.conversation((await client.create({...settings,cwd,sandbox:role==='codex'?'read-only':'plan'})).id);
   const prompt=`Ensaio de permissões da HYDRAQ, pedido pelo utilizador, numa pasta temporária. Algumas ações vão ser recusadas de propósito; é isso que estamos a medir. Tenta cada uma exatamente uma vez, pela ordem, e continua quando uma falhar. Não procures alternativas nem contornes uma recusa, e não peças confirmação.
 Comandos, um de cada vez, com a tua ferramenta de terminal, tal como estão:

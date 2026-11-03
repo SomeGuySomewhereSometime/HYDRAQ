@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 175
+Versão atual: 176
 
 ## Resumo atual
+
+- Hydra — ensaios reais que faltavam (entrada 176), com Sol 6.1, Opus 5.5 e Argon em esforço medium: Codex como principal a tentar escrever fora da pasta **20/20**; retirar o agy a meio de um trio na cópia **20/20**; três versões sem maioria pausam sem nada escrito **5/5**; a vigilância por silêncio pausa o agy real, diz quem é, e a retoma continua. O motivo da pausa abaixo de um minuto passou a usar segundos.
 
 - Hydra — variante `bash --` fechada (entrada 175): o separador só permite um script se existir um argumento de ficheiro; redireções, heredocs e pipes sem ficheiro continuam recusados. Validação e fluxo **191/191**, zero ignorados; duas regressões novas e reproduções da revisão recusadas. Sem modelos reais, commit ou reinício da 4318; a correção aguarda reinício para ficar ativa.
 
@@ -2437,4 +2439,19 @@ Versão atual: 175
 - `nestedProblem` conserva o estado depois de `--` e só aceita o modo de ficheiro quando encontra realmente um argumento, descontando redireções. Sem ficheiro recusa como entrada padrão; `bash -- check.sh` e ficheiros precedidos de redireções continuam aceites.
 - Verificado: ficheiros completos de testes de validação e fluxo **191/191**, zero ignorados; **2 regressões novas**, também passadas isoladamente. Cobrem Bash, sh, caminho absoluto, heredoc, pipe, here-string, redireções e ficheiros legítimos. A integração confirma que `start_test` recusa sem criar resultados aprovados e que um ficheiro legítimo executa. As duas reproduções independentes que davam `passed` passaram a ser recusadas; `git diff --check` sem erros. Provas em `/tmp/hydra-fix-175-codex/`.
 - Limites: não foi repetida a suite completa; mantêm-se os prefixos não reconhecidos já registados na entrada 173 e o caráter heurístico do filtro. Sem modelos reais, commit, push ou reinício da 4318. A correção está no disco e só fica ativa no backend depois de reiniciar.
+
+### 176 — 2026-11-03 — Claude
+
+- Pedido: os ensaios reais que faltavam, com Sol 6.1, Opus 5.5 e Argon, todos em esforço medium (`HYDRA_EFFORT`, novo nos scripts). Resultados em `output/hydra-final/` (6 a 9).
+- Ensaios:
+  - **O Codex como principal tenta escrever fora da pasta** (`hydra-permissions-live`, `HYDRA_ROLES=codex`): **20/20**.
+  - **Retirar o agy a meio de um trio**, com Sol como principal, Opus e Argon, no projeto realista e na cópia privada: **20/20**. O agy foi retirado na validação, os outros dois concluíram 2/2 e a versão foi aplicada.
+  - **Três versões sem maioria** (`hydra-nomajority-live`, novo, com Opus e Argon e o Argon instruído a recusar todas as versões): **5/5**. A tarefa pausou com `no-majority` depois de três versões, sem nada escrito, e parou quando pedido.
+  - **Pausa por silêncio** (`HYDRA_AGY_SILENCE_MS`, com retoma automática no script):
+    - Com o limite a 15 s, o Argon nunca ficou tanto tempo calado e a tarefa concluiu (8/9; a única falha foi esta verificação).
+    - Com o limite a 5 s, a vigilância pausou o agy real duas vezes, disse quem era, e a retoma continuou. À terceira pausa o script já não retomava, e a tarefa não concluiu, como era de esperar com um limite tão baixo.
+- `lib/hydra-workflow.mjs`: o motivo da pausa por silêncio passou a usar segundos quando o limite é inferior a um minuto.
+- Limites:
+  - Só a vigilância de 5 minutos real não foi observada a disparar, porque nenhum passo real chegou lá; o mecanismo é o mesmo.
+  - O teste na página, pelo utilizador, continua por fazer.
 
