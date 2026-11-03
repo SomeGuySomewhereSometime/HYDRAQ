@@ -5147,3 +5147,5 @@ body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-
 .native-plan-files { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .plan-file-dialog { width: min(900px, calc(100vw - 24px)); max-height: calc(100dvh - 24px); overflow: auto; }
 .plan-file-path { overflow-wrap: anywhere; color: var(--text-secondary); font-size: 12px; }
+
+.cx-test-capture{margin:12px 0}.cx-test-capture figcaption{overflow-wrap:anywhere}.cx-test-image{display:block;max-width:100%;max-height:70vh;object-fit:contain;margin-top:8px;border-radius:8px}

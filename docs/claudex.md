@@ -38,6 +38,12 @@ As continuações nativas são internas à mesma tarefa: não é preciso escreve
 
 ## Permissões e testes
 
+Em jogos, interfaces e animações, `start_test` aceita `capture:true`. O Chrome pode correr dentro do isolamento com `google-chrome --headless=new --no-sandbox --disable-dev-shm-usage --user-data-dir=/tmp/chrome --screenshot="$HYDRAQ_TEST_ARTIFACTS/frame.png" "file://$PWD/index.html"`. O servidor local do projeto e o browser podem comunicar pelo localhost privado, mantendo a rede exterior indisponível. Não usa perfis, cookies ou sessões do browser do utilizador.
+
+`$HYDRAQ_TEST_ARTIFACTS` aponta para um tmpfs próprio do teste, limitado a 32 MB durante a escrita. Aceita até 16 PNG/JPEG/WebP estáticos, até 5 MB cada e 20 MB no total; links, pastas e outros conteúdos são recusados. Sem imagens, uma recolha pedida não passa. A recolha conserva as imagens antes de apagar o ambiente, também quando o comando falha; timeout e cancelamento não certificam capturas. São guardadas fora do projeto, com hash, teste, participante, ronda e versão. Apagar a tarefa também as remove.
+
+`test_status.artifacts` lista as capturas. `read_test_image {testId,imageId}` devolve uma imagem MCP e regista a entrega; as dos colegas ficam ocultas até à própria revisão. O cartão oferece **Ver captura**. Cada leitura verifica a integridade; imagens indisponíveis ou alteradas dão erro e permitem nova tentativa. Criar ou receber uma imagem não equivale a avaliá-la: em `submit_review`, `visualReview {status:'reviewed',reason:'observações'}` exige ter recebido todas as capturas próprias relevantes, ou `status:'not-reviewed'` declara o que falta. Isso fica na revisão e na conclusão. Sequências de capturas podem mostrar estados distintos, mas uma imagem não prova fluidez nem timing. Vídeo fica para uma etapa posterior.
+
 As permissões são determinadas pelo coordenador, não por mensagens dos modelos. Fora da implementação, todos ficam só em leitura. O principal, nessa fase, pode escrever apenas no projeto, com três exceções iguais para os três clientes: não escreve em `.git`, não tem rede e os seus comandos não saem do isolamento. Por isso, um principal do Hydra não faz commit nem instala dependências da rede.
 
 | Principal | Comandos | Ferramentas de ficheiros |

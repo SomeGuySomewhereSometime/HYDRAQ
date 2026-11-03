@@ -93,7 +93,7 @@ export class Dictation {
       if (!response.ok) throw Error(result.error || 'Não foi possível transcrever a gravação.');
       if (generation !== this.generation || this.key !== this.getKey()) return;
       const text = this.input.value, addition = (text && !/\s$/.test(text) ? ' ' : '') + result.text;
-      if ((text + addition).length > this.input.maxLength) throw Error('O texto transcrito não cabe na mensagem. Envia ou encurta o rascunho antes de voltar a ditar.');
+      if (this.input.maxLength >= 0 && (text + addition).length > this.input.maxLength) throw Error('O texto transcrito não cabe na mensagem. Envia ou encurta o rascunho antes de voltar a ditar.');
       this.input.value = text + addition;
       this.input.dispatchEvent(new Event('input', { bubbles: true })); this.input.focus();
       this.toast('Ditado acrescentado. Revê o texto e carrega em Enviar.');

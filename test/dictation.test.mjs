@@ -3,7 +3,25 @@ import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
 import { GroqDictation, inspectAudio, MAX_AUDIO_BYTES } from '../lib/dictation.mjs';
 import { createHttpServer } from '../lib/http.mjs';
+import { Dictation } from '../public/dictation.js';
 const audio = Buffer.from('RIFF0000WAVEfixture');
+
+test('ditado aceita uma caixa sem maxlength e respeita limites explícitos sem enviar automaticamente',async t=>{
+ const previous=globalThis.fetch;t.after(()=>{globalThis.fetch=previous;});
+ globalThis.fetch=async()=>Response.json({text:'Ditado.'});
+ for(const [maxLength,expected,overflow] of [[-1,'Rascunho. Ditado.',false],[17,'Rascunho. Ditado.',false],[16,'Rascunho.',true],[0,'Rascunho.',true]]){
+  const notices=[],events=[];let focused=false;
+  const dictation=Object.assign(Object.create(Dictation.prototype),{
+   input:{value:'Rascunho.',maxLength,dispatchEvent:event=>events.push(event.type),focus:()=>{focused=true;}},
+   generation:1,key:'chat',getKey:()=> 'chat',getToken:()=> 'test',controller:new AbortController(),
+   update:()=>{},toast:message=>notices.push(message),
+  });
+  await dictation.transcribe(new Blob(['audio'],{type:'audio/wav'}),1);
+  assert.equal(dictation.input.value,expected,'maxlength='+maxLength);
+  assert.deepEqual(events,overflow?[]:['input']);assert.equal(focused,!overflow);assert.equal(dictation.phase,'idle');
+  assert.match(notices[0],overflow?/não cabe/:/Ditado acrescentado/);
+ }
+});
 
 test('ditado envia Whisper V3 em português uma vez sem persistir áudio ou expor a chave', async () => {
   let calls = 0;

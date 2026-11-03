@@ -1552,3 +1552,32 @@ test('start_test recusa scripts da entrada depois de -- sem registar falsos suce
  await wait(()=>x.r.workflow.tests.find(t=>t.id===result.test.id).status!=='running');
  assert.equal(x.r.workflow.tests.find(t=>t.id===result.test.id).status,'passed');
 });
+
+test('capturas persistem ligadas ao teste; avaliação visual exige entrega, preserva independência e deteta alterações',{skip:noBwrap},async t=>{
+ const png='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a5j8AAAAASUVORK5CYII=';
+ const x=await setup(t);await x.plan();await x.implemented();
+ const command=`node -e 'require("fs").writeFileSync(process.env.HYDRAQ_TEST_ARTIFACTS+"/frame.png",Buffer.from("${png}","base64"))'`;
+ const a=(await x.raw('codex','start_test',{messageId:'visual',purpose:'Captura.',command,capture:true})).test;
+ await wait(()=>x.r.workflow.tests.find(t=>t.id===a.id).status!=='running');
+ const saved=x.r.workflow.tests.find(t=>t.id===a.id),meta=saved.artifacts[0];assert.equal(saved.status,'passed');assert.equal(saved.hash,x.r.workflow.snapshot.hash);
+ assert.equal(meta.bytes,undefined);assert.equal(meta.data,undefined);assert.equal((await x.raw('codex','test_status')).tests[0].artifacts[0].id,meta.id);
+ await assert.rejects(x.raw('claude','read_test_image',{testId:a.id,imageId:meta.id}),/primeiro a tua revisão/);
+ const args={...await x.read('codex'),decision:'approve',reason:'Testado.',testIds:[a.id]};await x.raw('codex','read_changes');
+ await assert.rejects(x.raw('codex','submit_review',args),/visualReview/);
+ await assert.rejects(x.raw('codex','submit_review',{...args,visualReview:{status:'reviewed',reason:'Vi a captura.'}}),/Lê todas/);
+ const image=await x.raw('codex','read_test_image',{testId:a.id,imageId:meta.id});assert.equal(image.image.data,png);assert.equal(image.hash,saved.hash);
+ await x.raw('codex','submit_review',{...args,visualReview:{status:'reviewed',reason:'Inspecionei a imagem de teste.'}});assert.equal(x.r.workflow.reviews.codex.visualReview.status,'reviewed');
+ const fromDisk=JSON.parse(await readFile(x.cx.directory+'/state.json','utf8')).conversations.find(r=>r.id===x.r.id);assert.equal(fromDisk.workflow.tests[0].artifacts[0].sha256,meta.sha256);
+ const stored=await x.cx.testImage(x.r.id,a.id,meta.id);await writeFile(stored.path,'alterado');await assert.rejects(x.cx.testImage(x.r.id,a.id,meta.id),/Imagem inválida|alterada/);
+ await assert.rejects(x.cx.testImage(x.r.id,a.id,'../../etc/passwd'),/não encontrada/);
+ await x.cx.stop(x.r.id);await settledTask(x);await x.cx.deleteTask(x.r.id,{confirm:true});
+ assert.equal(await stat(stored.path).catch(()=>null),null,'apagar tarefa remove também as capturas');
+});
+
+test('não avaliar capturas fica explícito na revisão e na conclusão',{skip:noBwrap},async t=>{
+ const {workflowEvidence}=await import('../lib/hydra-workflow.mjs');
+ const x=await setup(t);await x.plan();await x.implemented();const ids=await x.tests();
+ await x.call('codex','submit_review',{...await x.read('codex'),decision:'approve',reason:'Só lógica.',testIds:[ids.codex],visualReview:{status:'not-reviewed',reason:'Não foi possível observar animações.'}});
+ const round=x.r.workflow.rounds.at(-1);const evidence=workflowEvidence({...x.r,workflow:{...x.r.workflow,phase:'finalizing',rounds:[round]}});
+ assert.match(evidence,/avaliação visual não validada/);assert.match(evidence,/observar animações/);
+});

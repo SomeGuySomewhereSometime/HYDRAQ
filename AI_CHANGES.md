@@ -1,8 +1,12 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 176
+Versão atual: 178
 
 ## Resumo atual
+
+- Hydra — capturas nos testes e revisão visual (entrada 178): `start_test` aceita `capture:true`, guarda imagens fora do ambiente descartável e entrega-as com `read_test_image`; o cartão tem **Ver captura**. A avaliação visual é declarada à parte e as limitações ficam na conclusão. Suite **848/848**, browser **10/10**, imagens MCP vistas por Opus, Sol e Flash; tarefa real numa cópia do jogo **9/9**, original intacto. Sem vídeo, commit ou reinício da 4318; falta reiniciar para ativar o backend.
+
+- Ditado — corrigida a recusa de qualquer transcrição na caixa principal sem limite (entrada 177): o `maxLength=-1` do navegador deixa de ser tratado como um limite excedido. Testes **5/5**, browser **17/17**, sem chamadas à Groq nem recuperação do texto anterior. Requer recarregar a página; sem reinício do servidor.
 
 - Hydra — ensaios reais que faltavam (entrada 176), com Sol 6.1, Opus 5.5 e Argon em esforço medium: Codex como principal a tentar escrever fora da pasta **20/20**; retirar o agy a meio de um trio na cópia **20/20**; três versões sem maioria pausam sem nada escrito **5/5**; a vigilância por silêncio pausa o agy real, diz quem é, e a retoma continua. O motivo da pausa abaixo de um minuto passou a usar segundos.
 
@@ -2455,3 +2459,20 @@ Versão atual: 176
   - Só a vigilância de 5 minutos real não foi observada a disparar, porque nenhum passo real chegou lá; o mecanismo é o mesmo.
   - O teste na página, pelo utilizador, continua por fazer.
 
+
+### 177 — 2026-11-03 — Codex
+
+- Pedido: corrigir o aviso «O texto transcrito não cabe na mensagem»; o utilizador dispensou recuperar o texto anterior.
+- `public/dictation.js`: a caixa principal não tem `maxlength`, pelo que o navegador devolve `-1`. A comparação recusava qualquer texto; agora só aplica o limite se for não negativo. Mantém o rascunho, acrescenta a transcrição e exige envio manual.
+- Verificado: testes de ditado **5/5**, com regressão para caixa ilimitada, limite exato, excesso e limite zero. Browser **17/17**, com microfone artificial, áudio codificado e transcrição simulada; inclui acrescentar texto, cancelamento, quota, mudança de conversa e ecrã móvel, sem erros JavaScript. A primeira corrida do teste novo tinha a contagem de caracteres errada; foi corrigida e a corrida final passou. `git diff --check` sem erros. Provas em `/tmp/hydra-fix-dictation-177/`.
+- Limites: sem transcrição real na Groq, recuperação de texto anterior, commit, push ou reinício da 4318. Recarregar a página carrega o módulo atualizado.
+
+### 178 — 2026-11-03 — Codex
+
+- Pedido: implementar capturas nos testes isolados, leitura pelos modelos e apresentação no cartão, antes de acrescentar vídeo.
+- `start_test {capture:true}`: Chrome headless com `--no-sandbox` corre no bwrap existente. O browser e um servidor local comunicam pelo localhost privado, sem rede externa. As imagens vão para `$HYDRAQ_TEST_ARTIFACTS`, num tmpfs de 32 MB; a recolha aceita até 16 PNG/JPEG/WebP estáticos de 5 MB, 20 MB no total. Recusa links, hard links, pastas, conteúdo inválido e recolhas vazias. A quota atua durante a escrita. Há um transporte separado da saída textual; timeout e cancelamento não certificam imagens.
+- Persistência: as imagens são recolhidas antes da limpeza, guardadas em `outputs/<tarefa>/images`, com integridade verificada e associadas ao teste, participante, ronda e hash. O estado guarda metadados. `test_status` lista-as; `read_test_image` devolve imagem MCP, mantendo as capturas dos colegas ocultas até à própria revisão. A API autenticada e o cartão permitem **Ver captura**, também no histórico. Imagens ausentes ou alteradas dão erro e permitem tentar de novo. Apagar a tarefa remove-as.
+- Avaliação: entregar uma imagem só regista entrega. `submit_review.visualReview` declara `reviewed` com observações, depois de receber todas as capturas próprias relevantes, ou `not-reviewed` com a limitação. Revisão, cartão e conclusão mostram isso. Prompts, ferramentas e documentação indicam como capturar no isolamento e não confundem uma imagem com fluidez ou timing validados.
+- Verificado: suite sequencial **848/848**, zero ignorados, com 7 testes novos; testes de recolha **5/5** e regressões de fluxo **2/2**, incluindo a limpeza final. Browser novo `validation/hydra-images-ui.mjs` **10/10**, sem erros JavaScript: três capturas no bwrap real, autenticação, independência, leitura MCP, cartão, limitação visual e 390 px sem overflow. `git diff --check` sem erros.
+- Clientes reais: Opus 5.5, Sol 6.1 e agy com Gemini 3.8 Flash identificaram o fundo vermelho e o texto de uma imagem artificial recebida por MCP. O Sol ficou inicialmente na autorização MCP nativa, sem executar a leitura; uma segunda prova resolveu apenas essa autorização e passou. Não foi necessário usar Argon. Em seguida, tarefa Hydra completa com Opus principal e Flash, numa cópia temporária do jogo do utilizador: **9/9**, capturas recebidas e descritas por ambos, avaliação visual explícita, conclusão aprovada e jogo original intacto. Só o título do HTML da cópia mudou. Os dois declararam que a imagem estática não comprova fluidez. Provas, scripts, JSONs e capturas em `/tmp/hydra-visual-178/`; as primeiras verificações focada e de browser, com erros no próprio ensaio, também ficaram conservadas.
+- Limites: só imagens estáticas nesta etapa; sem gravação de vídeo nem validação temporal automática. Compatibilidade real confirmada nos três modelos acima; o Codex pode pedir autorização nativa para a primeira ferramenta MCP, pelo fluxo existente. Sem commit, push ou reinício da 4318; a funcionalidade só fica ativa no backend depois de reiniciar.
