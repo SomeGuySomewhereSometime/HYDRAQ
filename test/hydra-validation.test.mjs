@@ -427,3 +427,13 @@ test('um shell que lê o script da entrada não esconde falhas; um ficheiro de s
  for(const command of ["bash scripts/test.sh","bash -x scripts/test.sh arg","bash scripts/test.sh < input.txt","bash scripts/test.sh > out.log 2>&1","bash -- scripts/test.sh","sh scripts/test.sh","bash -c 'npm test' < /dev/null","bash --version"])
   assert.equal(testCommandProblem(command),null,command);
 });
+
+test('o separador -- só identifica um script quando existe um argumento de ficheiro',()=>{
+ for(const shell of ['bash','sh','/bin/bash']){
+  for(const suffix of [''," <<'EOF'\ntest 1 = 2\necho terminou\nEOF"," <<< 'test 1 = 2; echo terminou'",' < script.sh',' 3< input.txt > out.log',' <input.txt >out.log'])
+   assert.match(testCommandProblem(shell+' --'+suffix)||'',/lê o script da entrada/,shell+' --'+suffix);
+  assert.match(testCommandProblem("printf 'test 1 = 2\\necho terminou\\n' | "+shell+' --')||'',/lê o script da entrada/);
+  for(const suffix of [' scripts/test.sh',' < input.txt scripts/test.sh',' >out.log scripts/test.sh',' --version'])
+   assert.equal(testCommandProblem(shell+' --'+suffix),null,shell+' --'+suffix);
+ }
+});

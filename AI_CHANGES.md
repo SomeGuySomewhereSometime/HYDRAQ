@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 174
+Versão atual: 175
 
 ## Resumo atual
+
+- Hydra — variante `bash --` fechada (entrada 175): o separador só permite um script se existir um argumento de ficheiro; redireções, heredocs e pipes sem ficheiro continuam recusados. Validação e fluxo **191/191**, zero ignorados; duas regressões novas e reproduções da revisão recusadas. Sem modelos reais, commit ou reinício da 4318; a correção aguarda reinício para ficar ativa.
 
 - Hydra — ensaio final com modelos reais (entrada 174), com Opus e Flash, sem o Codex, que estava sem quota. Passaram: escrita fora da pasta **46/46**; pergunta nativa a meio, com o modelo a pedir ele próprio novo plano, **8/8**; pausar e retomar nas quatro fases na cópia **18/19**; parar o servidor com o agy a escrever **15/15**; a HYDRAQ como projeto **8/8**. O ensaio encontrou e corrigiu uma falha antiga do agy: depois de uma interrupção, o turno seguinte reutilizava o processo e morria com o SIGKILL armado para o anterior. Suite **838/838**.
 
@@ -2428,4 +2430,11 @@ Versão atual: 174
   - O Codex não entrou neste ensaio. Falta a escrita fora da pasta com o Codex como principal, cujo isolamento já foi testado diretamente no lote 2.
   - Retirar o agy, a pausa por silêncio e as três versões sem maioria continuam só com clientes simulados.
 - 4318 reiniciada com a correção do agy, sem nada em curso: novo serviço `hydraq-20261103T190351Z`, PID 2284120. Os clientes estão ligados, os ficheiros servidos iguais ao disco e os estados iguais, exceto o registo do histórico nativo do OpenCode. Para parar: `systemctl --user stop hydraq-20261103T190351Z`.
+
+### 175 — 2026-11-03 — Codex
+
+- Pedido: fechar o P1 da revisão às entradas 173 e 174. `bash --` sem ficheiro de script aceitava entrada por heredoc ou pipe e podia aprovar uma asserção falhada.
+- `nestedProblem` conserva o estado depois de `--` e só aceita o modo de ficheiro quando encontra realmente um argumento, descontando redireções. Sem ficheiro recusa como entrada padrão; `bash -- check.sh` e ficheiros precedidos de redireções continuam aceites.
+- Verificado: ficheiros completos de testes de validação e fluxo **191/191**, zero ignorados; **2 regressões novas**, também passadas isoladamente. Cobrem Bash, sh, caminho absoluto, heredoc, pipe, here-string, redireções e ficheiros legítimos. A integração confirma que `start_test` recusa sem criar resultados aprovados e que um ficheiro legítimo executa. As duas reproduções independentes que davam `passed` passaram a ser recusadas; `git diff --check` sem erros. Provas em `/tmp/hydra-fix-175-codex/`.
+- Limites: não foi repetida a suite completa; mantêm-se os prefixos não reconhecidos já registados na entrada 173 e o caráter heurístico do filtro. Sem modelos reais, commit, push ou reinício da 4318. A correção está no disco e só fica ativa no backend depois de reiniciar.
 

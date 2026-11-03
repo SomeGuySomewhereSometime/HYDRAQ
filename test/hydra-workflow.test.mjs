@@ -1542,3 +1542,13 @@ test('retomar na conclusão não acorda os revisores antes de haver versão para
  await x.turn('codex');await new Promise(r=>setTimeout(r,300));
  assert.equal(x.r.members.codex.turns,before.codex+1);assert.equal(x.r.members.claude.turns,before.claude);assert.equal(x.r.members.antigravity.turns,before.antigravity);
 });
+
+test('start_test recusa scripts da entrada depois de -- sem registar falsos sucessos',{skip:noBwrap},async t=>{
+ const x=await setup(t);await x.plan();await writeFile(x.cwd+'/check.sh','test "$(cat value.txt)" = after\n');await x.implemented();
+ for(const [index,command] of ["bash -- <<'EOF'\ntest 1 = 2\necho terminou\nEOF","printf 'test 1 = 2\\necho terminou\\n' | bash --","sh -- <<< 'test 1 = 2; echo terminou'","bash -- < value.txt"].entries())
+  await assert.rejects(x.raw('codex','start_test',{messageId:'stdin-'+index,command,purpose:'Verificar uma asserção.'}),/lê o script da entrada/);
+ assert.equal(x.r.workflow.tests.length,0,'comandos recusados não produzem um resultado aprovado');
+ const result=await x.raw('codex','start_test',{messageId:'ficheiro',command:'bash -- check.sh',purpose:'Verificar o conteúdo do projeto.'});
+ await wait(()=>x.r.workflow.tests.find(t=>t.id===result.test.id).status!=='running');
+ assert.equal(x.r.workflow.tests.find(t=>t.id===result.test.id).status,'passed');
+});
