@@ -19,7 +19,7 @@ try{
  await page.locator('[data-pair="codex+claude+antigravity"]').click();
  check('trio selecionável na conversa',await page.locator('[data-pair="codex+claude+antigravity"]').getAttribute('aria-pressed')==='true');
  check('três modelos no painel',await page.locator('.mode-hydra .mode-participant:visible').count()===3);
- await page.locator('.mode-hydra .mode-field').filter({has:page.locator('.mode-field-label',{hasText:'Principal · único implementador'})}).locator('[data-value="claude"]').click();
+ await page.locator('.mode-hydra .mode-field').filter({has:page.locator('.mode-field-label',{hasText:'Principal · coordena o plano e a conclusão'})}).locator('[data-value="claude"]').click();
  await page.locator('#prompt').fill('Implementa a alteração de value.txt para after e testa.');await page.locator('#send').click();
  await until(()=>hub.claudex.records.length===1);const r=hub.claudex.records[0],cx=hub.claudex;
  await until(()=>r.roles.every(k=>cx.native(r,k).status==='running'));check('tarefa usa três modelos e principal escolhido',r.roles.length===3&&r.author==='claude'&&r.workflow.version===2);
@@ -27,7 +27,7 @@ try{
  const candidate=async()=>{for(const role of r.roles)if(r.ready[role]!==r.evidenceRevision){await until(()=>cx.native(r,role).status==='running');await call(role,'ready_to_conclude',await read(role));}return (await call(r.author,'propose_final',{...await read(r.author),text:'Alterar value.txt e testar o resultado.'})).candidate;};
  const votes=async c=>{for(const role of r.roles){await until(()=>cx.native(r,role).status==='running');await call(role,'review_final',{...await read(role),candidateId:c.id,hash:c.hash,decision:role==='antigravity'?'changes':'approve',reason:role==='antigravity'?'Prefiro outra abordagem.':'Concordo.'});}finish();await until(()=>r.workflow.objection&&cx.native(r,r.author).status==='running');await call(r.author,'answer_objection',{...await read(r.author),decision:'keep',reason:'Mantenho: é o que o pedido descreve.'});finish();};
  for(const role of r.roles)await call(role,'initial_position',{text:'Posição '+role,intent:'implement',authorizationQuote:r.messages[0].text});await votes(await candidate());
- await until(()=>r.workflow.phase==='implementing'&&cx.native(r,'claude').status==='running');await page.locator('.cx-badge',{hasText:'Principal a implementar'}).waitFor();
+ await until(()=>r.workflow.phase==='implementing'&&cx.native(r,'claude').status==='running');await page.locator('.cx-badge',{hasText:'Implementação por etapas'}).waitFor();
  check('fase de implementação visível',await page.locator('#hydra-inline .cx-participant').count()===3);
  await page.screenshot({path:out+'/implementing-1440.png'});
  await writeFile(cwd+'/value.txt','after');await call('claude','implementation_done',{...await read('claude'),summary:'Alteração aplicada.'});finish();await until(()=>r.workflow.phase==='validating'&&r.roles.every(k=>cx.native(r,k).status==='running'));

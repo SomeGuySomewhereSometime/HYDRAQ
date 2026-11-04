@@ -22,7 +22,7 @@ async function setup(t,{loseResponse=true,roles=['codex','claude']}={}) {
   const ui=Object.assign(Object.create(ClaudeXUI.prototype),{
     selected:null,detail:null,pending:null,sending:false,inlineConversation:null,
     prompt:{value:'Compara duas soluções.'},settings:{open:true},
-    controls:Object.fromEntries(Object.entries({project:'',cwd:'',workspace:'direct',requestMode:'auto',codexModel:'test',codexEffort:'low',claudeModel:'test',claudeEffort:'low',antigravityModel:'test',antigravityEffort:'low',author:'codex',consensus:'true'}).map(([key,value])=>[key,{value}])),
+    controls:Object.fromEntries(Object.entries({implementationPreferences:'',externalEnabled:'false',externalScope:'principal',externalRisk:'false',project:'',cwd:'',workspace:'direct',requestMode:'auto',codexModel:'test',codexEffort:'low',claudeModel:'test',claudeEffort:'low',antigravityModel:'test',antigravityEffort:'low',author:'codex',consensus:'true'}).map(([key,value])=>[key,{value}])),
     guards:()=>({turns:30,minutes:60}),roles:()=>roles,getState:()=>hub.snapshot(),
     render(){},renderDetail(){},saveDraft(){},refresh:async()=>{},toast(){},
     api:async(route,body)=>{
@@ -34,6 +34,7 @@ async function setup(t,{loseResponse=true,roles=['codex','claude']}={}) {
       return result;
     },
   });
+  ui.controls.writers={value:'codex',multiple:true,selectedOptions:[{value:'codex'}]};ui.controls.externalServers={value:'',multiple:true,selectedOptions:[]};
   return {ui,hub,calls,results,folderCount:()=>folders,dir,cwd};
 }
 
@@ -44,6 +45,21 @@ test('Hydra no separador recupera a criação sem mudar pasta ou duplicar a tare
   assert.equal(folderCount(),1);assert.equal(hub.claudex.records.length,1);
   assert.equal(calls[0].requestId,calls[1].requestId);assert.equal(calls[0].cwd,calls[1].cwd);
   assert.equal(results[1].duplicate,true);assert.equal(ui.selected,results[0].task.id);assert.equal(ui.pending,null);
+});
+
+test('consentimento MCP explícito chega à tarefa e nunca passa a uma tarefa criada do histórico',async t=>{
+ const {ui,hub,calls,cwd}=await setup(t,{loseResponse:false});ui.controls.cwd.value=cwd;
+ hub.claudex.external.catalogProvider=async()=>[{id:'claude:blender',name:'blender',source:'claude',signature:'preview',config:{command:'never-started'}}];
+ ui.controls.externalEnabled.value='true';ui.controls.externalRisk.value='true';ui.controls.externalScope.value='all';ui.controls.externalServers.selectedOptions=[{value:'claude:blender',dataset:{signature:'preview'}}];
+ await ui.submit();assert.equal(calls[0].externalMcp.confirmRisk,true);assert.deepEqual(hub.claudex.records[0].externalMcp.roles,['codex','claude']);
+ await hub.claudex.stop(ui.selected);await hub.claudex.pauseDrains.get(ui.selected);await hub.claudex.releaseIdle(hub.claudex.record(ui.selected));ui.detail=hub.claudex.detail(ui.selected);ui.prompt.value='Outro pedido.';await ui.submit(true);
+ assert.equal(calls[1].externalMcp,undefined);assert.equal(hub.claudex.records[1].externalMcp,null);assert.deepEqual(calls[1].writers,['codex']);
+});
+
+test('uma configuração MCP mudada desde a escolha na página exige nova confirmação',async t=>{
+ const {ui,hub,cwd}=await setup(t,{loseResponse:false});ui.controls.cwd.value=cwd;ui.controls.externalEnabled.value='true';ui.controls.externalRisk.value='true';ui.controls.externalServers.selectedOptions=[{value:'claude:blender',dataset:{signature:'preview'}}];
+ hub.claudex.external.catalogProvider=async()=>[{id:'claude:blender',name:'blender',source:'claude',signature:'changed',config:{command:'never-started'}}];
+ await assert.rejects(ui.submit(),/configuração externa mudou/);assert.equal(hub.claudex.records.length,0);
 });
 
 test('Hydra na conversa recupera a criação automática depois de perder a resposta',async t=>{

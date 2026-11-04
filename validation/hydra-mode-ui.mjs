@@ -86,7 +86,7 @@ try {
   const numbers = page.locator('.mode-guards input');
   await numbers.nth(0).fill('0'); await numbers.nth(1).fill('0');
   check('guards mirrored', await page.locator('#cx-guardTurns').inputValue() === '0' && await page.locator('#cx-guardMinutes').inputValue() === '0');
-  await page.locator('.mode-field', { hasText: 'Principal · único implementador' }).locator('.mode-chip', { hasText: 'Claude Code' }).click();
+  await page.locator('.mode-field', { hasText: 'Principal · coordena o plano e a conclusão' }).locator('.mode-chip', { hasText: 'Claude Code' }).click();
   check('author mirrored', await page.locator('#cx-author').inputValue() === 'claude');
   // Send from the normal composer.
   await page.locator('#prompt').fill('Planear um organizador offline.');

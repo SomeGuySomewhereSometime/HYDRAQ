@@ -1902,12 +1902,18 @@ function hydraSetup(pair) {
     card.append(head, model.element, effort.element);
     entries.push({ element: card, sync() { model.sync(); effort.sync(); } });
   }
-  entries.push(chipGroup('Principal · único implementador', controls.author, { text: option => providerNames[option.value] || option.textContent }));
+  entries.push(chipGroup('Principal · coordena o plano e a conclusão', controls.author, { text: option => providerNames[option.value] || option.textContent }));
   entries.push(chipGroup('Decisão', controls.consensus));
   entries.push(chipGroup('Tipo de pedido', controls.requestMode));
   const workspace=chipGroup('Local de trabalho',controls.workspace),workspaceHint=element('p','cx-hint mode-workspace-hint');
   workspaceHint.id='mode-workspace-hint-'+key.replaceAll('+','-');workspace.element.setAttribute('aria-describedby',workspaceHint.id);
   entries.push(workspace,{element:workspaceHint,sync(){workspaceHint.textContent=claudexUI.workspaceHint.textContent;}});
+  for(const [name,label] of [['writers','Implementadores autorizados · só na cópia privada'],['implementationPreferences','Preferências de distribuição'],['externalEnabled','Ferramentas externas (MCP)'],['externalServers','Servidores externos'],['externalScope','Quem usa ferramentas externas'],['externalRisk','Autorização de ações externas']]){
+    const source=controls[name],wrap=element('label','mode-field'),input=document.createElement(source.tagName.toLowerCase());input.setAttribute('aria-label',label);if(source.multiple){input.multiple=true;input.size=source.size;}if(source.maxLength>0)input.maxLength=source.maxLength;input.placeholder=source.placeholder||'';
+    wrap.append(element('span','mode-field-label',label),input);input.addEventListener('change',()=>{if(source.multiple){for(const o of source.options)o.selected=[...input.selectedOptions].some(s=>s.value===o.value);}else source.value=input.value;source.dispatchEvent(new Event('change',{bubbles:true}));});
+    entries.push({element:wrap,sync(){wrap.hidden=source.parentElement.hidden;input.disabled=source.disabled;if(source.tagName==='SELECT'){const sig=source.innerHTML;if(input.dataset.options!==sig){input.innerHTML=sig;input.dataset.options=sig;}for(const o of input.options)o.selected=[...source.selectedOptions].some(s=>s.value===o.value);}else if(document.activeElement!==input)input.value=source.value;}});
+  }
+  entries.push({element:element('p','cx-hint'),sync(){this.element.hidden=claudexUI.externalHint.hidden;this.element.textContent=claudexUI.externalHint.textContent;}});
   const guards = element('div', 'mode-field mode-guards'), turns = numberField('Proteção · turnos por participante', controls.guardTurns, 'turnos'), minutes = numberField('Proteção · minutos ativos', controls.guardMinutes, 'min');
   guards.append(element('span', 'mode-field-label', 'Proteções · 0 desativa'), turns.element, minutes.element);
   guards.dataset.tip = claudexUI.guardHint.textContent;
@@ -1921,7 +1927,7 @@ const modeTiles = Object.fromEntries([
   ['normal', 'Normal', 'Um cliente', 1, 'Um cliente responde. Podes trocar de cliente a meio da conversa, com passagem de contexto.'],
   ['dual', 'Multi', 'Até 4 modelos', 4, 'Dois a quatro clientes, todos, um ou um grupo. Respostas independentes por ronda; só o principal implementa.'],
   ['review', 'Revisor', 'Automático', 2, 'Outros modelos reveem automaticamente a resposta ou o código do principal.'],
-  ['hydra', 'Hydra', 'Em diálogo', 3, 'Dois ou três modelos planeiam juntos. Se pedires alterações, só o principal implementa; todos reveem e testam, na mesma tarefa.'],
+  ['hydra', 'Hydra', 'Em diálogo', 3, 'Dois ou três modelos planeiam juntos. Se pedires alterações, os implementadores autorizados executam por etapas; todos reveem e testam, na mesma tarefa.'],
 ].map(([mode, label, subtitle, heads, tip]) => {
   const tile = element('button', 'mode-tile');
   tile.type = 'button'; tile.dataset.mode = mode; tile.dataset.tip = tip;

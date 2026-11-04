@@ -49,6 +49,25 @@ async function setup(t,extra={}){
  return {root,cwd,hub,cx,r,roles,clients,call,raw,read,finish,phase,turn,positions,candidate,vote,answerObjection,plan,implemented,tests,place:workplace};
 }
 
+test('etapas com clientes simulados: plano exato, passagem independente e retoma do executor correto',async t=>{
+ const x=await setup(t,{roles:['codex','claude'],workspace:'copy',writers:['codex','claude']});
+ // This test drives coordination and real filesystem copies, not native command confinement.
+ x.cx.writerProblem=async()=>null;x.cx.testingProblem=async()=>null;
+ await x.positions();for(const role of x.roles)await x.call(role,'ready_to_conclude',await x.read(role));
+ await assert.rejects(x.call('codex','propose_final',{...await x.read('codex'),text:'Plano sem distribuição.'}),/distribuição exata/);
+ const implementation={steps:[{role:'codex',instructions:'Preparar lógica.'},{role:'claude',instructions:'Acabar interface.'}],fixer:'claude'};
+ const c=(await x.call('codex','propose_final',{...await x.read('codex'),text:'Plano com dois responsáveis.',implementation})).candidate;
+ assert.deepEqual(c.implementation.steps.map(s=>s.role),['codex','claude']);assert.match(c.text,/Acabar interface/);
+ for(const role of x.roles)await x.vote(c,role);x.finish();await wait(()=>x.r.workflow.phase==='implementing'&&x.cx.native(x.r,'codex').status==='running');
+ const first=x.place();await writeFile(first+'/value.txt','one');const fd=await fsp.open(first+'/value.txt','r+');t.after(()=>fd.close());
+ await assert.rejects(x.call('codex','implementation_done',{...await x.read('codex'),summary:'Sem identificador.'}),/stepId/);
+ await x.call('codex','implementation_done',{...await x.read('codex'),stepId:x.r.workflow.steps[0].id,summary:'Lógica pronta.'});x.finish();await wait(()=>x.r.workflow.writer==='claude'&&x.cx.native(x.r,'claude').status==='running');
+ const second=x.place();assert.notEqual(first,second);await fd.write('LATE',0,'utf8');assert.equal(await readFile(second+'/value.txt','utf8'),'one');assert.equal(await readFile(x.cwd+'/value.txt','utf8'),'before');assert.equal(x.clients.claude.logs.at(-1).settings.hydraWrite,true);
+ await writeFile(second+'/value.txt','after');await x.cx.pause(x.r.id);await x.cx.pauseDrains.get(x.r.id);await wait(()=>!x.cx.jobs.has(x.r.id));await x.cx.resume(x.r.id,{requestId:'resume-stage'});await wait(()=>x.cx.native(x.r,'claude').status==='running');
+ const resumed=x.place();assert.notEqual(resumed,second);await writeFile(second+'/value.txt','LATE');assert.equal(await readFile(resumed+'/value.txt','utf8'),'after');assert.equal(x.r.workflow.writer,'claude');
+ await x.call('claude','implementation_done',{...await x.read('claude'),stepId:x.r.workflow.steps[1].id,summary:'Interface pronta.'});x.finish();await x.phase('validating');assert.notEqual(x.place(),resumed);assert.equal(await readFile(x.place()+'/value.txt','utf8'),'after');assert.equal(x.r.workflow.completedSteps.length,2);assert.equal(await readFile(x.cwd+'/value.txt','utf8'),'before');assert.ok(x.roles.every(k=>x.clients[k].logs.at(-1).settings.hydraWrite===false));
+});
+
 test('trio: maioria aprova plano, só principal escreve, todos testam e votam conclusão',{skip:noBwrap},async t=>{
  const x=await setup(t);await x.plan();
  assert.equal(x.r.workflow.approvedPlan.votes.antigravity.decision,'changes');

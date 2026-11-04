@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, readFile, cp, readlink } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -64,6 +64,12 @@ test('sessão nativa: mesmo processo, retoma por ID ao mudar de modelo e após r
   await restarted.send(again.id,'quarto','d');await waitFor(()=>again.status==='completed');
   assert.match(again.messages.at(-1).text,/Resposta 4/);
   assert.equal(again.threadId,c.threadId);
+});
+
+test('mudar a pasta conserva a sessão mas renova o processo, mesmo com modelo e permissões iguais',async t=>{
+ const {client,directory}=await setup(t);await client.connect();const c=await client.create({cwd:directory,model:'haiku',effort:'low'});
+ await client.send(c.id,'primeiro','stage-one');await waitFor(()=>c.status==='completed');const pid=client.session.child.pid,id=c.threadId,next=directory+'-next';t.after(()=>rm(next,{recursive:true,force:true}));await cp(directory,next,{recursive:true});c.cwd=next;
+ await client.send(c.id,'segundo','stage-two');await waitFor(()=>c.status==='completed');assert.notEqual(client.session.child.pid,pid);assert.equal(c.threadId,id);assert.equal(await readlink('/proc/'+client.session.child.pid+'/cwd'),next);assert.match(c.messages.at(-1).text,/Resposta 2/);
 });
 
 test('autorizações nativas passam pela interface e recusas ficam registadas',async t=> {

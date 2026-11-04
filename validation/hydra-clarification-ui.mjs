@@ -18,7 +18,7 @@ try{
  browser=await chromium.launch({headless:true,executablePath:'/usr/bin/google-chrome',args:['--no-sandbox']});const page=await browser.newPage({viewport:{width:1440,height:1000}});page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(id=>{localStorage.setItem('hydraq.theme','atelier');localStorage.setItem('hydraq.conversation',id);localStorage.setItem('hydraq.mascotAnimation','false');},normal.id);
  await page.goto('http://127.0.0.1:'+server.address().port);await page.locator('.mode-tile[data-mode="hydra"]').click();await page.locator('[data-pair="codex+claude+antigravity"]').click();
- await page.locator('.mode-hydra .mode-field').filter({has:page.locator('.mode-field-label',{hasText:'Principal · único implementador'})}).locator('[data-value="claude"]').click();
+ await page.locator('.mode-hydra .mode-field').filter({has:page.locator('.mode-field-label',{hasText:'Principal · coordena o plano e a conclusão'})}).locator('[data-value="claude"]').click();
  await page.locator('#prompt').fill('Implementa a alteração de value.txt para after e testa.');await page.locator('#send').click();
  await until(()=>hub.claudex.records.length===1);const r=hub.claudex.records[0],cx=hub.claudex,request=r.messages[0].text;
  await until(()=>r.roles.every(k=>cx.native(r,k).status==='running'));
@@ -26,7 +26,7 @@ try{
  const positions=async intent=>{for(const role of r.roles)await call(role,'initial_position',{text:'Posição '+role,intent,authorizationQuote:request,revision:r.revision});};
  const agree=async text=>{for(const role of r.roles)await call(role,'ready_to_conclude',await read(role));const c=(await call(r.author,'propose_final',{...await read(r.author),text})).candidate;for(const role of r.roles)await call(role,'review_final',{...await read(role),candidateId:c.id,hash:c.hash,decision:'approve'});finish();};
  await positions('implement');await agree('Alterar value.txt e testar o resultado.');
- await until(()=>r.workflow.phase==='implementing'&&cx.native(r,'claude').status==='running');await page.locator('.cx-badge',{hasText:'Principal a implementar'}).waitFor();
+ await until(()=>r.workflow.phase==='implementing'&&cx.native(r,'claude').status==='running');await page.locator('.cx-badge',{hasText:'Implementação por etapas'}).waitFor();
 
  clients.claude.approvals.set('q1',{id:'q1',method:'claude/askUserQuestion',conversationId:cx.native(r,'claude').id,params:{questions:[{question:'Qual o formato?',header:'Formato',options:[{label:'Texto simples'}]}]}});
  await hub.respond('claude:q1',{decision:'accept',answers:{'Qual o formato?':'Texto simples'}});

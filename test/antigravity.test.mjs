@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile, mkdir, readlink } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +25,11 @@ async function setup(t) {
   return {client,directory,options,settingsFile,cleanupClients};
 }
 async function chat(client,directory){return client.create({cwd:directory,model:'gemini-4-argon',effort:'low'});}
+
+test('mudar de etapa troca o processo aquecido e a pasta sem mudar a conversa',async t=>{
+ const {client,directory}=await setup(t),c=await chat(client,directory);await client.send(c.id,'primeiro','stage-one');await waitFor(()=>c.status==='completed');const pid=client.session.child.pid,id=c.threadId,next=directory+'/next';await mkdir(next);c.cwd=next;
+ await client.send(c.id,'segundo','stage-two');await waitFor(()=>c.status==='completed');assert.notEqual(client.session.child.pid,pid);assert.equal(c.threadId,id);assert.equal(await readlink('/proc/'+client.session.child.pid+'/cwd'),next);assert.match(c.messages.at(-1).text,/Resposta/);
+});
 
 test('sucesso sem resposta é falha explícita e recusa de ferramenta mantém a sua causa',async t=>{
  const{client,directory}=await setup(t),c=await chat(client,directory);

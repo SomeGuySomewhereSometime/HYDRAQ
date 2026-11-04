@@ -13,7 +13,7 @@ async function setup(t){const root=await mkdtemp('/tmp/hydra-artifacts-'),cwd=ro
 test('transporte aceita imagens reais e recusa nomes, conteúdo e quantidades inválidos',()=>{
  const raw=files=>JSON.stringify({files});
  const image=decodeArtifacts(raw([{name:'frame.png',data:png}]))[0];assert.equal(image.width,1);assert.equal(image.mimeType,'image/png');
- for(const files of [[{name:'../escape.png',data:png}],[{name:'arquivo.svg',data:Buffer.from('<svg/>').toString('base64')}],Array.from({length:17},(_,i)=>({name:i+'.png',data:png})),[{name:'same.png',data:png},{name:'same.png',data:png}]])assert.throws(()=>decodeArtifacts(raw(files)));
+ for(const files of [[{name:'../escape.png',data:png}],[{name:'arquivo.svg',data:Buffer.from('<svg/>').toString('base64')}],Array.from({length:33},(_,i)=>({name:i+'.png',data:png})),[{name:'same.png',data:png},{name:'same.png',data:png}]])assert.throws(()=>decodeArtifacts(raw(files)));
 });
 test('capturas saem do tmpfs antes da limpeza sem alterar o código; falhas conservam a imagem',{skip:noBwrap},async t=>{
  const x=await setup(t);const r=await runValidation({...x,capture:true,command:writeImage+'; test 1 = 2'});
