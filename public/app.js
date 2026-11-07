@@ -13,6 +13,7 @@ import { quotaUsageView } from './turn-quotas.js';
 import { OpinionUI, opinionResultAnchors, diagnosticsView } from './opinions.js';
 import { Layout, Tooltips, AppearanceMenu, ClientColors, APPEARANCES, COLUMNS } from './layout.js';
 // A server started before the dual routes does not serve dual.js: the composer then works without Dual.
+const gitPanelModule = await import('./git-panel.js').catch(() => null);
 const claudexModule = await import('./claudex.js').catch(() => null);
 const dualModule = await import('./dual.js').catch(() => null);
 // Readable actions, durations and the request summary; a server started before it existed leaves the old card.
@@ -300,7 +301,9 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
   messageSignature=activitySignature=approvalsSignature=progressSignature='';settingsOwner=null;render();
   if(!overview)$('#prompt').focus();
 }
-const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{accept(await api('/api/state'));render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id)});
+const gitPanel = gitPanelModule ? new gitPanelModule.GitPanelUI({ api }) : null;
+$('#git-panel-trigger').addEventListener('click', () => gitPanel?.open(project()));
+const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{accept(await api('/api/state'));render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id),git:gitPanel ? p=>gitPanel.open(p) : null});
 const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:current,getProject:project,getKey:composerKey,getProvider:providerId,toast,renderImages:(target,images)=>imageAttachments.renderMessage(target,images),changed:()=>render()});
 const providerStatus = providerStatusModule && $('#provider-status') ? new providerStatusModule.ProviderStatus({root:$('#provider-status'),api,getState:()=>state,getProvider:providerId,getSelections:quotaSelections,accept,render,toast}) : null;
 if ($('#provider-status')) $('#provider-status').hidden = !providerStatus;
@@ -1540,6 +1543,7 @@ function renderHydra(conversation) {
 }
 
 function render() {
+  $('#git-panel-trigger').hidden = !gitPanel || !project() || Boolean(project()?.archived);
   if (!state) return;
   if (selected && !state.conversations.some(conversation => conversation.id === selected)) selected = null;
   const conversation = current();

@@ -1,8 +1,16 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 190
+Versão atual: 194
 
 ## Resumo atual
+
+- Ativação do painel Git (entrada 194): versão 194 na 4318 (PID 87133), cinco clientes ligados, 119 conversas preservadas e painel Git servido.
+
+- Primeiro estado Git (entrada 193): ficheiros novos são listados por metadados e nomes sensíveis. Verificações de conteúdo continuam antes da seleção, ao abrir o diff. Ensaio com 384 MiB novos: mediana de 672 para 23 ms. Testes focados 78/78. Sem reinício da 4318.
+
+- Estado do painel Git (entrada 192): usa os dados de stat do índice para evitar ler assets intactos. Verifica bytes quando há alterações, risco de racy Git ou metadados insuficientes. Ensaio de 384 MiB passou de 586 ms e 384 MiB lidos para 19 ms e 43 KiB lidos. Os quatro conjuntos focados passaram 77/77. Sem reinício da 4318.
+
+- Painel Git por projeto (entrada 191): ativação com proposta de `.gitignore`, estado, diff, commit dos blobs revistos, histórico, restauro com ponto de segurança, branches e envio remoto confirmado. Testes focados 75/75 e quatro percursos no navegador. A instância da 4318 precisa de reinício para o ativar.
 
 - Entrega e arranque (entrada 190): alterações 187–189 entregues em commit local, sem push. Versão 190 ativa na 4318 (PID 18945), cinco clientes ligados e 119 conversas preservadas; testes focados 15/15.
 
@@ -2586,3 +2594,30 @@ Versão atual: 190
 
 - Commit pedido pelo utilizador, incluindo as entradas 187–189 e respetivos testes/guiões, sem artefactos de `output/` e sem push.
 - A porta 4318 não respondia antes da operação. Versão 190 iniciada com PID 18945 e opções HYDRAQ_PEER_WAIT=1, HYDRAQ_NORMAL_DELEGATION=1 e limite de três delegações. Os cinco clientes ligaram; as 119 conversas conservam os mesmos IDs por cliente e não há tarefas ativas. /health confirmou a revisão e ausência de reinício pendente; módulos da página responderam 200. Testes focados 15/15; sem inferência real. Processo em segundo plano por ausência de terminal gráfico, com logs em .hydraq/server.log.
+
+
+### 191 — 2026-11-07 — Codex — painel Git por projeto
+
+- **Git** junto à conversa e na página do projeto. Ativação com proposta de `.gitignore`, avisos de possíveis segredos e ficheiros grandes, diffs por ficheiro, histórico, comparação e troca de branches, restauro com cópia de segurança e configuração e pré-visualização do remoto antes do envio.
+- Commit dos blobs revistos, com verificação da árvore, bloqueio de HEAD e índice e atualização condicional da branch a partir de uma worktree auxiliar. Preserva preparação alheia e edições posteriores. Diário recupera interrupções sem repetir o commit. Reservas do HYDRAQ impedem escrita concorrente no projeto.
+- Git 2.53 no Linux, referências `files`, SHA-1 e SHA-256. Filtros, hooks e assinatura obrigatória tratados explicitamente. Envio só com avanço da branch e referência remota revista. Testes focados **75/75**: `git-panel` 9, `http-events` 1, `hydra-validation` 42 e `projects` 23. Incluem SIGKILL entre referência e índice, troca concorrente de branch e remoto local. Quatro percursos no navegador com clientes simulados e capturas desktop/móvel inspecionadas em `output/git-panel-191/`. Acesso a um serviço Git remoto autenticado por confirmar. Sem commit nem reinício da 4318.
+
+
+### 192 — 2026-11-07 — Codex — estado Git sem releitura dos assets intactos
+
+- Aproveita o stat do índice quando coincide com o ficheiro e o mtime antecede o do índice. Recorre a leitura e hash próprios se os metadados mudaram, se houver risco de racy Git, se o índice mudar durante a consulta ou se o Git devolver um formato de stat desconhecido. Só consulta atributos para os candidatos a alteração. Os hashes de leituras verificadas podem ser reutilizados em memória para as entradas criadas pelo painel sem stat nativo, desde que os timestamps e o blob ainda coincidam.
+- Comparação no mesmo repositório descartável, com 48 assets esparsos de 8 MiB, três medições por caso. Estado limpo: mediana de **585,6 para 18,6 ms** e contagem de leitura do processo de **402 712 116 para 44 331 bytes**. Com um asset alterado: **36,9 ms** e **8 440 558 bytes**.
+- Proposta Unity inclui .vs, .idea, projetos e soluções do IDE e MemoryCaptures. Mantido o âmbito completo pedido pelo utilizador, incluindo envio após confirmação explícita. Autenticação em serviço remoto continua por verificar. Testes **77/77**: `git-panel` 11, `http-events` 1, `hydra-validation` 42 e `projects` 23. Quatro percursos no navegador isolado aprovados, incluindo envio para um remoto local. Sem commit nem reinício da 4318.
+
+
+### 193 — 2026-11-07 — Codex — listar ficheiros novos sem abrir o conteúdo
+
+- A lista de alterações usa só metadados para caminhos ausentes do HEAD e do índice. Conserva avisos por nome, tamanho e atributos Git. O diff continua a verificar possíveis segredos no conteúdo, conversões de fins de linha e o blob revisto antes de permitir a seleção.
+- Três medições de `listChanges` por caso. Repositório recém-inicializado com 48 assets esparsos novos (384 MiB): mediana de **671,9 para 22,8 ms** e leituras do processo de **402 698 630 para 43 144 bytes**. Na pasta HYDRAQ, os mesmos 412 resultados passaram de **1126,8 para 142,2 ms** e de **53 667 975 para 1 576 506 bytes**.
+- Testes focados **78/78**: `git-panel` 12, `http-events` 1, `hydra-validation` 42 e `projects` 23. A regressão cobre listagem sem ler um asset novo de 16 MiB, aviso acima de 64 MiB, bloqueio de um segredo no conteúdo e recusa de uma conversão CRLF na revisão. Quatro percursos no navegador isolado aprovados. Sem commit nem reinício da 4318.
+
+
+### 194 — 2026-11-07 — Codex — ativação do painel Git
+
+- Entrega das entradas 191–193 pedida pelo utilizador.
+- Instância 18945 encerrada sem tarefas nem autorizações pendentes. A nova instância (PID 87133) serve a revisão 194 na porta 4318 com os cinco clientes ligados e os mesmos 119 IDs de conversa. Módulo Git servido igual ao ficheiro em disco. Estado Git confirmado no projeto HYDRAQ. Opções de arranque preservadas. Logs em `.hydraq/server.log`. Sem push.

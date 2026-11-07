@@ -60,8 +60,8 @@ export function conversationGroups(state) {
 }
 
 export class ProjectUI {
-  constructor({getState,api,refresh,choose,openProject,newChat,toast,memory}) {
-    Object.assign(this,{getState,api,refresh,choose,openProject,newChat,toast,memory});this.open=new Set();this.archived=false;
+  constructor({getState,api,refresh,choose,openProject,newChat,toast,memory,git}) {
+    Object.assign(this,{getState,api,refresh,choose,openProject,newChat,toast,memory,git});this.open=new Set();this.archived=false;
     this.search=document.querySelector('#project-search');
     this.search.addEventListener('input',()=>{this.signature='';this.render(this.selection);});
     const contentSearch=this.button('Pesquisar conteúdo…',()=>this.searchContent());contentSearch.id='search-content';contentSearch.className='secondary-button';this.search.after(contentSearch);
@@ -145,6 +145,7 @@ export class ProjectUI {
     const title=project?.name||'Sem projeto';view.append(el('p','eyebrow','PROJETOS'),el('h1','',title),el('p','project-path',project?.root||'Conversas independentes, cada uma com a sua pasta de trabalho.'));
     if(project?.available===false)view.append(el('p','notice',project.folderError));
     const actions=el('div','project-page-actions');const create=this.button('＋ Nova conversa',()=>this.newChat(project?.id||null),'primary-action');create.disabled=Boolean(catalog?.error||project?.archived||project?.available===false);actions.append(create);
+    if(project&&!project.archived&&this.git)actions.append(this.button('Git',()=>this.git(project)));
     if(project)actions.append(this.button('Definições do projeto',()=>this.editProject(project)),this.button('Memória e conversas',()=>this.memory(project.id)));view.append(actions);
     view.append(el('p','',project?.archived?'Projeto arquivado. Restaura-o nas definições para continuar.':'Cada conversa mantém a sua sessão. A memória curada e os avisos recentes seguem com os pedidos; as outras conversas são consultadas apenas quando necessário.'));
     const own=conversationGroups(state).filter(g=>(g.organization.projectId||null)===(project?.id||null)&&(!g.organization.archived||this.archived||project?.archived));

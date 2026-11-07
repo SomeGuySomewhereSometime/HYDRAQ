@@ -282,6 +282,16 @@ O catálogo privado `.hydraq/projects.json` guarda a organização por grupo, se
 
 Uma pasta indisponível ou que passou a apontar para outro caminho bloqueia novos pedidos, conservando as conversas para consulta. Não é feita uma retoma noutra pasta. Várias raízes por projeto, revisão paralela e delegação automática ficam para uma versão posterior.
 
+## Git por projeto
+
+Abre **Git** na página do projeto ou junto à conversa. Num projeto sem repositório, **Ativar Git** mostra uma proposta de `.gitignore` para rever. O painel preserva um `.gitignore` existente. Na lista de alterações, ficheiros grandes recebem um aviso de LFS. Para ficheiros novos, a lista consulta os metadados e sinaliza nomes sensíveis. A verificação heurística do conteúdo acontece ao abrir o diff, antes de o ficheiro ficar disponível para seleção.
+
+Em **Alterações**, abre o diff de cada ficheiro, marca os que queres guardar e escolhe **Criar commit local**. O commit usa os blobs revistos e deixa as edições posteriores na pasta. Entradas que já têm preparação no terminal ficam fora da seleção. O painel preserva a preparação dos restantes ficheiros. Usa a identidade configurada no Git. Se a configuração exigir assinatura, cria o commit no terminal. O painel suspende operações de escrita quando há trabalho ativo no repositório e tem um cartão próprio para recuperar uma interrupção entre a criação do commit e a atualização do índice.
+
+Em **Histórico**, seleciona um commit, abre um ficheiro alterado e pré-visualiza o restauro. A operação guarda uma cópia do conteúdo atual em **Pontos de segurança de restauros** e altera a pasta de trabalho. Em **Branches**, podes criar, trocar e comparar branches locais. Em **Remoto**, escolhe ou adiciona um destino, abre a pré-visualização e confirma os commits a enviar. O painel só permite avançar a branch remota a partir do estado revisto. Para acesso privado, SSH usa o agente e HTTPS pode usar o auxiliar de credenciais global do Git.
+
+Requer Linux, a worktree principal e um Git recente com referências no formato `files` (validado com Git 2.53). O painel mostra ficheiros binários pelo tamanho e pelo identificador do blob. Ficheiros que precisam de filtros ou conversão, submódulos, ligações simbólicas, ficheiros acima de 64 MiB e diffs de texto acima do orçamento de 1 MiB usam o terminal. As operações do painel não executam hooks do repositório.
+
 ## Memória e consulta das conversas do projeto
 
 Na página do projeto, usa **Memória e conversas**; na conversa, **Memória e conversas do projeto**. São três níveis separados:
