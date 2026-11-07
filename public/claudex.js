@@ -1,3 +1,4 @@
+import { hydraQuotaUsage, quotaUsageView } from './turn-quotas.js';
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const providers=['codex','claude','antigravity'],legacyRoles=['codex','claude'],names={codex:'Codex',claude:'Claude',antigravity:'Antigravity',user:'Tu',coordinator:'Hydra'};
 export const pairName=roles=>roles.length===3?'Hydra Trio':roles.includes('antigravity')?(roles.includes('claude')?'Claudini':'Geminex'):'ClaudeX';
@@ -72,12 +73,13 @@ export class ClaudeXUI{
   this.workspaceInfo=node('div');this.workspaceInfo.hidden=true;
   this.approvals=node('div');this.goal=node('div','cx-goal');
   this.exchanges=node('details','cx-exchanges');this.exchanges.open=true;this.exchangeSummary=node('summary','','Diálogo');this.messages=node('div','cx-messages');this.exchanges.append(this.exchangeSummary,this.messages);
+  this.quotaHost=node('div');this.quotaHost.hidden=true;
   this.result=node('section','cx-result');this.result.setAttribute('aria-label','Resposta comum do Hydra');
   this.draft=node('details','cx-draft');this.draft.append(node('summary','','Versões e aprovações'));this.versions=node('div');this.draft.append(this.versions);
   this.form=node('form','cx-composer');const label=this.promptLabel=node('label','sr-only','Pedido para o Hydra');this.prompt=node('textarea');this.prompt.id='cx-prompt';label.htmlFor=this.prompt.id;this.prompt.rows=3;this.prompt.maxLength=16000;this.prompt.placeholder='O que queres que os participantes investiguem juntos?';this.prompt.addEventListener('input',()=>this.saveDraft());
   const actions=node('div','cx-actions');this.hint=node('span','cx-hint');this.send=node('button','primary','Iniciar ClaudeX');this.send.type='submit';this.stop=this.button('Pausar todos',async()=>{this.detail=await this.api('/api/claudex/'+this.selected+'/pause',{});this.renderDetail();this.render();});this.finish=this.button('Terminar tarefa',async()=>{this.detail=await this.api('/api/claudex/'+this.selected+'/stop',{});this.renderDetail();this.render();});this.finish.title='Liberta as conversas; o progresso fica guardado.';this.finish.hidden=true;this.clone=this.button('Nova tarefa com este progresso',()=>this.sendRequest(true));this.clone.title='Abre novas sessões com o progresso identificado; conserva a tarefa anterior.';this.clone.hidden=true;actions.append(this.hint,this.stop,this.finish,this.clone,this.send);this.form.append(label,this.prompt,actions);
   this.form.addEventListener('submit',e=>{e.preventDefault();this.sendRequest();});
-  main.append(heading,this.intro,this.error,this.pauseNotice,this.settings,this.workspaceInfo,this.participants,this.approvals,this.goal,this.exchanges,this.result,this.draft,this.form);this.root.append(history,main);this.restoreDraft();
+  main.append(heading,this.intro,this.error,this.pauseNotice,this.settings,this.workspaceInfo,this.participants,this.approvals,this.goal,this.exchanges,this.result,this.quotaHost,this.draft,this.form);this.root.append(history,main);this.restoreDraft();
  }
  saveDraft(){localStorage.setItem('hydraq.claudex.draft.'+(this.selected||'new'),this.prompt.value);}
  restoreDraft(){this.prompt.value=localStorage.getItem('hydraq.claudex.draft.'+(this.selected||'new'))||'';}
@@ -136,6 +138,11 @@ export class ClaudeXUI{
   this.view={roles,status,running,canResume,pausing,interruptionPending,connected,stopLabel:this.stop.textContent,stopDisabled:this.stop.disabled};
   // In a conversation the request and the common answer are its own messages, around this card.
   this.settings.hidden=this.promptLabel.hidden=this.prompt.hidden=this.send.hidden=this.hint.hidden=this.goal.hidden=this.result.hidden=inline;if(inline)this.stop.hidden=true;this.form.hidden=inline&&this.finish.hidden&&this.clone.hidden;this.intro.hidden=!inline||Boolean(this.selected);
+  const quotas=this.quotaRows(this.detail),quotaSignature=JSON.stringify(quotas);
+  if(this.quotaSignature!==quotaSignature){
+   this.quotaSignature=quotaSignature;this.quotaHost.hidden=!quotas.length;
+   this.quotaHost.replaceChildren(...(quotas.length?[this.quotaSection(quotas)]:[]));
+  }
   this.changed();
  }
  async refresh(){if(this.loading||!this.selected)return;this.loading=true;const id=this.selected;try{const d=await this.api('/api/claudex/'+id);if(id!==this.selected)return;this.detail=d;this.renderDetail();this.render();}catch(e){this.error.textContent=e.message;this.error.hidden=false;}finally{this.loading=false;}}
@@ -163,6 +170,13 @@ export class ClaudeXUI{
   this.result.replaceChildren();if(d.result){if(this.resultTask!==d.id){this.resultTask=d.id;this.exchanges.open=false;}this.result.append(node('h2','',d.result.label||outcomes[d.result.outcome]||(d.result.agreed?outcomes.agreement:outcomes.synthesis)),this.markdown(d.result.text),this.button('Copiar resposta',()=>navigator.clipboard.writeText(d.result.text)));}
   else if(d.candidateId)this.result.append(node('p','cx-hint','A versão candidata está em revisão. O documento final aparece aqui quando o processo terminar.'));
   this.draft.hidden=!d.candidates.length;this.versions.replaceChildren(...this.versionList(d,opened),...this.validationList(d));
+ }
+ quotaRows(task){return hydraQuotaUsage(task,this.getState()?.conversations||[]);}
+ quotaSection(rows){
+  const section=node('section','cx-workspace');
+  section.append(node('strong','','Consumo de quota da tarefa'));
+  for(const row of rows)section.append(quotaUsageView(row,{heading:[names[row.provider],row.model].filter(Boolean).join(' · ')}));
+  return section;
  }
  taskCards(d){const cards=[this.workspaceCard(d)],remove=this.removeCard(d),steps=d.workflow?.steps||[];
   if(steps.length){const card=node('section','cx-workspace');card.append(node('strong','','Etapas de implementação'));for(const [i,step] of steps.entries())card.append(node('p','',`${i+1}. ${names[step.role]||step.role}: ${step.instructions}${i===(d.workflow.stepIndex||0)&&['implementing','fixing'].includes(d.workflow.phase)?' · em execução':''}`));card.append(node('small','','Escrita sequencial em pastas independentes; correções: '+(names[d.workflow.approvedPlan?.implementation?.fixer]||names[d.author]||d.author)));cards.push(card);}
@@ -260,11 +274,11 @@ export class ClaudeXUI{
    if(requests.length)shown.add(record.id);
    entries.push({at:requests.at(-1)?.at||'￿',record,card:true});
   }
-  return {tasks,entries,shown,signature:JSON.stringify([liveId,tasks.map(r=>[r.id,r.id===liveId?null:[r.status,r.updatedAt,this.cache.get(r.id)?.failed,this.cache.get(r.id)?.detail?.updatedAt],entries.filter(e=>e.record===r).map(e=>e.message?.seq??'card')])])};
+  return {tasks,entries,shown,signature:JSON.stringify([liveId,tasks.map(r=>[r.id,r.id===liveId?null:[r.status,r.updatedAt,this.cache.get(r.id)?.failed,this.cache.get(r.id)?.detail?.updatedAt,this.quotaRows(this.detailOf(r.id))],entries.filter(e=>e.record===r).map(e=>e.message?.seq??'card')])])};
  }
  /** A finished task in the conversation: one line that opens to its dialogue and versions. Kept between renders, so what was opened stays open. */
  card(record){
-  const d=this.detailOf(record.id),signature=JSON.stringify([record.status,record.retired,record.released,record.unvalidated,record.result,d?.messages.length,d?.candidates.length,d?.workspace,record.workspace,d?.deletionError,record.deletionError,this.cache.get(record.id)?.failed]);
+  const d=this.detailOf(record.id),signature=JSON.stringify([record.status,record.retired,record.released,record.unvalidated,record.result,d?.messages.length,d?.candidates.length,d?.workspace,record.workspace,d?.deletionError,record.deletionError,this.cache.get(record.id)?.failed,this.quotaRows(d)]);
   let entry=this.cards.get(record.id);
   if(!entry){const element=node('details','cx-card'),pair=record.roles||legacyRoles;element.dataset.task=record.id;element.style.setProperty('--pair-a',`var(--c-${pair[0]})`);element.style.setProperty('--pair-b',`var(--c-${pair[1]})`);element.addEventListener('toggle',()=>{if(element.open)this.fillCard(record.id);});entry={element};this.cards.set(record.id,entry);}
   if(entry.signature!==signature){
@@ -279,6 +293,7 @@ export class ClaudeXUI{
   const entry=this.cards.get(id),d=this.detailOf(id);if(!entry||entry.filled)return;const failed=this.cache.get(id)?.failed;if(failed){entry.filled=true;const body=node('div','cx-card-body'),record=this.getState()?.claudex?.records.find(r=>r.id===id);if(record?.workspace)body.append(this.workspaceCard(record));body.append(node('p','','Não foi possível carregar os detalhes desta tarefa. O estado acima é o mais recente recebido.'),this.button('Tentar carregar novamente',()=>{this.cache.delete(id);entry.signature=null;entry.filled=false;if(record)this.load(record);this.changed();}));entry.element.append(body);return;}if(!d)return;entry.filled=true;
   const body=node('div','cx-card-body'),list=node('div','cx-messages');if(d.deletionError)body.append(node('p','notice',d.deletionError));body.append(...this.taskCards(d));for(const m of d.messages.filter(m=>m.from!=='user'||isClarification(m)))list.append(this.messageCard(m,true));body.append(list);
   if(d.candidates.length){const versions=node('details','cx-draft');versions.append(node('summary','','Versões e aprovações'),...this.versionList(d),...this.validationList(d));body.append(versions);}
+  const quotas=this.quotaRows(d);if(quotas.length)body.append(this.quotaSection(quotas));
   body.append(this.button('Abrir no separador Hydra',()=>this.choose(id)));
   // Finished, given back and with nothing left to apply: only then can the user remove it.
   const record=this.getState()?.claudex?.records.find(r=>r.id===id);

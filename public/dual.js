@@ -1,3 +1,4 @@
+import { quotaUsageView } from './turn-quotas.js';
 import {glyph,PanelKit} from './opinions.js';
 
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
@@ -81,7 +82,7 @@ export class DualUI{
   return recipients.some(([provider,model])=>this.getState()?.providers?.[provider]?.capabilities?.images===false||this.getModels(provider).find(m=>m.id===model)?.images===false);
  }
  // A synthesis's text is refreshed in place (refreshSyntheses); only its state rebuilds the transcript.
- signature(conversation){const record=this.anyRecord(conversation);return record?[record.id,record.active,record.target,record.principal,memberKeys(record).map(key=>record.members[key].conversationId),record.changes?.length||0,this.running(conversation),record.rounds.map(r=>[r.id,r.targets,r.write,r.synthesis,Object.values(r.deliveries).map(d=>[d.requestId,d.status,d.coverage,d.error,d.synthesis])]),this.syntheses(record).map(b=>[b.id,b.context,b.jobs[0]?.status,b.jobs[0]?.error,Boolean(b.jobs[0]?.text)])]:null;}
+ signature(conversation){const record=this.anyRecord(conversation);return record?[record.id,record.active,record.target,record.principal,memberKeys(record).map(key=>record.members[key].conversationId),record.changes?.length||0,this.running(conversation),record.rounds.map(r=>[r.id,r.targets,r.write,r.synthesis,Object.values(r.deliveries).map(d=>[d.requestId,d.status,d.coverage,d.error,d.synthesis])]),this.syntheses(record).map(b=>[b.id,b.context,b.jobs[0]?.status,b.jobs[0]?.error,Boolean(b.jobs[0]?.text),b.jobs[0]?.quotaUsage])]:null;}
  syntheses(record){return this.getSyntheses().filter(b=>b.dualId===record?.id).sort((x,y)=>String(x.createdAt).localeCompare(String(y.createdAt)));}
  /** A synthesis meant for the next round is still being written: a round sent now goes without it. */
  pendingSynthesis(conversation){const record=this.record(conversation);return this.syntheses(record).some(b=>b.context&&synthesizing(b.jobs[0]));}
@@ -360,7 +361,10 @@ export class DualUI{
      const folded=article.querySelector(':scope > .message-body');if(folded)folded.hidden=false;article.classList.remove('message-folded');
      panel.body.append(article);
     });
-    if(!answers.length)panel.body.append(this.panels.placeholder(delivery.error||turn?.error||owner?.error||(status.live?'A preparar a resposta…':'Sem resposta visível.')));
+    if(!answers.length){
+     panel.body.append(this.panels.placeholder(delivery.error||turn?.error||owner?.error||(status.live?'A preparar a resposta…':'Sem resposta visível.')));
+     if(turn?.quotaUsage)panel.body.append(quotaUsageView(turn.quotaUsage));
+    }
     else if(turn?.error&&!status.live)panel.body.append(node('p','dual-error',turn.error));
     const context=contexts.get(part.key);
     if(context){const summary=context.querySelector('summary');summary.textContent=`Contexto do ${otherNames(roundMembers(record,round),part.key)} enviado com este pedido · ${coverageDetail(delivery)}`;panel.body.append(context);}
@@ -445,6 +449,7 @@ export class DualUI{
  fillSynthesis(view,batch){
   const job=batch.jobs[0];view.text=job.text||'';view.copy.hidden=!view.text;view.shown=view.text;
   view.body.replaceChildren(view.text?this.markdown(view.text):this.panels.placeholder(job.error||(synthesizing(job)?'A preparar a síntese…':'Sem texto.')));
+  if(job.quotaUsage)view.body.append(quotaUsageView(job.quotaUsage));
   view.body.setAttribute('aria-label','Síntese');this.panels.restore(view.body);
  }
  /** New text of a synthesis being written, without rebuilding the conversation. */

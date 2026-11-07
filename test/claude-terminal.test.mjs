@@ -89,7 +89,7 @@ test('terminal Claude: arquivar deixa o motivo no lugar da credencial e desarqui
 
 async function hub(t, extraEnv = {}) {
   const directory = await realpath(await mkdtemp(path.join(os.tmpdir(), 'hydraq-claude-terminal-')));
-  const env = { ...process.env, CLAUDE_CONFIG_DIR: path.join(directory, 'claude-home'), FAKE_CLAUDE_AGENTS: path.join(directory, 'agents.json'), FAKE_CLAUDE_ARGS_LOG: path.join(directory, 'args.json'), ...extraEnv };
+  const env = { ...process.env, CLAUDE_CONFIG_DIR: path.join(directory, 'claude-home'), FAKE_CLAUDE_AGENTS: path.join(directory, 'agents.json'), FAKE_CLAUDE_ARGS_LOG: path.join(directory, 'args.json'), FAKE_CLAUDE_INFERENCE_ARGS_LOG: path.join(directory, 'inference-args.json'), ...extraEnv };
   const claude = new ClaudeCode({ dataDir: path.join(directory, 'claude'), defaultCwd: directory, executable: process.execPath, prefixArgs: [fake], env, questions: true });
   const providers = new Providers({ dataDir: path.join(directory, 'state'), defaultCwd: directory, clients: { claude }, git: async () => null });
   await providers.load(); await providers.connect('claude');
@@ -260,7 +260,7 @@ test('Claude original: passa a sessão ao terminal, bloqueia a HYDRAQ e importa 
 
   await providers.send(c.id, 'depois', 'hydraq-3');
   await waitFor(() => c.status === 'completed');
-  const args = JSON.parse(await readFile(env.FAKE_CLAUDE_ARGS_LOG, 'utf8'));
+  const args = JSON.parse(await readFile(env.FAKE_CLAUDE_INFERENCE_ARGS_LOG, 'utf8'));
   assert.equal(args[args.indexOf('--resume') + 1], c.threadId, 'a HYDRAQ retoma a mesma sessão nativa');
 });
 
@@ -318,7 +318,7 @@ test('associar sessões do terminal e da app Claude; sessões programáticas fic
   await writeFile(path.join(directory, `.fake-claude-${ids[0]}`), JSON.stringify({ count: 1 }));
   await providers.send(c.id, 'continuar', 'continuar-1');
   await waitFor(() => c.status === 'completed');
-  const args = JSON.parse(await readFile(env.FAKE_CLAUDE_ARGS_LOG, 'utf8'));
+  const args = JSON.parse(await readFile(env.FAKE_CLAUDE_INFERENCE_ARGS_LOG, 'utf8'));
   assert.equal(args[args.indexOf('--resume') + 1], ids[0]);
 });
 

@@ -1,3 +1,4 @@
+import { quotaUsageView } from './turn-quotas.js';
 import {elicitationForm} from './elicitation.js';
 export function diagnosticsView(diagnostics = []) {
   const section=document.createElement('section');section.className='native-diagnostics';
@@ -356,6 +357,7 @@ export class OpinionUI{
   if(job.text){const text=this.markdown(job.text);if(live)streamingTarget(text).append(node('span','streaming-indicator'));content.push(text);}
   else if(live||deciding)content.push(this.placeholder(deciding?'O revisor aguarda a tua decisão.':'A analisar a resposta inicial…'));
   if(job.error)content.push(node('p','opinion-error',job.error));
+  if(job.quotaUsage)content.push(quotaUsageView(job.quotaUsage));
   if(job.diagnostics?.length)content.push(diagnosticsView(job.diagnostics));
   if(!content.length)content.push(this.placeholder('Sem texto comunicado pelo revisor.'));
   view.body.replaceChildren(...content);view.body.setAttribute('aria-label','Parecer de '+names[job.provider]);view.text=job.text||'';view.copy.hidden=!view.text;
@@ -493,6 +495,7 @@ export class OpinionUI{
     if(job.text)card.append(this.markdown(job.text));else if(active(job))card.append(node('p','opinion-caption','A aguardar texto do revisor…'));if(job.error)card.append(node('p','opinion-error',job.error));
     for(const request of job.approvals||[]){const previous=approvalNodes.get(String(request.id)),approval=previous?.approvalSignature===JSON.stringify(request)?previous:this.approval(job,request);card.append(approval);if(!this.seenApprovals.has(request.id)){this.seenApprovals.add(request.id);this.openAncestors(card);slot.pendingReveal=approval;}}
     if(job.usage){const u=job.usage;card.append(node('p','opinion-caption',`Entrada: ${u.inputTokens??u.input_tokens??'não medida'} · Saída: ${u.outputTokens??u.output_tokens??'não medida'}${job.provider==='opencode'?' · Custo: '+(Number.isFinite(job.costUSD)?job.costUSD+' USD':'não medido'):''}`));}
+    if(job.quotaUsage)card.append(quotaUsageView(job.quotaUsage));
     const controls=node('div','opinion-card-actions');
     if(active(job)&&(batch.kind==='delegation'||!job.approvals?.length))controls.append(this.button(batch.kind==='delegation'?'Parar delegação':'Parar este parecer',async()=>{try{await this.api('/api/opinions/'+job.id+'/stop',{});await this.refreshState();}catch(e){this.toast(e.message);}}));
     if(job.status==='completed'&&job.text&&delivery.state==='separate'&&!automaticPending){const label=node('label','opinion-selection'),check=node('input');check.type='checkbox';check.checked=this.selected.has(job.id);check.setAttribute('aria-label','Selecionar parecer de '+names[job.provider]+' '+job.model);check.addEventListener('change',()=>{check.checked?this.selected.add(job.id):this.selected.delete(job.id);this.updateUseButton(panel,batch);});label.append(check,document.createTextNode('Selecionar'));controls.append(label,this.button(batch.kind==='delegation'?'Enviar ao principal':'Enviar este à conversa',()=>this.incorporate(batch,[job.id])));}

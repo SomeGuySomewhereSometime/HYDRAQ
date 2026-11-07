@@ -4,11 +4,12 @@ import { workConflict, workReason } from './work-locks.js';
 import { captureDraftIntent, draftMode, followupOptions, followupDescriptions } from './composer.js';
 import { elicitationForm } from './elicitation.js';
 import { ImageAttachments } from './attachments.js';
-import { ComposerDrafts, draftKey } from './drafts.js';
+import { ComposerDrafts, PersistentDraftMap, draftKey } from './drafts.js';
 import { ProjectUI, conversationGroups, chooseFolder } from './projects.js';
 import { ProjectMemoryUI } from './project-memory.js';
 import { CollaborationUI } from './collaboration.js';
 import { ModelPicker } from './model-picker.js';
+import { quotaUsageView } from './turn-quotas.js';
 import { OpinionUI, opinionResultAnchors, diagnosticsView } from './opinions.js';
 import { Layout, Tooltips, AppearanceMenu, ClientColors, APPEARANCES, COLUMNS } from './layout.js';
 // A server started before the dual routes does not serve dual.js: the composer then works without Dual.
@@ -91,7 +92,7 @@ let selected = localStorage.getItem('hydraq.conversation') || null;
 let selectedProject = localStorage.getItem('hydraq.project') || null;
 let projectOverview = !selected && localStorage.getItem('hydraq.projectView') === 'true';
 const composerDrafts = new ComposerDrafts();
-const draftProviders = new Map();
+const draftProviders = new PersistentDraftMap('hydraq.draft-providers.v1');
 const providerNames = { codex: 'Codex', antigravity: 'Antigravity', claude: 'Claude Code', cursor: 'Cursor', opencode: 'OpenCode' };
 let selectedProvider = localStorage.getItem('hydraq.provider') || 'codex';
 if (!providerNames[selectedProvider]) selectedProvider = 'codex';
@@ -115,7 +116,7 @@ let transcriptPinned = true;
 let composerIntent = null;
 const deliveryPreferences = {};
 const chosenDelivery = () => composerIntent?.deliveryMode || $('#followup-mode')?.value || followupOptions(current())[0];
-const settingDrafts = new Map();
+const settingDrafts = new PersistentDraftMap('hydraq.draft-settings.v1');
 const recoveryDrafts = new Map();
 let settingsOwner;
 let settingsBaseline;
@@ -820,7 +821,7 @@ function renderMessages(conversation) {
   const liveTask = hydraOn() ? hydraTask(conversation)?.id || claudexUI?.selected || null : null;
   const hydra = claudexUI?.transcript(group, liveTask) || { tasks: [], entries: [], shown: new Set(), signature: '' };
   const opinionState=opinionUI.viewState();
-  const signature = JSON.stringify([conversation?.id,hydraOn(),hydra.signature,dualUI?.signature(conversation),opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage,turn.diagnostics]), entry.handoffState])]);
+  const signature = JSON.stringify([conversation?.id,hydraOn(),hydra.signature,dualUI?.signature(conversation),opinionUI.archiveRevision,state.opinions?.archivedGroups,opinionState?.batches.map(b=>[b.id,b.conversationId,b.sourceKey]),opinionState?.automatic?.cycles.map(c=>[c.id,c.conversationId,c.requestId,c.returnRequestId,c.status]),opinionState?.merges.map(m=>[m.id,m.requestId,m.jobIds]), group.map(entry => [entry.id, entry.messages, entry.items?.filter(i=>i.turnId===entry.turns?.at(-1)?.id).map(i=>[i.id,i.type,i.status,i.summary]), entry.turns?.map(turn=>[turn.id,turn.requestId,turn.status,turn.usage,turn.nativeTurnUsage,turn.diagnostics,turn.quotaUsage]), entry.handoffState])]);
   if (signature === messageSignature) {opinionUI.refresh();dualUI?.refreshSyntheses();return;}
   messageSignature = signature;
   const view = $('#messages');
@@ -912,6 +913,14 @@ function renderMessages(conversation) {
       if(turn?.usagePartial&&finalMessage)article.append(element('p','message-usage','Consumo parcial: faltam contadores de um ciclo.'));
       if (turn?.usage && finalMessage && owner.provider!=='opencode') article.append(element('p', 'message-usage', `Entrada: ${formatTokens(turn.usage.inputTokens)} · Em cache: ${formatTokens(turn.usage.cachedInputTokens)} (${turn.usage.cachePercent}%) · Sem cache: ${formatTokens(turn.usage.uncachedInputTokens)}`));
       else if (turn?.nativeTurnUsage && finalMessage) article.append(element('p', 'message-usage', `Neste pedido — Entrada: ${formatTokens(turn.nativeTurnUsage.input_tokens)} · Leitura de cache: ${formatTokens(turn.nativeTurnUsage.cache_read_tokens)} · Saída: ${formatTokens(turn.nativeTurnUsage.output_tokens)} · Raciocínio: ${formatTokens(turn.nativeTurnUsage.thinking_tokens)}`));
+      if (turn?.quotaUsage && !owner.messages.slice(owner.messages.indexOf(message) + 1).some(next =>
+        next.role === 'assistant' && (turn.requestId && next.requestId === turn.requestId || turn.id && next.turnId === turn.id))) {
+        article.append(quotaUsageView(turn.quotaUsage));
+      }
+    }
+    if (message.role === 'assistant' && message.source === 'claudex-publication') {
+      const quotas = claudexUI?.quotaRows(claudexUI.detailOf(message.claudexTask, true)) || [];
+      if (quotas.length) article.append(claudexUI.quotaSection(quotas));
     }
     const planIds=[...(message.planDocumentIds||[]),...(message.planDocumentId?[message.planDocumentId]:[])];
     if(planIds.length){const files=element('div','native-plan-files');for(const id of new Set(planIds)){const button=element('button','secondary-button','Abrir ficheiro do plano');button.type='button';button.dataset.planDocument=id;button.addEventListener('click',()=>openPlanDocument(owner,id));files.append(button);}article.append(files);}
@@ -2404,6 +2413,7 @@ async function boot(recovering = false) {
     token = initial.token;
     state = initial.state;
     if(!recovering&&!current()&&selectedProject)selectedProvider=state.projectCatalog?.projects.find(p=>p.id===selectedProject)?.defaults?.provider||selectedProvider;
+    if(!recovering){const draft=composerDrafts.get(composerKey());$('#prompt').value=draft.text;composerIntent=draft.intent;$('#cwd').value=conversationFolder(current())||project()?.root||draft.cwd||'';}
     render();
     listen();
   } catch (error) {
@@ -2415,3 +2425,17 @@ async function boot(recovering = false) {
   }
 }
 boot();
+
+window.addEventListener('hydraq-draft-storage-error',()=>toast('Não foi possível guardar o rascunho neste navegador. Mantém esta página aberta.'));
+window.addEventListener('pagehide',saveComposerDraft);
+let loadedPageVersion=null;
+async function showRuntimeVersion(){
+ try { const response=await fetch('/health');if(!response.ok)return;const info=await response.json();
+ loadedPageVersion??=info.pageVersion;
+ let badge=document.querySelector('#runtime-version');if(!badge){badge=element('span','status-chip');badge.id='runtime-version';document.querySelector('.topbar-context').append(badge);}
+ const reload=loadedPageVersion!==info.pageVersion;
+ badge.textContent=!info.startedAt?'Servidor anterior · Reiniciar servidor':`v${info.version}${info.restartRequired?' · Reiniciar servidor':reload?' · Recarregar página':''}`;
+ badge.title=`Servidor iniciado em ${info.startedAt||'data desconhecida'}${info.sourceVersion?' · Ficheiros: v'+info.sourceVersion:''}`;
+ }catch{}
+}
+showRuntimeVersion();setInterval(showRuntimeVersion,60000);

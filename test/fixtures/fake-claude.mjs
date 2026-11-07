@@ -9,6 +9,7 @@ if (!args.includes('-p') || option('--input-format') !== 'stream-json' || option
 if (args.includes('--dangerously-skip-permissions') || args.includes('--allow-dangerously-skip-permissions')) process.exit(9);
 if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_BASE_URL) process.exit(7);
 const catalog = !args.includes('--model');
+if(!catalog && process.env.FAKE_CLAUDE_INFERENCE_ARGS_LOG)writeFileSync(process.env.FAKE_CLAUDE_INFERENCE_ARGS_LOG,JSON.stringify(args));
 if (!catalog && option('--permission-prompt-tool') !== 'stdio') process.exit(6);
 const resume = option('--resume');
 const sessionId = resume || option('--session-id');

@@ -1,36 +1,12 @@
+import { selectedQuotas, quotaWindowOrder } from './quota-windows.js';
+export { selectedQuotas } from './quota-windows.js';
+
 const names = { codex: 'Codex', claude: 'Claude Code', antigravity: 'Antigravity', cursor: 'Cursor', opencode: 'OpenCode' };
 const tracked = ['codex', 'claude', 'antigravity'];
 const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; };
 const numeric = n => typeof n === 'number' && Number.isFinite(n);
 const pct = n => numeric(n) ? `${Math.round(n * 10) / 10}%` : '—';
 const time = value => { const date = new Date(value); return value && Number.isFinite(date.getTime()) ? date.toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'por confirmar'; };
-const order = (a, b) => (a.windowDurationMins || Infinity) - (b.windowDurationMins || Infinity);
-
-/** Associate only the native groups we recognize; never borrow another subscription's quota. */
-export function selectedQuotas(provider, model, windows = [], metadata = {}) {
-  const identity = `${model || ''} ${metadata.name || ''} ${metadata.metadata?.resolvedModel || ''}`.toLowerCase();
-  if (provider === 'codex') {
-    const specific = windows.filter(w => w.group?.toLowerCase() === model?.toLowerCase() || w.id?.startsWith(`${model}:`));
-    const common = windows.filter(w => w.id?.startsWith('codex:') || w.group?.toLowerCase() === 'codex');
-    const selected = [...new Set([...common, ...specific])];
-    return { windows: (selected.length ? selected : windows).slice().sort(order), scope: specific.length ? 'Quota da conta e do modelo' : selected.length || new Set(windows.map(w => w.group)).size <= 1 ? 'Quota partilhada do Codex' : 'Grupos de limites comunicados pelo Codex' };
-  }
-  if (provider === 'claude') {
-    const family = /opus/.test(identity) ? 'opus' : /sonnet/.test(identity) ? 'sonnet' : null;
-    return { windows: windows.filter(w => ['five_hour', 'seven_day'].includes(w.id) || (family && w.id === `seven_day_${family}`)).sort(order), scope: 'Quota da subscrição Claude' };
-  }
-  if (provider === 'antigravity') {
-    const argon = w => /argon/i.test(`${w.id} ${w.group}`);
-    const gemini = w => !argon(w) && /gemini/i.test(`${w.id} ${w.group}`);
-    const thirdParty = w => /^3p-/.test(w.id || '') || /claude.*gpt|gpt.*claude/i.test(w.group || '');
-    if (/gemini.*argon/.test(identity) && windows.some(argon)) return { windows: windows.filter(argon).sort(order), scope: 'Quota própria do Argon' };
-    if (/gemini/.test(identity)) return { windows: windows.filter(gemini).sort(order), scope: 'Grupo Gemini · Antigravity' };
-    if (/claude|gpt/.test(identity)) return { windows: windows.filter(thirdParty).sort(order), scope: 'Grupo Claude e GPT · Antigravity' };
-    return { windows: [], scope: 'Grupo de quota por identificar', unmapped: windows.length > 0 };
-  }
-  return { windows: [], scope: 'O cliente não disponibiliza estes limites' };
-}
-
 export function resetLabel(value, now = Date.now()) {
   const delta = Date.parse(value) - now;
   if (!value || !Number.isFinite(delta)) return 'Reposição não comunicada';
@@ -139,7 +115,7 @@ export class ProviderStatus {
     if (quotas?.error) card.append(el('p', 'provider-status-note', quotas.error));
     if (!quotas?.windows?.length) card.append(el('p', 'provider-status-note', 'Quotas não disponíveis nesta consulta.'));
     let group;
-    for (const quota of (quotas?.windows || []).slice().sort((a, b) => a.group.localeCompare(b.group) || order(a, b))) {
+    for (const quota of (quotas?.windows || []).slice().sort((a, b) => a.group.localeCompare(b.group) || quotaWindowOrder(a, b))) {
       if (quota.group !== group) { group = quota.group; card.append(el('h5', '', group)); }
       card.append(this.window(quota, id, now, false, Boolean(quotas.stale || quotas.error || provider.connection !== 'connected')));
     }

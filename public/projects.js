@@ -1,3 +1,4 @@
+import { searchConversations } from './conversation-search.js';
 const el = (tag, cls, text) => { const node=document.createElement(tag);if(cls)node.className=cls;if(text!==undefined)node.textContent=text;return node; };
 const inside = (root,folder) => folder===root || folder.startsWith(root==='/'?'/':root+'/');
 const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',cursor:'Cursor',opencode:'OpenCode'};
@@ -63,6 +64,7 @@ export class ProjectUI {
     Object.assign(this,{getState,api,refresh,choose,openProject,newChat,toast,memory});this.open=new Set();this.archived=false;
     this.search=document.querySelector('#project-search');
     this.search.addEventListener('input',()=>{this.signature='';this.render(this.selection);});
+    const contentSearch=this.button('Pesquisar conteúdo…',()=>this.searchContent());contentSearch.id='search-content';contentSearch.className='secondary-button';this.search.after(contentSearch);
     document.querySelector('#new-project').addEventListener('click',()=>this.editProject());
     document.querySelector('#organize-projects').addEventListener('click',()=>this.organize());
     document.querySelector('#show-archived').addEventListener('click',()=>{this.archived=!this.archived;this.signature='';this.render(this.selection);});
@@ -116,6 +118,18 @@ export class ProjectUI {
     document.querySelector('#catalog-error').textContent=catalog.error||'';document.querySelector('#catalog-error').classList.toggle('hidden',!catalog.error);
     document.querySelector('#new-project').disabled=Boolean(catalog.error);document.querySelector('#organize-projects').disabled=Boolean(catalog.error)||!catalog.projects.some(p=>!p.archived);
     this.renderOverview();
+  }
+  searchContent(){
+    const form=this.modal('Pesquisar conteúdo em todas as conversas'),query=this.input('',1000),provider=this.select([['','Todos os clientes'],...Object.entries(names)],''),project=this.select([['','Todos os projetos'],['loose','Sem projeto'],...(this.getState().projectCatalog?.projects||[]).map(p=>[p.id,p.name])],''),since=this.input(),file=this.input(),results=el('div');
+    query.type='search';query.placeholder='Palavras na mensagem';since.type='date';file.placeholder='Ficheiro observado (opcional)';
+    this.field(form,'Conteúdo',query);this.field(form,'Cliente',provider);this.field(form,'Projeto',project);this.field(form,'Desde',since);this.field(form,'Ficheiro',file);
+    const submit=el('button','','Pesquisar');submit.type='submit';form.append(submit,el('p','','Inclui conversas arquivadas. Resultados do histórico público guardado; mensagens internas são excluídas.'),results);
+    form.addEventListener('submit',event=>{event.preventDefault();const matches=searchConversations(this.getState().conversations,{query:query.value,provider:provider.value,projectId:project.value,since:since.value,file:file.value});results.replaceChildren(el('p','',`${matches.length} ${matches.length===1?'resultado':'resultados'}`));let shown=0;
+      const more=this.button('Mostrar mais',append);
+      const self=this;
+      function append(){more.remove();for(const match of matches.slice(shown,shown+30)){const open=self.button(match.title,()=>{self.dialog.close();self.choose(match.conversationId);});results.append(open,el('small','',`${names[match.provider]||match.provider} · ${match.date.slice(0,10)}`),el('p','',match.excerpt));}shown+=30;if(shown<matches.length)results.append(more);}
+      append();
+    });query.focus();
   }
   groupRow(group){
     const row=el('div','conversation-row'),button=this.button('',()=>this.choose(group.latest.id),`conversation-link${this.selection.group===group.id?' active':''}`);

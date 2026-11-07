@@ -1,8 +1,16 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 186
+Versão atual: 190
 
 ## Resumo atual
+
+- Entrega e arranque (entrada 190): alterações 187–189 entregues em commit local, sem push. Versão 190 ativa na 4318 (PID 18945), cinco clientes ligados e 119 conversas preservadas; testes focados 15/15.
+
+- Uso diário (entrada 189): rascunhos de texto e definições persistentes no navegador, pesquisa global de mensagens públicas com filtros e excertos, e revisão do servidor visível com avisos de atualização. Verificações focadas e navegador isolado; sem inferência real nem reinício da 4318.
+
+- Quotas com menos consultas (entrada 188): no Hydra, leitura inicial e final por participante, sem consultas entre turnos internos. Nos restantes envios, reutilização da leitura final recente e tempos guardados no histórico. Testes dos fluxos **161/161**, medição/SSE **11/11** e navegador **10/10**. Ativo na 4318, com reinício posterior a todas as alterações do backend e SSE confirmado.
+
+- Consumo de quota por resposta (entrada 187): só a percentagem gasta em cada limite do Codex, Claude e Antigravity, com totais Hydra por participante/modelo. Suite sequencial **889/889**, regressão HTTP **1/1** e navegador **10/10** com clientes simulados; Claude e Flash reais confirmados. Corrigido um encerramento do servidor por heartbeat de uma ligação terminada. Ativo na 4318.
 
 - Delegação normal (entrada 186): prazo de execução de cinco minutos substituído por verificações de estado a cada dez minutos. A tarefa continua e pode ser parada pelo utilizador, inclusive com autorização pendente. Testes focados **67/67**. Ativo na porta 4318.
 
@@ -2546,3 +2554,35 @@ Versão atual: 186
 
 - A cada dez minutos o cartão e a ferramenta de estado mostram a preparação, uma autorização pendente ou a atividade recente reportada pelo cliente. A falta de atividade não cancela a investigação. O botão Parar delegação também aparece com uma autorização pendente.
 - Testes focados **67/67**. O relógio simulado confirmou verificações consecutivas, uma conclusão após o prazo antigo e a preservação e paragem manual de uma autorização pendente. Sem novo ensaio real. A 4318 foi reiniciada a pedido do utilizador com as opções experimentais ativas e três delegações por turno.
+
+
+### 187 — 2026-11-07 — Codex — consumo de quota por resposta e participante
+
+- Rodapé no fim de cada resposta apenas com a percentagem gasta em cada limite, conforme ajuste do utilizador. As leituras inicial/final ficam no histórico e os detalhes da estimativa no tooltip. Só limites nativos de cinco horas e semanais aplicáveis ao modelo, incluindo grupos próprios e quota semanal da família Claude. Argon conserva apenas o seu grupo semanal. Cursor e OpenCode ficam excluídos.
+- Medição ligada ao envio nativo, também para sessões isoladas de revisão, delegação e síntese. O histórico guarda o resultado; repetir um identificador não consulta nem conta de novo. O Multi mostra cada resposta, o Revisor mostra principal e revisores, e a resposta comum e o cartão Hydra somam os turnos desta tarefa por participante/modelo, incluindo quem saiu. Dados históricos sem medição não são reconstruídos.
+- As leituras usam os clientes originais, com prazo de seis segundos. Falhas não impedem a resposta. Reposições e turnos simultâneos na mesma subscrição ficam sem estimativa; totais incompletos são assinalados no tooltip. Zero de diferença aparece como «0%», com a resolução do contador explicada no tooltip; falhas e reposições mostram «—». A precisão e a atualização são as do contador da conta/grupo e podem incluir atividade fora da HYDRAQ. O Claude tolera a variação inferior a um segundo observada nas datas nativas de reposição.
+- Suite final sequencial **889/889**, zero ignorados. A execução paralela anterior falhou em 12 testes de estabilização do catálogo simulado OpenCode; todos passaram na sequencial. Verificações focadas **6/6** para diferenças, reposições, concorrência, Argon, envio normal dos três clientes, persistência e retry. Navegador **10/10** com clientes simulados, incluindo os quatro modos, exclusões e 390 px; capturas inspecionadas. Consultas reais dos três clientes sem inferência. Pedidos mínimos reais em sessões temporárias: Haiku concluiu com contadores iguais à precisão fornecida; Flash concluiu com **0,048727%** em cinco horas e **0,013924%** semanais. Codex sem quota de cinco horas disponível para um pedido real.
+- A instância anterior encerrou com `ERR_STREAM_WRITE_AFTER_END`: um stream SSE terminado por contrapressão conservava o heartbeat. Limpeza ligada ao fim/fecho/erro da resposta e heartbeat protegido, com regressão **1/1** e testes HTTP/integração focados **28/28**. Reiniciada a 4318, cinco clientes ligados e opções experimentais preservadas. Sem commit.
+
+
+### 188 — 2026-11-07 — Codex — custo das quotas e medição por tarefa Hydra
+
+- A pedido do utilizador, o Hydra mede o início e o fim da tarefa por participante, em vez de consultar a quota em cada turno interno. As leituras iniciais são guardadas no registo da tarefa; os totais continuam na resposta comum e no cartão. Parar, concluir sem acordo e retirar um participante fecham a medição quando aplicável; tarefas retomadas depois de um reinício assinalam o intervalo sem acompanhamento. O histórico antigo conserva a soma por turno.
+- Nos outros modos, uma leitura final pode servir de leitura inicial durante 30 segundos. Concorrência, eventos de quota, reposições, mudança de contexto de conta ou expiração obrigam a nova consulta. Se a leitura final ainda estiver em curso, o próximo envio aguarda essa leitura. O histórico guarda tempos antes/depois, espera pela leitura anterior e reutilização; a interface mantém apenas as percentagens.
+- Três consultas reais por cliente, sem inferência: Codex **423–1538 ms**, Claude **914–944 ms**, agy **2496–2975 ms** por consulta. Ensaio posterior com dois turnos sintéticos e consultas reais: três consultas em vez de quatro; espera inicial do segundo turno **0 ms** nos três clientes. A primeira foi **452/806/2720 ms**, respetivamente. Estes comandos consultam os contadores sem enviar prompts aos modelos.
+- Testes da medição/SSE **11/11**, incluindo dez turnos internos Hydra com apenas duas consultas, reutilização, espera por consulta em curso, invalidação, persistência e reinício. Fluxos Hydra, Multi, Revisor, opiniões e integração **161/161**; navegador **10/10** com clientes simulados. Sem novo ensaio de inferência real ou commit.
+- Ativação confirmada: processo **263403** iniciado às **02:48:32 UTC**, depois da última alteração do backend às **02:46:13 UTC**, incluindo `http.mjs`. Cinco clientes ligados, sem tarefas interrompidas e opções experimentais anteriores preservadas. A ligação SSE foi fechada e o mesmo processo respondeu depois do intervalo de heartbeat de 20 segundos. Ficheiros da página exigem recarregamento.
+
+
+### 189 — 2026-11-07 — Codex — rascunhos, pesquisa global e versão em execução
+
+- Texto, intenção, pasta, cliente e definições do rascunho guardados neste navegador. Recarregar recupera a edição, mantendo orientações ligadas ao turno original. Falhas do armazenamento conservam o texto em memória e avisam; imagens continuam apenas na página.
+- Botão Pesquisar conteúdo na barra lateral: mensagens públicas de todos os projetos, incluindo arquivados, com excertos, paginação de 30 e filtros por cliente, projeto, data e ficheiro observado. Sem enviar contexto aos modelos.
+- `/health` anuncia a revisão carregada e o início da instância, deteta alterações aos módulos backend/servidor e aos ficheiros da página. A barra superior consulta a cada minuto e distingue reiniciar servidor de recarregar página.
+- Testes focados: 31/31 para rascunhos, pesquisa, versão, projetos, compositor e SSE; integração/SSE 22/22. Navegador isolado com clientes simulados: recuperação do texto e raciocínio, pesquisa com acentos, filtro, versão e ausência de erros JavaScript. Capturas desktop/móvel inspecionadas em `output/daily-improvements-189/`. Sem chamadas a modelos reais, commit ou reinício da 4318; backend requer reinício e página requer recarregamento.
+
+
+### 190 — 2026-11-07 — Codex — entrega e reinício
+
+- Commit pedido pelo utilizador, incluindo as entradas 187–189 e respetivos testes/guiões, sem artefactos de `output/` e sem push.
+- A porta 4318 não respondia antes da operação. Versão 190 iniciada com PID 18945 e opções HYDRAQ_PEER_WAIT=1, HYDRAQ_NORMAL_DELEGATION=1 e limite de três delegações. Os cinco clientes ligaram; as 119 conversas conservam os mesmos IDs por cliente e não há tarefas ativas. /health confirmou a revisão e ausência de reinício pendente; módulos da página responderam 200. Testes focados 15/15; sem inferência real. Processo em segundo plano por ausência de terminal gráfico, com logs em .hydraq/server.log.
