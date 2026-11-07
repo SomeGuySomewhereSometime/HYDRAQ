@@ -150,10 +150,10 @@ test('atalho resolve Claude/Cursor sem depender do PATH gráfico e remove a chav
   const dir=await directory(t),scripts=path.join(dir,'scripts'),bin=path.join(dir,'bin'),home=path.join(dir,'home'),local=path.join(home,'.local/bin');
   await Promise.all([mkdir(scripts),mkdir(bin),mkdir(local,{recursive:true})]);
   const launch=path.join(scripts,'launch.sh');await writeFile(launch,await readFile(path.join(root,'scripts/launch.sh')),{mode:0o700});
-  for(const name of ['codex','agy','claude','agent'])await writeFile(path.join(local,name),'#!/bin/sh\nexit 0\n',{mode:0o700});
+  for(const name of ['codex','agy','claude','agent','cursor-agent'])await writeFile(path.join(local,name),'#!/bin/sh\nexit 0\n',{mode:0o700});
   await writeFile(path.join(bin,'node'),'#!/bin/sh\ncat >/dev/null\n',{mode:0o700});
   await writeFile(path.join(bin,'curl'),'#!/bin/sh\nprintf \'{"app":"HYDRAQ"}\'\n',{mode:0o700});
   const capture=path.join(dir,'capture');await writeFile(path.join(bin,'xdg-open'),'#!/bin/sh\nprintf "%s\\n" "$HYDRAQ_CLAUDE_BIN" "$HYDRAQ_CURSOR_BIN" "${CURSOR_API_KEY:-ABSENT}" > "$HYDRAQ_TEST_CAPTURE"\n',{mode:0o700});
   execFileSync('/bin/bash',[launch],{env:{...process.env,HOME:home,PATH:`${bin}:/usr/bin:/bin`,HYDRAQ_CLAUDE_BIN:'',HYDRAQ_CURSOR_BIN:'',HYDRAQ_TEST_CAPTURE:capture,CURSOR_API_KEY:'FAKE-INHERITED'},timeout:5000});
-  assert.deepEqual((await readFile(capture,'utf8')).trim().split('\n'),[path.join(local,'claude'),path.join(local,'agent'),'ABSENT']);
+  assert.deepEqual((await readFile(capture,'utf8')).trim().split('\n'),[path.join(local,'claude'),path.join(local,'cursor-agent'),'ABSENT']);
 });

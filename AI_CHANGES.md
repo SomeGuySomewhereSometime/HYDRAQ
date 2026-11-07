@@ -1,8 +1,16 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 179
+Versão atual: 183
 
 ## Resumo atual
+
+- Delegação normal (entrada 183): o principal pode ler o resultado concluído por MCP e encadear até três pedidos por turno. Só um trabalho em curso por conversa. Suite **879/879**. Ensaio real Sol → Opus → Astra no mesmo turno. Ativo na porta 4318 com limite de três por turno.
+
+- Delegação (entrada 182): um pedido por turno e destinos Codex, Claude e Antigravity com proteção de leitura. O prazo de espera do Hydra responde sem aguardar a fila e o aviso por steer tem um intervalo de cinco segundos após a resposta. Testes focados **36/36**. Ativo na porta 4318.
+
+- Delegação experimental (entrada 181): espera por parecer no planeamento Hydra e investigações delegadas em leitura no modo normal. Sol recebeu e usou o parecer do Opus no mesmo turno após uma primeira espera expirada. No modo normal, Sol → Opus concluiu com o resultado no cartão. Ativo na porta 4318 com as duas opções experimentais ligadas.
+
+- Cursor (entrada 180): o arranque usa `cursor-agent` para evitar selecionar o Grok CLI pelo nome `agent`. Testes **12/12**. Ativo na **4318**, com sessão autenticada e catálogo nativo verificados. Falta ensaiar uma resposta de modelo.
 
 - Hydra — etapas privadas, guiões visuais e MCP externos (entrada 179): implementado no backend e na interface. Suite **872/872**, zero ignorados; MCP final **17/17**; browser **16/16**. Duo real Sol/Opus com Blender concluído e rechecado **13/13**; trio Sol/Opus/Flash **9/9**. Vários implementadores só na cópia privada; MCP externos exigem autorização explícita por tarefa. Sem commit nem reinício da 4318; falta reiniciar para ativar o backend.
 
@@ -2488,3 +2496,30 @@ Versão atual: 179
 - Modelos reais: duo Sol 6.1/Opus 5.5 completou as duas etapas. Blender inicialmente indisponível bloqueou aprovação sem aplicar ao original; retoma nas mesmas sessões com Blender temporário, exportação GLB/render e revisão real detetaram uma cena extra no GLB; Claude corrigiu e todos voltaram a testar antes de aplicar. Prova final rechecada **13/13**. O `summary.json` original **11/12** fica conservado: a asserção `slice(-2)` não previa a etapa adicional legítima de correção, corrigida no ensaio e explicada em `rechecked.json`. Trio Sol/Opus/Gemini 3.8 Flash **9/9**, Codex e Claude a implementar e os três a executar o guião e a receber o mosaico. Opus 5.5 confirmado no transcript nativo. Sem Argon.
 - Provas em `output/hydra-expansion-179/`; scripts novos em `validation/hydra-expansion-ui.mjs`, `hydra-expanded-live.mjs` e `hydra-expanded-evidence.mjs`. O erro inicial do próprio ensaio de trio (getter de aprovações ausente no agy) e a indisponibilidade inicial do Blender foram conservados nos temporários; as mesmas sessões foram retomadas. Blender temporário encerrado, sem carregar projetos do utilizador.
 - Limites: rAF headless não mede frames apresentados nem sensação de controlo; a página tem de estar pronta para servir estaticamente. Sem vídeo ou jogo interativo entre chamadas. Gateway suporta stdio/HTTP com cabeçalhos/variáveis de ambiente; não herda OAuth nativo nem transportes SSE antigos. Efeitos MCP externos não são certificados pelos testes e podem continuar após interrupção. Blender externo real confirmado com Claude; permissões/transportes dos restantes cobertos por fixtures, sem afirmar um ensaio externo real por cada cliente. Sem revisão por outro agente, commit, push, reinício da 4318 ou alteração do jogo original. Falta reiniciar para ativar o backend.
+
+### 180 — 2026-11-06 — Codex — conflito entre executáveis do Cursor e do Grok
+
+- Reproduzido com o ambiente do servidor: `agent` selecionava o Grok CLI, que recusava o perfil `--sandbox enabled` usado pelo Cursor. O adaptador e o lançador usam agora `cursor-agent`. A opção `HYDRAQ_CURSOR_BIN` continua a permitir um executável explícito.
+- Verificado: testes do Cursor e dos planos **12/12**, sintaxe do lançador e diff sem erros. Servidor reiniciado na 4318 após verificar que não havia conversas nem colaboração em execução. O Cursor abriu uma sessão autenticada e apresentou Grok 4.7, 4.6 e 4.5. Falta ensaiar uma resposta de modelo.
+
+
+### 181 — 2026-11-07 — Codex — espera e delegação entre modelos
+
+- Transporte Hydra cancela a espera ao receber cancelamento MCP ou ao perder a resposta HTTP. Sonda descartável: Sol e Opus receberam os nonces de 20 s e 30 s em chamadas consecutivas no mesmo turno. Só as ferramentas de espera têm prazo HTTP alargado.
+- `HYDRAQ_PEER_WAIT=1` disponibiliza `wait_for_reply` ao Codex principal num duo com Claude, antes da prontidão ou votação no planeamento. Usa as mensagens já persistidas, até três chamadas de 30 s e 75 s totais por pergunta na sessão MCP. No ensaio real, o Sol recebeu pending com o Opus ocupado e usou a resposta do Opus na segunda chamada, no mesmo turno.
+- `HYDRAQ_NORMAL_DELEGATION=1` permite a conversas normais Codex/Claude delegarem em leitura a modelos disponíveis no motor de opiniões. Um trabalho em curso por conversa, prazo de execução de cinco minutos, instância privada e resultado no cartão **Enviar ao principal**. Sol → Opus confirmado em instância descartável com autorização da chamada MCP. Dois modelos do mesmo fornecedor e envio pelo cartão cobertos por teste simulado.
+- Verificação: **66/66** testes focados no estado final, incluindo cancelamento MCP → HTTP e recuperação dos lugares da ponte. Suite geral **877/878**. A falha é a asserção anterior do lançador que espera `agent`; a entrada 180 passou a procurar `cursor-agent`.
+- A pedido do utilizador, o servidor foi iniciado na porta 4318 com as duas opções ligadas. A porta estava livre antes do arranque. Confirmados o endpoint de saúde, as opções no processo e 116 conversas carregadas.
+- A matriz dos limites máximos por cliente, o caso real de entrega tardia após o turno terminar e a validação visual do cartão ficam por verificar.
+
+### 182 — 2026-11-07 — Codex — limites da delegação experimental
+
+- Um pedido por turno, com repetição idempotente, e destinos limitados a Codex, Claude e Antigravity com proteção de leitura. A tarefa delegada indica a pasta e as instruções locais e distingue material citado de autorização.
+- O prazo de espera responde fora da fila, e a resposta adia brevemente o aviso no mesmo turno sem marcar a entrega. Corrigido o teste antigo do lançador para exigir cursor-agent, mantendo um agent concorrente na fixture.
+- Testes focados **36/36**. Suite geral por repetir. Reiniciada a 4318 quando estava livre, com as duas opções e 116 conversas confirmadas. Sem novo ensaio com modelos reais.
+
+### 183 — 2026-11-07 — Codex — resultados e sequência no modo normal
+
+- `get_delegation_status` devolve o resultado concluído como material citado, com fornecedor e modelo. O cartão continua disponível. Consulta imediata, sem espera bloqueante.
+- Uma chave nova cria um novo pedido no mesmo turno. Repetições conservam o ID e pedidos simultâneos continuam limitados a um ativo por conversa. `HYDRAQ_NORMAL_DELEGATION_LIMIT` tem valor inicial 3 e 0 desliga a delegação normal. Pedidos do turno ativo ficam acessíveis até este terminar.
+- Testes focados **67/67**, incluindo resultados no mesmo turno simulado, dois fornecedores em sequência, repetição, recusa por trabalho ativo, limite e valor 0. Suite completa **879/879**, sem ignorados. Ensaio real numa instância descartável: o Sol leu pelo MCP o identificador aleatório devolvido pelo Opus, incluiu-o no pedido ao Astra e leu a segunda resposta com o mesmo ID de turno. Ambos os trabalhos concluídos. A 4318 foi reiniciada a pedido do utilizador com as duas opções experimentais e o limite de três delegações por turno.

@@ -22,8 +22,8 @@ fi
 if [[ -z "${HYDRAQ_CLAUDE_BIN:-}" && -x "$HOME/.local/bin/claude" ]]; then
   export HYDRAQ_CLAUDE_BIN="$HOME/.local/bin/claude"
 fi
-if [[ -z "${HYDRAQ_CURSOR_BIN:-}" && -x "$HOME/.local/bin/agent" ]]; then
-  export HYDRAQ_CURSOR_BIN="$HOME/.local/bin/agent"
+if [[ -z "${HYDRAQ_CURSOR_BIN:-}" && -x "$HOME/.local/bin/cursor-agent" ]]; then
+  export HYDRAQ_CURSOR_BIN="$HOME/.local/bin/cursor-agent"
 fi
 mkdir -p "$task_root/.hydraq"
 chmod 700 "$task_root/.hydraq"
