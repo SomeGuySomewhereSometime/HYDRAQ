@@ -93,11 +93,14 @@ test('delegação normal usa uma instância privada do mesmo fornecedor e exige 
  await assert.rejects(hub.opinions.delegate(c,turn,{...request,requestKey:'third'}),/em curso/);
  await wait(()=>!hub.opinions.tasks.size);
  assert.equal(hub.opinions.delegationStatus(c.id,next.id).result.text,'PARECER-claude');
- await hub.opinions.delegate(c,turn,{...request,requestKey:'third'});
+ hub.clients.cursor.models.push({id:'grok-4.7',efforts:['low'],defaultEffort:'low'});
+ const third=await hub.opinions.delegate(c,turn,{...request,requestKey:'third',provider:'cursor',model:'grok-4.7'});
  await wait(()=>!hub.opinions.tasks.size);
+ assert.equal(hub.opinions.delegationStatus(c.id,third.id).result.text,'PARECER-cursor');
+ assert.equal(workers[2].logs[0].settings.sandbox,'ask');
  await assert.rejects(hub.opinions.delegate(c,turn,{...request,requestKey:'fourth'}),/Limite.*3/);
  assert.equal((await hub.opinions.delegate(c,turn,request)).id,delegated.id);
- await assert.rejects(hub.opinions.delegate(c,turn,{...request,provider:'cursor'}),/Codex, Claude e Antigravity/);
+ await assert.rejects(hub.opinions.delegate(c,turn,{...request,provider:'cursor'}),/escolhe Grok 4.7/);
  assert.equal(source.logs.length,0);
  turn.status=c.status='completed';
  await hub.opinions.incorporate(c.id,{jobIds:[batch.jobs[0].id],requestId:'send-delegated'});
@@ -115,4 +118,88 @@ test('limite configurado a zero impede criar delegações',async t=>{
  turn.status=c.status='running';
  await assert.rejects(hub.opinions.delegate(c,turn,{requestKey:'disabled',provider:'codex',model:'test',task:'Pesquisa'}),/desligada/);
  assert.equal(hub.opinions.batches.length,0);
+});
+
+test('resultado delegado é paginado sem cortar pares Unicode nem perder texto',async t=>{
+ const{hub,c}=await setup(t);
+ const turn=c.turns.at(-1);
+ turn.status=c.status='running';
+ const {id}=await hub.opinions.delegate(c,turn,{requestKey:'pages',provider:'codex',model:'test',task:'Pesquisa'});
+ await wait(()=>!hub.opinions.tasks.size);
+ const text='a'.repeat(5999)+'😀'+'b'.repeat(6000)+'fim';
+ hub.opinions.batches[0].jobs[0].text=text;
+ let offset=0,joined='',pages=0;
+ do{
+  const page=hub.opinions.delegationStatus(c.id,id,offset);
+  assert.equal(page.offset,offset);
+  assert.equal(page.totalChars,text.length);
+  assert.ok(page.result.text.length<=6000);
+  assert.doesNotMatch(page.result.text,/[\uD800-\uDBFF]$/);
+  joined+=page.result.text;
+  offset=page.nextOffset;
+  pages++;
+ }while(offset!==null);
+ assert.equal(pages,3);
+ assert.equal(joined,text);
+ assert.throws(()=>hub.opinions.delegationStatus(c.id,id,-1),/Offset inválido/);
+});
+
+test('falha antes do envio liberta quota e um pedido enviado continua a contar mesmo se falhar',async t=>{
+ const{hub,c}=await setup(t,{claude:'pre-fail',antigravity:'lost'});
+ const original=process.env.HYDRAQ_NORMAL_DELEGATION_LIMIT;
+ t.after(()=>{if(original===undefined)delete process.env.HYDRAQ_NORMAL_DELEGATION_LIMIT;else process.env.HYDRAQ_NORMAL_DELEGATION_LIMIT=original;});
+ process.env.HYDRAQ_NORMAL_DELEGATION_LIMIT='1';
+ const turn=c.turns.at(-1);
+ turn.status=c.status='running';
+ const request={requestKey:'startup',provider:'claude',model:'test',task:'Pesquisa'};
+ await hub.opinions.delegate(c,turn,request);
+ await wait(()=>!hub.opinions.tasks.size);
+ assert.equal(hub.opinions.batches[0].jobs[0].status,'failed');
+ assert.equal(hub.opinions.batches[0].jobs[0].countedForLimit,false);
+ hub.clients.antigravity.hooksFile='fixture';
+ hub.clients.antigravity.guardDirectory='fixture';
+ await hub.opinions.delegate(c,turn,{...request,requestKey:'sent',provider:'antigravity'});
+ await wait(()=>!hub.opinions.tasks.size);
+ assert.equal(hub.opinions.batches[1].jobs[0].status,'uncertain');
+ assert.equal(hub.opinions.batches[1].jobs[0].countedForLimit,true);
+ await assert.rejects(hub.opinions.delegate(c,turn,{...request,requestKey:'overflow'}),/Limite.*1/);
+});
+
+test('verificação de delegação prolongada informa atividade sem parar o cliente',async t=>{
+ const{hub,c,workers}=await setup(t,{codex:'hold'});
+ t.mock.timers.enable({apis:['setInterval','Date']});
+ const turn=c.turns.at(-1);
+ turn.status=c.status='running';
+ const {id}=await hub.opinions.delegate(c,turn,{requestKey:'long',provider:'codex',model:'test',task:'Pesquisa prolongada'});
+ await wait(()=>workers[0]?.logs.length);
+ const job=hub.opinions.batches[0].jobs[0],worker=workers[0],child=worker.conversations[0];
+ t.mock.timers.tick(10*60_000);
+ assert.equal(hub.opinions.delegationStatus(c.id,id).healthCheck.state,'no-recent-activity');
+ assert.equal(child.status,'running');
+ child.updatedAt=new Date(Date.now()+9*60_000).toISOString();
+ t.mock.timers.tick(10*60_000);
+ assert.equal(hub.opinions.delegationStatus(c.id,id).healthCheck.state,'recent-activity');
+ assert.equal(job.status,'running');
+ worker.finish(child,'Resultado após mais de 10 minutos');
+ await wait(()=>!hub.opinions.tasks.size);
+ assert.equal(hub.opinions.delegationStatus(c.id,id).status,'completed');
+ assert.equal(hub.opinions.delegationStatus(c.id,id).healthCheck,undefined);
+});
+
+test('autorização de delegação fica pendente após a verificação e permite parar',async t=>{
+ const{hub,c}=await setup(t,{claude:'permission'});
+ t.mock.timers.enable({apis:['setInterval','Date']});
+ const turn=c.turns.at(-1);
+ turn.status=c.status='running';
+ const {id}=await hub.opinions.delegate(c,turn,{requestKey:'approval',provider:'claude',model:'test',task:'Pesquisa que requer autorização'});
+ const job=hub.opinions.batches[0].jobs[0];
+ await wait(()=>job.approvals?.length);
+ const approval=job.approvals[0].id;
+ t.mock.timers.tick(10*60_000);
+ assert.equal(hub.opinions.delegationStatus(c.id,id).healthCheck.state,'awaiting-approval');
+ assert.equal(job.approvals[0].id,approval);
+ await hub.opinions.stop(job.id);
+ await wait(()=>!hub.opinions.tasks.size);
+ assert.equal(hub.opinions.delegationStatus(c.id,id).status,'interrupted');
+ assert.deepEqual(job.approvals,[]);
 });

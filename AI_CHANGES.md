@@ -1,8 +1,14 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 183
+Versão atual: 186
 
 ## Resumo atual
+
+- Delegação normal (entrada 186): prazo de execução de cinco minutos substituído por verificações de estado a cada dez minutos. A tarefa continua e pode ser parada pelo utilizador, inclusive com autorização pendente. Testes focados **67/67**. Ativo na porta 4318.
+
+- Delegação (entrada 185): resultados MCP paginados, falhas anteriores ao envio libertam quota. Suite **881/881**. Grok real confirmou cartão, recusa e expiração aos cinco minutos. Hydra confirmou entrega tardia num novo turno do Sol. A 4318 continua na 184.
+
+- Cursor Grok 4.7 (entrada 184): pode iniciar e receber delegações no modo normal. Sol → Grok e Grok → Sol confirmados com clientes reais e resultado no mesmo turno. **53/53** testes focados. Ativo na porta 4318.
 
 - Delegação normal (entrada 183): o principal pode ler o resultado concluído por MCP e encadear até três pedidos por turno. Só um trabalho em curso por conversa. Suite **879/879**. Ensaio real Sol → Opus → Astra no mesmo turno. Ativo na porta 4318 com limite de três por turno.
 
@@ -2523,3 +2529,20 @@ Versão atual: 183
 - `get_delegation_status` devolve o resultado concluído como material citado, com fornecedor e modelo. O cartão continua disponível. Consulta imediata, sem espera bloqueante.
 - Uma chave nova cria um novo pedido no mesmo turno. Repetições conservam o ID e pedidos simultâneos continuam limitados a um ativo por conversa. `HYDRAQ_NORMAL_DELEGATION_LIMIT` tem valor inicial 3 e 0 desliga a delegação normal. Pedidos do turno ativo ficam acessíveis até este terminar.
 - Testes focados **67/67**, incluindo resultados no mesmo turno simulado, dois fornecedores em sequência, repetição, recusa por trabalho ativo, limite e valor 0. Suite completa **879/879**, sem ignorados. Ensaio real numa instância descartável: o Sol leu pelo MCP o identificador aleatório devolvido pelo Opus, incluiu-o no pedido ao Astra e leu a segunda resposta com o mesmo ID de turno. Ambos os trabalhos concluídos. A 4318 foi reiniciada a pedido do utilizador com as duas opções experimentais e o limite de três delegações por turno.
+
+### 184 — 2026-11-07 — Codex — Cursor Grok 4.7 na delegação normal
+
+- Grok 4.7 pode iniciar e receber delegações. O Cursor delegado corre em Perguntar sobre montagem bubblewrap só de leitura. Dados internos do HYDRAQ ocultos e diretório de sessão privado montado num caminho curto para o socket do Cursor.
+- Sol → Grok e Grok → Sol verificados com clientes reais em instância descartável: cada principal leu no mesmo turno o identificador de um ficheiro consultado pelo delegado. Confirmado que a montagem impede escrita no projeto e esconde os dados internos. Testes focados **53/53**.
+- Reiniciada a porta 4318 quando estava livre, com as opções experimentais, Grok 4.7 no catálogo e 118 conversas. Suite completa por repetir.
+
+### 185 — 2026-11-07 — Codex — paginação, quota e ensaios de delegação
+
+- `get_delegation_status` entrega até 6000 caracteres, com `offset`, `nextOffset` e `totalChars`. A paginação conserva pares Unicode. Uma falha antes de enviar o pedido liberta a quota. Envios confirmados ou incertos continuam a contar.
+- Suite completa **881/881**, sem ignorados. Grok 4.7 real, modo Perguntar: autorização ACP visível no cartão do navegador. Recusa pelo endpoint do cartão devolveu HTTP 200 e o comando ficou recusado. Noutro ensaio a autorização pendente foi cancelada e o trabalho interrompido aos **300,145 s**. Pai simulado nestes dois ensaios descartáveis.
+- Hydra Sol/Opus real: o primeiro turno do Sol terminou antes de chegar a resposta. O coordenador retomou o Sol, que leu e usou o identificador no novo turno. Sem reinício da 4318 ou commit. Matriz dos prazos máximos por cliente ainda pendente.
+
+### 186 — 2026-11-07 — Codex — acompanhamento das delegações longas
+
+- A cada dez minutos o cartão e a ferramenta de estado mostram a preparação, uma autorização pendente ou a atividade recente reportada pelo cliente. A falta de atividade não cancela a investigação. O botão Parar delegação também aparece com uma autorização pendente.
+- Testes focados **67/67**. O relógio simulado confirmou verificações consecutivas, uma conclusão após o prazo antigo e a preservação e paragem manual de uma autorização pendente. Sem novo ensaio real. A 4318 foi reiniciada a pedido do utilizador com as opções experimentais ativas e três delegações por turno.
