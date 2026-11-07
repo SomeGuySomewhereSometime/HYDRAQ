@@ -1,8 +1,12 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 194
+Versão atual: 196
 
 ## Resumo atual
+
+- Correções à barra Multi (entrada 196): a composição aguarda confirmação do servidor, o envio rejeita revisões antigas, o lugar desligado fica persistido e bloqueia o envio, o principal mantém-se ao reordenar rascunhos e o OpenCode carrega o catálogo antes de entrar. Testes focados 42/42, quatro cenários da barra e 33/33 verificações do Multi no navegador. Guardado localmente na branch `codex/interface-hydraq`. Sem reinício da 4318.
+
+- Barra de clientes transversal, alternância direta no Multi e renovação visual de Grafite e Mono (entrada 195): `#agent-dock` (bem como `#inspector-tabs` e `#command-palette-trigger`) passa a estar visível em Atelier, Grafite e Mono, mantendo os cinco clientes lado a lado com a respetiva cor. No modo Multi, todos os clientes continuam visíveis na barra (`aria-pressed="true"` para ligados, `"false"` para desligados) e clicar num cliente liga-o ou desliga-o diretamente (`add`, `remove`, `replace` ou rascunho `pending`). Renovação visual de Grafite e Mono (com paleta carbono e acentos cromáticos por cliente). Testes focados **38/38** (`dual-ui`, `dual`, `multi`, `layout`). Alterações deixadas sem commit para revisão; requer recarregar a página.
 
 - Ativação do painel Git (entrada 194): versão 194 na 4318 (PID 87133), cinco clientes ligados, 119 conversas preservadas e painel Git servido.
 
@@ -2621,3 +2625,19 @@ Versão atual: 194
 
 - Entrega das entradas 191–193 pedida pelo utilizador.
 - Instância 18945 encerrada sem tarefas nem autorizações pendentes. A nova instância (PID 87133) serve a revisão 194 na porta 4318 com os cinco clientes ligados e os mesmos 119 IDs de conversa. Módulo Git servido igual ao ficheiro em disco. Estado Git confirmado no projeto HYDRAQ. Opções de arranque preservadas. Logs em `.hydraq/server.log`. Sem push.
+
+
+### 195 — 2026-11-07 — Antigravity — barra de clientes transversal, toggle direto no Multi e renovação de Grafite e Mono
+
+- **Barra horizontal de clientes (`#agent-dock`) em todos os temas**: removida a restrição `.atelier-only` de `#agent-dock` (e também de `#inspector-tabs` e `#command-palette-trigger`) em `public/index.html`, tornando a barra horizontal com Codex, Antigravity, Claude Code, Cursor e OpenCode visível por cima da caixa de mensagem em Atelier, Grafite (`classic`) e Mono (`mono`), cada um com a sua cor (`--accent` / `--c-<cliente>`).
+- **Modo Multi na barra de clientes**: `renderDock` e `dockClick` em `public/dual.js` e `renderAgentDock` / `renderSend` / `chipGroup` em `public/app.js` mantêm os cinco clientes sempre visíveis e pela mesma ordem (`pill.hidden = false`, sem reordenação CSS). Os participantes ativos ficam em destaque (`aria-pressed="true"`, estrela `★` no principal) e os restantes permanecem visíveis como desligados (`aria-pressed="false"`). Clicar diretamente num cliente na barra liga-o ou desliga-o do Multi (via `/api/dual/:id/add`, `/api/dual/:id/remove`, `/api/dual/:id/replace` ou atualização de `pending.participants` antes do primeiro envio).
+- **Aspeto de Grafite e Mono**: renovadas as superfícies, contrastes, sombras, cartões, separadores do painel lateral e estados ativos em `public/style.css` e `public/layout.js`, dando ao Grafite um acabamento ardósia/grafite escovada mais profundo e ao Mono uma estética carbono com acentos cromáticos vivos por cliente e cores semânticas reais.
+- **Verificação**: sintaxe JS validada (`node --check`) e testes unitários/integração focados **38/38** (`test/dual-ui.test.mjs`, `test/dual.test.mjs`, `test/multi.test.mjs`, `test/layout.test.mjs`). Sem commit (pedido explícito do utilizador); falta recarregar a página no navegador para revisão visual pelo utilizador.
+
+
+### 196 — 2026-11-07 — Codex — composição confirmada na barra Multi
+
+- Durante uma alteração pela barra, o Multi mostra a composição confirmada e bloqueia o envio. O servidor recusa envios com uma revisão antiga dos participantes. Uma resposta HTTP perdida leva a releitura do estado.
+- Numa dupla, o lugar desligado fica no estado persistido. A barra mantém um participante ligado após recarregar. Novo envio e reenvio ficam suspensos até ligar o mesmo cliente ou escolher outro. As rondas antigas mantêm os seus participantes.
+- O principal de um rascunho acompanha o cliente ao reordenar os lugares. Se o OpenCode ainda não tiver catálogo para a pasta, a barra carrega-o e valida um modelo antes de enviar a alteração. O ponto de um cliente desligado fica discreto mesmo se o cliente estiver ligado ao serviço.
+- Testes focados **42/42** (`dual-ui`, `dual`, `multi`, `layout`). Navegador isolado com clientes simulados confirma remoção atrasada, bloqueio de Enviar, destinatários reais da ronda, persistência após recarregar, catálogo OpenCode e principal do rascunho. Regressão Multi no navegador **33/33**. Guardado localmente na branch `codex/interface-hydraq`. A 4318 requer reinício para carregar a nova rota.

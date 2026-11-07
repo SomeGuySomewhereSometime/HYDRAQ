@@ -53,7 +53,7 @@
           <span id="handoff-hint" class="sr-only"></span>
         </div>
         <nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true" data-tip="Conversas com um cliente de cada vez, com passagem de contexto entre clientes.">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false" data-tip="Equipa: o Codex planeia, o Grok executa e o Claude pode rever.">Colaboração</button><button id="tab-claudex" type="button" aria-controls="claudex-view" aria-selected="false" data-tip="Hydra: dois ou três clientes investigam juntos e preparam uma resposta comum; num pedido de alterações, o principal escreve e todos reveem e testam. Também disponível nas Conversas, no painel Modo." hidden>Hydra</button></nav>
-        <button id="command-palette-trigger" class="command-trigger atelier-only" type="button" data-tip="Abrir paleta rápida de comandos, conversas, projetos e clientes (Ctrl+K)"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Comandos</span><kbd>⌃K</kbd></button>
+        <button id="command-palette-trigger" class="command-trigger" type="button" data-tip="Abrir paleta rápida de comandos, conversas, projetos e clientes (Ctrl+K)"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Comandos</span><kbd>⌃K</kbd></button>
         <button id="theme-toggle" class="theme-switch" type="button" data-tip="Escolher a aparência"><span class="appearance-swatch" data-swatch="atelier" aria-hidden="true"></span><span id="theme-label">Atelier</span><svg class="ui-icon theme-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="connection-state" id="connection-state" data-tip="Estado da ligação ao cliente escolhido.">A ligar ao Codex…</div>
         <button id="inspector-toggle" class="icon-button panel-toggle" type="button" aria-controls="inspector" aria-expanded="true" data-tip="Mostrar ou esconder o último pedido, a atividade e as configurações"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg><span class="sr-only">Painel de atividade</span></button>
@@ -130,7 +130,7 @@
             <div id="switch-note" class="switch-note hidden" role="status"></div>
             <section id="review-unavailable" class="review-unavailable" role="alert" hidden></section>
             <form id="composer" class="composer">
-              <div class="atelier-agent-dock atelier-only" id="agent-dock" role="toolbar" aria-label="Escolher agente ativo">
+              <div class="atelier-agent-dock" id="agent-dock" role="toolbar" aria-label="Escolher agente ativo">
                 <button type="button" class="agent-pill" data-agent="codex" aria-pressed="true" data-tip="Mudar para Codex (OpenAI · sessão local)">
                   <span class="agent-pill-dot"></span>
                   <span class="agent-pill-name">Codex</span>
@@ -186,7 +186,7 @@
         </section>
         <div class="panel-resizer" id="inspector-resizer" data-panel="inspector" role="separator" aria-orientation="vertical" aria-controls="inspector" aria-label="Largura do painel de atividade" tabindex="0" data-tip="Arrasta para ajustar a largura · setas também ajustam · duplo clique repõe · Enter esconde"></div>
         <aside class="inspector" id="inspector" aria-label="Último pedido, atividade e configurações" data-inspector-tab="all">
-          <div class="atelier-inspector-tabs atelier-only" id="inspector-tabs" role="tablist" aria-label="Vista do painel lateral">
+          <div class="atelier-inspector-tabs" id="inspector-tabs" role="tablist" aria-label="Vista do painel lateral">
             <button type="button" role="tab" data-inspector-view="all" aria-selected="true" data-tip="Mostra consumo, atividade e sistema num único painel">Tudo</button>
             <button type="button" role="tab" data-inspector-view="activity" aria-selected="false" data-tip="Foca na linha temporal de comandos, ficheiros e ferramentas">Atividade</button>
             <button type="button" role="tab" data-inspector-view="telemetry" aria-selected="false" data-tip="Foca nos contadores de tokens, cache e diffs do turno">Consumo</button>

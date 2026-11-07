@@ -52,8 +52,8 @@ export function dualPanelState(delivery,turn){
 }
 
 export class DualUI{
- constructor({api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses=()=>[],markdown,describeWork=null,elapsed=null}){
-  Object.assign(this,{api,getState,getCurrent,getKey,getProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses,markdown,describeWork,elapsed});
+ constructor({api,getState,getCurrent,getKey,getProvider,setProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses=()=>[],markdown,describeWork=null,elapsed=null}){
+  Object.assign(this,{api,getState,getCurrent,getKey,getProvider,setProvider,getModels,memberSettings,toast,refresh,beforeChange,changed,open,applySettings,loadModels,getSyntheses,markdown,describeWork,elapsed});
   this.panels=new PanelKit({toast});this.pending=new Map();this.sequence=0;this.synthesisViews=new Map();this.thoughtsOpen=new Set();this.thoughtChoices=new Map();
   this.dialog=node('dialog','opinion-dialog dual-dialog');this.dialog.setAttribute('aria-labelledby','dual-dialog-title');document.body.append(this.dialog);
   document.getElementById('dual-toggle')?.addEventListener('click',()=>this.configure());
@@ -64,7 +64,11 @@ export class DualUI{
  pendingFor(){return this.record()?null:this.pending.get(this.getKey())||null;}
  consumePending(key){this.pending.delete(key);}
  conversation(id){return this.getState()?.conversations?.find(c=>c.id===id)||null;}
- focusProvider(conversation){const record=this.record(conversation);return record?record.members[targetKeys(record).length>1?record.principal:targetKeys(record)[0]].provider:null;}
+ focusProvider(conversation){
+  const record=this.record(conversation);if(!record)return null;
+  const keys=targetKeys(record),key=record.vacant||keys.length>1?record.principal:keys[0];
+  return record.members[key].provider;
+ }
  both(conversation){const record=this.record(conversation);return record?targetKeys(record).length>1:Boolean(this.pendingFor());}
  running(conversation){const record=this.record(conversation);return Boolean(record&&memberKeys(record).some(key=>busy.has(this.conversation(record.members[key].conversationId)?.status)));}
  /** Every recipient of the next request must be connected. */
@@ -87,7 +91,7 @@ export class DualUI{
  /** A synthesis meant for the next round is still being written: a round sent now goes without it. */
  pendingSynthesis(conversation){const record=this.record(conversation);return this.syntheses(record).some(b=>b.context&&synthesizing(b.jobs[0]));}
  async setTarget(target){
-  const record=this.record();if(!record||this.targetBusy||JSON.stringify(record.target)===JSON.stringify(target))return;
+  const record=this.record();if(!record||record.vacant||this.memberBusy||this.targetBusy||JSON.stringify(record.target)===JSON.stringify(target))return;
   this.targetBusy=true;
   this.beforeChange();const previous=record.target;record.target=target;this.changed();
   try{await this.api('/api/dual/'+record.id,{target,multiVersion:2});await this.refresh();}
@@ -100,21 +104,49 @@ export class DualUI{
   this.setTarget(record.principal);
   this.toast(`A implementação vai só para o principal: ${shortName(record.members[record.principal].provider)}. O outro recebe o resultado quando voltares a falar com ele.`);
  }
- modelLabel(provider,settings){const model=this.getModels(provider).find(m=>m.id===settings?.model);return [model?.name||settings?.model,effortLabels[settings?.effort]||settings?.effort].filter(Boolean).join(' · ');}
+ modelLabel(provider,settings){const model=this.getModels?.(provider)?.find(m=>m.id===settings?.model);return [model?.name||settings?.model,effortLabels[settings?.effort]||settings?.effort].filter(Boolean).join(' · ');}
 
+ pendingParticipants(pending=this.pendingFor?.()){
+  return !pending?[]:Array.isArray(pending.participants)?pending.participants:pending.provider?[pending]:[];
+ }
  pendingMembers(){
-  const pending=this.pendingFor();if(!pending)return null;
-  return {a:{provider:this.getCurrent()?.provider||this.getProvider(),...this.memberSettings(null,'a')},...Object.fromEntries((pending.participants||[pending]).map((p,i)=>[DUAL_KEYS[i+1],p]))};
+  const pending=this.pendingFor?.();if(!pending)return null;
+  const parts=(this.pendingParticipants||DualUI.prototype.pendingParticipants).call(this,pending);
+  return {a:{provider:this.getCurrent?.()?.provider||this.getProvider?.()||'codex',...(this.memberSettings?.(null,'a')||{})},...Object.fromEntries(parts.map((p,i)=>[DUAL_KEYS[i+1],p]))};
+ }
+ activeMembers(conversation=this.getCurrent?.()){
+  const record=this.record?.(conversation);
+  if(record?.vacant)return Object.fromEntries(memberKeys(record).filter(k=>k!==record.vacant).map(k=>[k,record.members[k]]));
+  return record?.members||this.pendingMembers();
+ }
+ activeProviders(conversation=this.getCurrent?.()){
+  const members=(this.activeMembers||DualUI.prototype.activeMembers).call(this,conversation);
+  return members?Object.values(members).map(m=>m.provider):[];
+ }
+ incomplete(conversation=this.getCurrent?.()){
+  const members=(this.activeMembers||DualUI.prototype.activeMembers).call(this,conversation);
+  return Boolean(members&&Object.keys(members).length<2);
+ }
+ defaultChoice(provider,record=this.record?.()){
+  const saved=this.memberSettings?.(record,null,provider)||{};
+  const groupId=record?.groupId||this.getCurrent?.()?.group;
+  const existing=groupId?this.getState?.()?.conversations?.find(c=>c.group===groupId&&c.provider===provider):null;
+  const list=this.getModels?.(provider)||[];
+  const entry=list.find(m=>m.id===(saved.model||existing?.model))||list.find(m=>m.isDefault)||list[0];
+  const model=entry?.id||saved.model||existing?.model||'';
+  const effort=entry?.efforts?.includes(saved.effort)?saved.effort:entry?.efforts?.includes(existing?.effort)?existing.effort:entry?.defaultEffort||entry?.efforts?.[0]||saved.effort||existing?.effort||'';
+  return {provider,model,effort};
  }
  renderComposer(conversation,{locked}){
   const toggle=document.getElementById('dual-toggle'),bar=document.getElementById('dual-targets'),composer=document.getElementById('composer'),review=document.getElementById('review-toggle');
   if(!toggle||!bar)return;
-  const record=this.record(conversation),pending=this.pendingFor(),members=record?.members||this.pendingMembers(),keys=members?Object.keys(members):[],pair=keys.map(k=>members[k].provider);
-  toggle.textContent=members?`Multi · ${keys.length} participantes`:'Multi';toggle.setAttribute('aria-pressed',String(Boolean(members)));toggle.disabled=Boolean(locked&&!record);
+  const record=this.record(conversation),pending=this.pendingFor(),members=this.activeMembers(conversation),keys=members?Object.keys(members):[],pair=keys.map(k=>members[k].provider);
+  toggle.textContent=members?`Multi · ${keys.length} ${keys.length===1?'participante':'participantes'}`:'Multi';toggle.setAttribute('aria-pressed',String(Boolean(members)));toggle.disabled=Boolean(this.memberBusy||locked&&!record);
   toggle.dataset.tip='Multi: dois a quatro clientes respondem de forma independente na mesma ronda. O histórico passa entre rondas; só o principal implementa.';
   if(this.selectingRecordId!==record?.id){this.selectingRecordId=record?.id;this.selectingGroup=false;}
-  locked=locked||this.targetBusy;
-  const selected=record?targetKeys(record):keys,principal=record?.principal||pending?.principal||'a';
+  locked=locked||this.targetBusy||this.memberBusy;
+  const rawSelected=record?targetKeys(record).filter(k=>keys.includes(k)):keys,selected=rawSelected.length?rawSelected:keys;
+  const principal=(record?.principal&&keys.includes(record.principal)?record.principal:pending?.principal&&keys.includes(pending.principal)?pending.principal:keys[0])||'a';
   if(members)composer.dataset.dual=selected.length>1?'both':'one';else delete composer.dataset.dual;
   composer.style.setProperty('--multi-edge',pair.map((provider,i)=>`var(--c-${provider}) ${i*100/Math.max(1,pair.length-1)}%`).join(', '));
   for(const [i,key] of DUAL_KEYS.entries()){if(pair[i])composer.style.setProperty('--pair-'+key,`var(--c-${pair[i]})`);else composer.style.removeProperty('--pair-'+key);}
@@ -125,7 +157,7 @@ export class DualUI{
   const option=(value,label,provider)=>{
     const button=node('button','dual-target');button.type='button';button.dataset.target=value;if(provider)button.dataset.client=provider;
     button.setAttribute('aria-pressed',String(value==='all'?selected.length===keys.length:selected.includes(value)));
-    button.textContent=label;button.disabled=locked||Boolean(pending&&value!=='all');
+    button.textContent=label;button.disabled=locked||Boolean(pending&&value!=='all')||keys.length<2;
     button.addEventListener('click',()=>{
       if(value==='all'){this.selectingGroup=false;this.setTarget('all');return;}
       if(!this.selectingGroup){this.setTarget(value);return;}
@@ -156,38 +188,146 @@ export class DualUI{
   return {value:()=>radios.find(r=>r.checked)?.value||Object.keys(members)[0],rename:(key,provider)=>{radios.find(r=>r.value===key).parentElement.lastChild.textContent=shortName(provider);},radios};
  }
 
- /** Atelier: in a dual the client bar shows the two participants, fixed; clicking one opens its settings. */
+ /** In a dual the horizontal client bar keeps all clients visible: active participants stay lit, and clicking any client toggles it on or off. */
  renderDock(conversation){
   const dock=document.getElementById('agent-dock');if(!dock)return false;
-  const record=this.record(conversation),pending=this.pendingFor();
-  const pair=record?Object.fromEntries(memberKeys(record).map(k=>[k,record.members[k].provider])):pending?Object.fromEntries(Object.entries(this.pendingMembers()).map(([k,m])=>[k,m.provider])):null;
-  const principal=record?.principal||pending?.principal||'a';
+  const record=this.record?.(conversation),pending=this.pendingFor?.(),members=(this.activeMembers||DualUI.prototype.activeMembers).call(this,conversation);
+  const pair=members?Object.fromEntries(Object.entries(members).map(([k,m])=>[k,m.provider])):null;
+  const keys=members?Object.keys(members):[];
+  const principal=(record?.principal&&keys.includes(record.principal)?record.principal:pending?.principal&&keys.includes(pending.principal)?pending.principal:keys[0])||'a';
   dock.toggleAttribute('data-dual',Boolean(pair));
-  dock.setAttribute('aria-label',pair?'Participantes do Multi':'Escolher agente ativo');
+  dock.setAttribute('aria-label',pair?'Participantes do Multi (clica num cliente para o ligar ou desligar)':'Escolher agente ativo');
   for(const pill of dock.querySelectorAll('[data-agent]')){
    const provider=pill.dataset.agent,key=pair?DUAL_KEYS.find(k=>pair[k]===provider):null,tag=pill.querySelector('.agent-pill-tag');
    pill.dataset.tagText??=tag?.textContent||'';pill.dataset.tipText??=pill.dataset.tip||'';
-   pill.hidden=Boolean(pair&&!key);
+   pill.hidden=false;
    pill.querySelector('.agent-pill-principal')?.remove();pill.querySelector('.agent-pill-lock')?.remove();
-   if(!key){delete pill.dataset.dualKey;if(tag)tag.textContent=pill.dataset.tagText;pill.dataset.tip=pill.dataset.tipText;pill.removeAttribute('aria-haspopup');continue;}
+   pill.removeAttribute('aria-haspopup');
+   if(!pair){
+    delete pill.dataset.dualKey;
+    if(tag)tag.textContent=pill.dataset.tagText;
+    pill.dataset.tip=pill.dataset.tipText;
+    continue;
+   }
+   pill.setAttribute('aria-pressed',String(Boolean(key)));
+   if(!key){
+    delete pill.dataset.dualKey;
+    if(tag)tag.textContent='Desligado';
+    pill.dataset.tip=`${names[provider]||provider} · desligado neste Multi. Clica para ligar ao Multi.`;
+    continue;
+   }
    pill.dataset.dualKey=key;
-   const label=this.modelLabel(provider,record?this.memberSettings(record,key):this.pendingMembers()?.[key]);
+   const label=(this.modelLabel||DualUI.prototype.modelLabel).call(this,provider,record?this.memberSettings?.(record,key):members[key]);
    if(tag)tag.textContent=label||pill.dataset.tagText;
    if(key===principal){const star=node('span','agent-pill-principal','★');star.setAttribute('aria-label','principal');pill.querySelector('.agent-pill-name')?.before(star);}
-   pill.append(lockIcon());pill.setAttribute('aria-haspopup','dialog');
-   pill.dataset.tip=`${names[provider]||provider}${key===principal?' · principal':''}${label?' · '+label:''}. Fixo no Multi: carrega para mudar modelo, raciocínio ou cliente. Quem recebe a mensagem escolhe-se no seletor da caixa.`;
+   pill.dataset.tip=`${names[provider]||provider}${key===principal?' · principal':''}${label?' · '+label:''}. Ligado no Multi: clica para desligar.`;
   }
   return Boolean(pair);
  }
+ /** A confirmed roster is the only roster shown or used for sending. */
+ runMemberChange(action){
+  this.memberBusy=true;
+  this.changed?.();
+  this.memberTask=Promise.resolve().then(action).catch(async error=>{
+   // A request may have succeeded while its reply was lost. Read back the
+   // server state, and let the send revision reject any still-stale view.
+   try{await this.refresh?.();}catch{/* The next state event can recover. */}
+   this.toast?.(error.message);
+  }).finally(()=>{this.memberBusy=false;this.changed?.();});
+ }
+ removePending(pending,active,key,conversation){
+  if(key==='a'&&conversation){
+   this.toast?.('Este cliente é a sessão inicial da conversa. Liga outro participante ou desliga o Multi.');
+   return;
+  }
+  this.beforeChange?.();
+  const principal=active[pending.principal||'a']?.provider;
+  const remaining=Object.entries(active).filter(([slot])=>slot!==key).map(([,member])=>member);
+  if(key==='a'){
+   const {provider,...settings}=remaining[0];
+   this.setProvider?.(provider);
+   this.applySettings?.(provider,settings);
+  }
+  pending.participants=remaining.slice(1);
+  const principalIndex=remaining.findIndex(member=>member.provider===principal);
+  pending.principal=DUAL_KEYS[Math.max(0,principalIndex)];
+  delete pending.provider;delete pending.model;delete pending.effort;
+  this.changed?.();
+ }
  dockClick(provider){
-  const conversation=this.getCurrent(),record=this.record(conversation);
-  if(record){const key=memberKeys(record).find(k=>record.members[k].provider===provider);if(key)this.editMember(key);return true;}
-  if(this.pendingFor()){this.configure();return true;}
-  return false;
+  const conversation=this.getCurrent?.(),record=this.record(conversation),pending=this.pendingFor();
+  if(!record&&!pending)return false;
+  if(this.memberBusy||this.targetBusy)return true;
+  const state=this.getState?.();
+  const terminal=record&&(state?.nativeSessions?.sessions?.some(s=>s.group===record.groupId)||state?.conversations?.some(c=>c.group===record.groupId&&c.terminal));
+  const roundSending=record?.rounds?.some(r=>r.targets?.some(k=>['preparing','sending'].includes(r.deliveries?.[k]?.status)));
+  if(this.running?.(conversation)||roundSending||conversation?.claudexTask){
+   this.toast?.('Aguarda que as respostas terminem para mudar os participantes do Multi.');
+   return true;
+  }
+  if(terminal){
+   this.toast?.('A conversa está no terminal. Usa «Continuar na HYDRAQ» antes de mudar os participantes do Multi.');
+   return true;
+  }
+  const active=this.activeMembers(conversation);
+  const keys=Object.keys(active),activeKey=keys.find(key=>active[key].provider===provider);
+  const revision=record?.revision||0,composer=this.getKey?.();
+  const sameComposer=()=>{
+   const latest=this.record();
+   return composer===this.getKey?.()&&(record?latest?.id===record.id:!latest&&this.pendingFor()===pending);
+  };
+  const post=(operation,body)=>this.api('/api/dual/'+record.id+'/'+operation,{revision,multiVersion:2,...body});
+  if(activeKey){
+   if(keys.length===1){this.toast?.('Mantém pelo menos um cliente ligado no Multi, ou desliga o Multi.');return true;}
+   if(!record){this.removePending(pending,active,activeKey,conversation);return true;}
+   this.beforeChange?.();
+   this.runMemberChange(async()=>{
+    const removed=active[activeKey],wasSelected=conversation?.id===removed.conversationId;
+    const principal=activeKey===record.principal?keys.find(k=>k!==activeKey):record.principal;
+    const result=keys.length===2
+     ? await post('slot',{key:activeKey,enabled:false})
+     : await post('remove',{key:activeKey,principal,requestId:crypto.randomUUID()});
+    await this.refresh();
+    if(wasSelected&&sameComposer()){
+     const next=result?.dual?.members[result.dual.principal]?.conversationId;
+     if(next)this.open?.(next);
+    }
+   });
+   return true;
+  }
+  if(keys.length>=4){this.toast?.('O Multi permite até quatro participantes. Desliga primeiro outro cliente.');return true;}
+  if(!this.offered(provider)){this.toast?.(`Liga primeiro o ${shortName(provider)} para o pôr no Multi.`);return true;}
+  this.beforeChange?.();
+  this.runMemberChange(async()=>{
+   const leaving=record?.members[record.vacant];
+   if(leaving?.provider===provider){
+    await post('slot',{key:record.vacant,enabled:true});
+    await this.refresh();
+    return;
+   }
+   if(!this.getModels(provider).length&&this.loadModels)await this.loadModels(provider,true);
+   if(!sameComposer()||(record&&(this.record()?.revision||0)!==revision))throw Error('O Multi mudou entretanto. Revê os participantes.');
+   const choice=this.defaultChoice(provider,this.record());
+   if(!choice.model||!this.getModels(provider).some(model=>model.id===choice.model)){
+    throw Error(`Não há um modelo disponível no catálogo de ${shortName(provider)}.`);
+   }
+   if(!record){
+    pending.participants=[...this.pendingParticipants(pending),choice];
+    pending.principal??='a';
+    delete pending.provider;delete pending.model;delete pending.effort;
+    return;
+   }
+   const result=leaving
+    ? await post('replace',{...choice,key:record.vacant,principal:record.principal})
+    : await post('add',{...choice,requestId:crypto.randomUUID()});
+   await this.refresh();
+   if(leaving&&sameComposer()&&conversation?.id===leaving.conversationId&&result?.conversationId)this.open?.(result.conversationId);
+  });
+  return true;
  }
  /** The composer's client field, while talking to one model: replaces that participant, asked first. */
  chooseClient(provider){
-  const record=this.record();if(!record)return;
+  const record=this.record();if(!record||record.vacant||this.memberBusy)return;
   const key=targetKeys(record).length>1?record.principal:targetKeys(record)[0];
   if(record.members[key].provider===provider)return;
   if(others(record.members,key).some(m=>m.provider===provider)){this.toast(`O ${shortName(provider)} já participa neste Multi. Para falar só com ele, escolhe-o no seletor.`);return;}
@@ -280,6 +420,12 @@ export class DualUI{
   this.dialog.append(node('p','opinion-caption','Cada cliente responde de forma independente na mesma ronda. Entre rondas, recebe o histórico dos restantes, com excertos assinalados quando necessário. Só o principal implementa.'));
   const error=node('p','opinion-error');error.setAttribute('role','alert');
   const fail=e=>{error.textContent=e.message;};
+  if(record?.vacant){
+    const end=node('button','secondary-button','Desligar Multi');end.type='button';
+    end.addEventListener('click',async()=>{end.disabled=true;try{await this.api('/api/dual/'+record.id+'/end',{});await this.refresh();this.dialog.close();this.open?.(record.members[record.principal].conversationId);}catch(e){fail(e);end.disabled=false;}});
+    this.dialog.append(node('p','opinion-caption','Há um lugar desligado. Liga um segundo cliente pela barra ou desliga o Multi.'),error,end);
+    this.dialog.showModal();return;
+  }
   if(record){
     const principal=this.principalChoice(record.members,record.principal),list=node('div','multi-member-list');this.dialog.append(list);
     const blocked=this.running(conversation)||Boolean(conversation?.claudexTask)||this.getState()?.conversations?.some(c=>c.group===record.groupId&&c.terminal);
@@ -300,7 +446,8 @@ export class DualUI{
   }
   const available=Object.keys(names).filter(id=>id!==source&&this.offered(id));
   if(!available.length){this.dialog.append(node('p','opinion-caption','Liga primeiro outro cliente para ativar o Multi.'));this.dialog.showModal();return;}
-  let choices=structuredClone(pending?.participants||[pending||{provider:available[0]}]),chosen=pending?.principal||'a';
+  const initial=this.pendingParticipants(pending);
+  let choices=structuredClone(initial.length?initial:[{provider:available[0]}]),chosen=pending?.principal||'a';
   const content=node('div','multi-start');this.dialog.append(content);
   const draw=()=>{
     content.replaceChildren();content.append(node('p','dual-summary',`${shortName(source)} · mantém a sessão desta conversa`));

@@ -2984,25 +2984,25 @@ body[data-theme="atelier"] .atelier-inspector-tabs button[aria-selected="true"] 
   color: #ffffff;
   box-shadow: 0 2px 6px #0008, inset 0 1px 0 #ffffff1a, inset 0 -1.5px 0 var(--accent);
 }
-body[data-theme="atelier"] #inspector[data-inspector-tab="activity"] :is(#turn-usage, #mode-panel, #diff-panel, #settings-details) {
+body #inspector[data-inspector-tab="activity"] :is(#turn-usage, #mode-panel, #diff-panel, #settings-details) {
   display: none !important;
 }
-body[data-theme="atelier"] #inspector[data-inspector-tab="telemetry"] :is(#mode-panel, .activity-heading, #activity-filter, #activity, #settings-details) {
+body #inspector[data-inspector-tab="telemetry"] :is(#mode-panel, .activity-heading, #activity-filter, #activity, #settings-details) {
   display: none !important;
 }
-body[data-theme="atelier"] #inspector[data-inspector-tab="telemetry"] #turn-usage {
+body #inspector[data-inspector-tab="telemetry"] #turn-usage {
   display: block !important;
 }
-body[data-theme="atelier"] #inspector[data-inspector-tab="system"] :is(#turn-usage, .activity-heading, #activity-filter, #activity, #diff-panel) {
+body #inspector[data-inspector-tab="system"] :is(#turn-usage, .activity-heading, #activity-filter, #activity, #diff-panel) {
   display: none !important;
 }
-body[data-theme="atelier"] #inspector[data-inspector-tab="system"] #settings-details {
+body #inspector[data-inspector-tab="system"] #settings-details {
   flex: 1;
   border-top: 0;
   margin-top: 0;
   padding-top: 0;
 }
-body[data-theme="atelier"] #inspector[data-inspector-tab="system"] #settings-details .config-card {
+body #inspector[data-inspector-tab="system"] #settings-details .config-card {
   max-height: none;
 }
 body[data-theme="atelier"] .turn-usage {
@@ -4228,15 +4228,114 @@ body .dual-target:disabled { opacity:.5; cursor:default; }
 .dual-stage .review-panel-body { height:auto; min-height:120px; max-height:var(--panel-h); }
 .dual-stage .review-grid[data-focus="true"] > .review-panel[data-expanded] .review-panel-body { max-height:none; }
 .dual-stage .review-panel-empty { min-height:96px; }
-/* Atelier, dual: the client bar keeps only the two participants, fixed, principal first marked with ★.
-   Clicking one opens its settings; who receives the next message is the selector's choice. */
-body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[hidden] { display:none; }
-body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-key="a"] { order:-2; }
-body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-key="b"] { order:-1; }
-body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-key] { background:linear-gradient(135deg, color-mix(in srgb, var(--accent) 18%, #171c2d) 0%, #111522 100%); border-color:color-mix(in srgb, var(--accent) 55%, #2d3650); color:#fff; }
-body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-key] .agent-pill-tag { display:block; min-width:0; overflow:hidden; color:color-mix(in srgb, var(--accent) 70%, #c9cfe0); text-overflow:ellipsis; white-space:nowrap; }
-@container composer (max-width: 520px) { body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-key] .agent-pill-tag { display:none; } }
-body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-key] .agent-pill-name { flex:none; }
+/* Horizontal client bar (#agent-dock): shared across Atelier, Grafite and Mono.
+   In Multi ([data-dual]), all 5 clients remain side by side in fixed order; active participants
+   stay highlighted and inactive clients remain visible as off so clicking any client toggles it. */
+body .atelier-agent-dock {
+  display: grid;
+  grid-template-columns: none;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  gap: 6px;
+  padding: 7px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: color-mix(in srgb, var(--bg-input, var(--bg-app)) 82%, transparent);
+}
+body .agent-pill {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 32px;
+  min-width: 0;
+  padding: 0 10px;
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--border-subtle));
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 5%, var(--bg-input, var(--bg-app)));
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 150ms cubic-bezier(0.22, 1, 0.36, 1), background-color 150ms cubic-bezier(0.22, 1, 0.36, 1), color 150ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 150ms cubic-bezier(0.22, 1, 0.36, 1), opacity 150ms ease, transform 120ms ease;
+}
+body .agent-pill:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 13%, var(--bg-raised));
+  color: var(--text-primary);
+}
+body .agent-pill[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--border-strong));
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 22%, var(--bg-raised)) 0%, color-mix(in srgb, var(--accent) 10%, var(--bg-surface)) 100%);
+  color: var(--text-primary);
+  box-shadow: 0 4px 14px -4px color-mix(in srgb, var(--accent) 32%, transparent), inset 0 1px 0 #ffffff1c;
+}
+body .agent-pill-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: color-mix(in srgb, var(--accent) 42%, var(--border-strong));
+  transition: background-color 150ms ease, box-shadow 150ms ease;
+}
+body .agent-pill[data-connected="true"] .agent-pill-dot,
+body .agent-pill[aria-pressed="true"] .agent-pill-dot {
+  background: var(--accent);
+  box-shadow: 0 0 8px color-mix(in srgb, var(--accent) 75%, transparent);
+}
+body .agent-pill-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body .agent-pill[aria-pressed="true"] .agent-pill-name {
+  color: var(--text-primary);
+}
+body .agent-pill-tag {
+  margin-left: auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 550;
+  color: color-mix(in srgb, var(--accent) 55%, var(--text-secondary));
+}
+body .agent-pill[aria-pressed="true"] .agent-pill-tag {
+  color: var(--accent);
+  font-weight: 620;
+}
+body .atelier-agent-dock[data-dual] .agent-pill[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 78%, #ffffff22);
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 25%, var(--bg-raised)) 0%, color-mix(in srgb, var(--accent) 12%, var(--bg-surface)) 100%);
+  box-shadow: 0 5px 16px -4px color-mix(in srgb, var(--accent) 36%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+body .atelier-agent-dock[data-dual] .agent-pill[aria-pressed="false"] {
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border-subtle));
+  background: color-mix(in srgb, var(--bg-input, var(--bg-app)) 88%, transparent);
+  color: var(--text-secondary);
+  opacity: 0.72;
+}
+body .atelier-agent-dock[data-dual] .agent-pill[aria-pressed="false"]:hover:not(:disabled) {
+  border-style: solid;
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-raised));
+  color: var(--text-primary);
+  opacity: 1;
+}
+body .atelier-agent-dock[data-dual] .agent-pill[aria-pressed="false"] .agent-pill-dot {
+  background: color-mix(in srgb, var(--accent) 35%, var(--border-strong));
+  box-shadow: none;
+}
+body .atelier-agent-dock[data-dual] .agent-pill[aria-pressed="false"] .agent-pill-tag {
+  color: var(--text-tertiary, var(--text-secondary));
+}
+@container composer (max-width: 860px) {
+  body .agent-pill-tag { display: none; }
+}
+@container composer (max-width: 520px) {
+  body .atelier-agent-dock { grid-auto-columns: max-content; overflow-x: auto; scrollbar-width: none; }
+  body .atelier-agent-dock::-webkit-scrollbar { display: none; }
+}
 .agent-pill-principal { flex:none; color:var(--warning,#e8c27a); font-size:11px; line-height:1; }
 .agent-pill-lock { flex:none; width:11px; height:11px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; opacity:.55; }
 .dual-member-actions { display:flex; flex-wrap:wrap; gap:8px; margin:4px 0 0; }
@@ -5133,8 +5232,6 @@ body .multi-select-toggle { margin-left: auto; font-size: 11px; }
 .multi-member-fields { flex: 1 1 100%; min-width: 0; width: 100%; }
 .multi-member-fields select { max-width: 100%; min-width: 0; }
 body:not([data-hydra]) #composer[data-dual] { --pair-edge: linear-gradient(90deg, var(--multi-edge)); }
-body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-key="c"] { order: 0; }
-body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-key="d"] { order: 1; }
 .mode-tile[data-mode="dual"] .mode-glyph { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
 
 #dual-targets { width: 100%; grid-column: 1 / -1; }
@@ -5177,3 +5274,370 @@ body[data-theme="atelier"] .atelier-agent-dock[data-dual] .agent-pill[data-dual-
 .git-dialog :is(.git-status, .git-main p, .git-main h3) { margin: 4px 0; }
 .git-dialog .git-main details > label { margin: 8px 0; }
 .git-dialog button[aria-pressed="true"] { box-shadow: inset 0 -2px var(--accent); }
+
+/* ==========================================================================
+   Grafite & Mono Studio Overhaul + Universal Client Bar (#agent-dock)
+   ========================================================================== */
+
+/* --- Shared Inspector HUD Tabs across Grafite, Mono and Atelier --- */
+body:not([data-theme="atelier"]) .atelier-inspector-tabs {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  margin-bottom: 14px;
+  border-radius: 11px;
+  background: var(--bg-input, var(--bg-app));
+  border: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 2px #00000055;
+  flex-shrink: 0;
+}
+body:not([data-theme="atelier"]) .atelier-inspector-tabs button {
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, box-shadow 140ms ease;
+}
+body:not([data-theme="atelier"]) .atelier-inspector-tabs button:hover:not([aria-selected="true"]) {
+  color: var(--text-primary);
+  background: var(--bg-hover);
+}
+body:not([data-theme="atelier"]) .atelier-inspector-tabs button[aria-selected="true"] {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  box-shadow: 0 2px 6px #00000055, inset 0 1px 0 var(--highlight, #ffffff12), inset 0 -2px 0 var(--accent);
+}
+
+/* --- Universal #agent-dock integration inside #composer --- */
+body .composer {
+  overflow: hidden;
+}
+body .agent-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+@media (forced-colors: active) {
+  body .agent-pill[aria-pressed="true"] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
+  }
+  body .agent-pill:focus-visible {
+    outline: 2px solid CanvasText;
+    outline-offset: 2px;
+  }
+}
+
+/* --- Grafite (data-theme="classic") Visual Elevation --- */
+body[data-theme="classic"] {
+  --bg-app: #0a0c10;
+  --bg-sidebar: #0e1116;
+  --bg-surface: #141820;
+  --bg-raised: #1b202b;
+  --bg-input: #0e1117;
+  --bg-hover: #222836;
+  --text-primary: #f0f2f7;
+  --text-secondary: #a3abbd;
+  --text-tertiary: #6e778a;
+  --border-subtle: #222834;
+  --border-strong: #353e52;
+  --highlight: #ffffff0f;
+  --glow-strength: 11%;
+  --hue-esmeralda: #34d399;
+  --hue-lima: #a3e635;
+  --hue-ambar: #fbbf24;
+  --hue-laranja: #fb923c;
+  --hue-rubi: #fb7185;
+  --hue-rosa: #f472b6;
+  --hue-violeta: #a78bfa;
+  --hue-azul: #60a5fa;
+  --hue-ciano: #22d3ee;
+}
+body[data-theme="classic"] .sidebar {
+  background: linear-gradient(180deg, #10141c 0%, #0c0f15 100%);
+  border-right-color: var(--border-subtle);
+}
+body[data-theme="classic"] .brand-heads i[data-connected="true"] {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 65%, transparent);
+}
+body[data-theme="classic"] .topbar {
+  background: color-mix(in srgb, var(--bg-app) 84%, transparent);
+  backdrop-filter: saturate(160%) blur(14px);
+  border-bottom-color: var(--border-subtle);
+}
+body[data-theme="classic"] .command-trigger {
+  height: 32px;
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  border-color: var(--border-subtle);
+  box-shadow: inset 0 1px 0 var(--highlight);
+}
+body[data-theme="classic"] .command-trigger:hover {
+  border-color: var(--accent-line);
+  background: var(--bg-hover);
+}
+body[data-theme="classic"] .composer {
+  background: linear-gradient(180deg, #171c26 0%, #11151d 100%);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 14px 36px -8px #00000099, inset 0 1px 0 var(--highlight);
+}
+body[data-theme="classic"][data-hydra] .composer,
+body[data-theme="classic"]:not([data-hydra]) #composer[data-dual] {
+  border-color: transparent;
+  background: linear-gradient(180deg, #171c26 0%, #11151d 100%) padding-box, var(--pair-edge) border-box;
+  box-shadow: 0 16px 40px -10px #000b, -12px 0 32px -22px var(--pair-a), 12px 0 32px -22px var(--pair-b);
+}
+body[data-theme="classic"] .atelier-agent-dock {
+  background: linear-gradient(180deg, #0d1017 0%, #10141c 100%);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 7px 8px;
+}
+body[data-theme="classic"] .agent-pill {
+  background: color-mix(in srgb, var(--accent) 6%, #131720);
+  border-color: color-mix(in srgb, var(--accent) 24%, #252c3b);
+  color: var(--text-secondary);
+}
+body[data-theme="classic"] .agent-pill:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 14%, #191f2b);
+  border-color: color-mix(in srgb, var(--accent) 58%, #343d52);
+  color: var(--text-primary);
+}
+body[data-theme="classic"] .agent-pill[aria-pressed="true"] {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, #1b2130) 0%, color-mix(in srgb, var(--accent) 10%, #131822) 100%);
+  border-color: color-mix(in srgb, var(--accent) 72%, #3a445c);
+  color: #ffffff;
+  box-shadow: 0 4px 14px -3px color-mix(in srgb, var(--accent) 32%, transparent), inset 0 1px 0 #ffffff22;
+}
+body[data-theme="classic"] .mode-panel {
+  background: linear-gradient(180deg, var(--bg-surface) 0%, color-mix(in srgb, var(--bg-surface) 75%, var(--bg-sidebar)) 100%);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--highlight);
+}
+
+/* --- Mono (data-theme="mono") Chromatic Carbon Overhaul --- */
+body[data-theme="mono"] {
+  --bg-app: #101216;
+  --bg-sidebar: #0c0e12;
+  --bg-surface: #161920;
+  --bg-raised: #1e222b;
+  --bg-input: #12151b;
+  --bg-hover: #252a35;
+  --text-primary: #f3f4f6;
+  --text-secondary: #a8b0bf;
+  --text-tertiary: #757e91;
+  --border-subtle: #262b36;
+  --border-strong: #3e4656;
+  --accent: var(--mono-client);
+  --accent-ink: #0c0e12;
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 46%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 26%, transparent);
+  --hue-esmeralda: #2dd4bf;
+  --hue-lima: #a3e635;
+  --hue-ambar: #f59e0b;
+  --hue-laranja: #f97316;
+  --hue-rubi: #f43f5e;
+  --hue-rosa: #ec4899;
+  --hue-violeta: #a855f7;
+  --hue-azul: #3b82f6;
+  --hue-ciano: #06b6d4;
+  --warning: #f59e0b;
+  --danger: #f43f5e;
+  --success: #10b981;
+  --warn-bg: #241d11;
+  --warn-border: #5c451c;
+  --warn-text: #fcd34d;
+  --danger-bg: #261419;
+  --danger-border: #632633;
+  --danger-text: #fda4af;
+  --info-bg: #121d2b;
+  --info-border: #284669;
+  --info-text: #93c5fd;
+  --code-bg: #0c0e12;
+  --code-head: #13161d;
+  --user-bg: #1b1f28;
+  --user-border: #2e3442;
+  --highlight: #ffffff0d;
+  --shadow-sm: 0 2px 6px #00000055;
+  --shadow-md: 0 10px 28px -6px #00000080;
+}
+body[data-theme="mono"] :is(.message, .opinion-provider, [data-client], [data-agent], [data-select-provider]) {
+  --accent-soft: color-mix(in srgb, var(--accent) 13%, transparent);
+  --accent-line: color-mix(in srgb, var(--accent) 46%, transparent);
+  --accent-glow: color-mix(in srgb, var(--accent) 26%, transparent);
+  --accent-ink: #0c0e12;
+}
+.appearance-swatch[data-swatch="mono"] {
+  background: radial-gradient(circle at 32% 32%, #2dd4bf 0 24%, transparent 26%), linear-gradient(135deg, #e5e7eb 0 48%, #101216 50%);
+  border: 1px solid #525b6d;
+}
+body[data-theme="mono"] .sidebar {
+  background: linear-gradient(180deg, #0e1015 0%, #0a0c10 100%);
+  border-right: 1px solid var(--border-subtle);
+}
+body[data-theme="mono"] .brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+body[data-theme="mono"] .brand > .mono-brand-art {
+  max-width: 156px;
+}
+body[data-theme="mono"] .brand > .brand-heads {
+  display: inline-flex;
+}
+body[data-theme="mono"] .brand-heads i[data-connected="true"] {
+  box-shadow: 0 0 6px color-mix(in srgb, var(--accent) 65%, transparent);
+}
+body[data-theme="mono"] .sidebar .new-chat {
+  border-color: color-mix(in srgb, var(--mono-client) 38%, var(--border-subtle));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mono-client) 13%, var(--bg-surface)), color-mix(in srgb, var(--mono-client) 6%, var(--bg-surface)));
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--highlight);
+}
+body[data-theme="mono"] .sidebar .new-chat:hover {
+  border-color: color-mix(in srgb, var(--mono-client) 65%, var(--border-strong));
+  background: linear-gradient(180deg, color-mix(in srgb, var(--mono-client) 19%, var(--bg-raised)), color-mix(in srgb, var(--mono-client) 10%, var(--bg-surface)));
+}
+body[data-theme="mono"] .conversation-link:hover {
+  background: var(--bg-hover);
+}
+body[data-theme="mono"] .conversation-link.active {
+  border-color: color-mix(in srgb, var(--mono-client) 30%, var(--border-subtle));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--mono-client) 14%, var(--bg-raised)) 0%, var(--bg-surface) 100%);
+  box-shadow: inset 2.5px 0 0 var(--mono-client), var(--shadow-sm);
+}
+body[data-theme="mono"] .topbar {
+  background: color-mix(in srgb, var(--bg-app) 86%, transparent);
+  backdrop-filter: saturate(150%) blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+}
+body[data-theme="mono"] .view-tabs {
+  background: var(--bg-input);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9px;
+}
+body[data-theme="mono"] .view-tabs button[aria-selected="true"] {
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  box-shadow: inset 0 -2px 0 var(--mono-client), var(--shadow-sm);
+}
+body[data-theme="mono"] .command-trigger {
+  height: 32px;
+  border-radius: 8px;
+  border-color: var(--border-subtle);
+  background: var(--bg-surface);
+}
+body[data-theme="mono"] .command-trigger:hover {
+  border-color: color-mix(in srgb, var(--mono-client) 50%, var(--border-strong));
+  background: var(--bg-raised);
+}
+body[data-theme="mono"] .connection-state {
+  border-color: color-mix(in srgb, var(--mono-client) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--mono-client) 8%, var(--bg-surface));
+  border-radius: 999px;
+}
+body[data-theme="mono"] .conversation-panel {
+  background: radial-gradient(980px 340px at 50% -130px, color-mix(in srgb, var(--mono-client) 10%, transparent), transparent 72%), var(--bg-app);
+}
+body[data-theme="mono"] .welcome h1 span {
+  color: var(--mono-client);
+}
+body[data-theme="mono"] .suggestions button {
+  background: linear-gradient(180deg, var(--bg-surface) 0%, color-mix(in srgb, var(--bg-surface) 70%, var(--bg-app)) 100%);
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--highlight);
+  transition: border-color 150ms ease, transform 150ms ease, box-shadow 150ms ease;
+}
+body[data-theme="mono"] .suggestions button:hover {
+  background: var(--bg-raised);
+  border-color: color-mix(in srgb, var(--mono-client) 52%, var(--border-strong));
+  box-shadow: var(--shadow-md), inset 0 1px 0 var(--highlight);
+  transform: translateY(-1px);
+}
+body[data-theme="mono"] .suggestions button > span:first-child {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--mono-client) 32%, var(--border-subtle));
+  background: color-mix(in srgb, var(--mono-client) 12%, var(--bg-input));
+  color: var(--mono-client);
+}
+body[data-theme="mono"] .composer {
+  border: 1px solid var(--border-strong);
+  border-top-color: color-mix(in srgb, var(--mono-client) 58%, var(--border-strong));
+  border-radius: 18px;
+  background: linear-gradient(180deg, #181c24 0%, #12151c 100%);
+  box-shadow: var(--shadow-md), inset 0 1px 0 var(--highlight);
+}
+body[data-theme="mono"] .composer:focus-within {
+  border-color: color-mix(in srgb, var(--mono-client) 72%, #ffffff);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--mono-client) 14%, transparent), var(--shadow-md);
+}
+body[data-theme="mono"][data-hydra] .composer,
+body[data-theme="mono"]:not([data-hydra]) #composer[data-dual] {
+  border-color: transparent;
+  background: linear-gradient(180deg, #181c24 0%, #12151c 100%) padding-box, var(--pair-edge) border-box;
+  box-shadow: var(--shadow-md), -12px 0 30px -20px var(--pair-a), 12px 0 30px -20px var(--pair-b);
+}
+body[data-theme="mono"] .atelier-agent-dock {
+  background: linear-gradient(180deg, #0e1116 0%, #12151c 100%);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 7px 8px;
+}
+body[data-theme="mono"] .agent-pill {
+  background: color-mix(in srgb, var(--accent) 6%, #141820);
+  border-color: color-mix(in srgb, var(--accent) 26%, var(--border-subtle));
+  color: var(--text-secondary);
+}
+body[data-theme="mono"] .agent-pill:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 15%, var(--bg-raised));
+  border-color: color-mix(in srgb, var(--accent) 62%, var(--border-strong));
+  color: var(--text-primary);
+}
+body[data-theme="mono"] .agent-pill[aria-pressed="true"] {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 24%, #1d222d) 0%, color-mix(in srgb, var(--accent) 10%, #141820) 100%);
+  border-color: color-mix(in srgb, var(--accent) 74%, #454f64);
+  color: #ffffff;
+  box-shadow: 0 4px 14px -3px color-mix(in srgb, var(--accent) 34%, transparent), inset 0 1px 0 #ffffff20;
+}
+body[data-theme="mono"] .pill-toggle[aria-pressed="true"] {
+  color: var(--mono-client);
+  background: color-mix(in srgb, var(--mono-client) 14%, var(--bg-raised));
+  border-color: color-mix(in srgb, var(--mono-client) 52%, var(--border-strong));
+}
+body[data-theme="mono"] .composer .send:not(:disabled) {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--mono-client) 90%, #ffffff) 0%, var(--mono-client) 100%);
+  color: #0b0d12;
+  border-color: color-mix(in srgb, var(--mono-client) 75%, #000000);
+  font-weight: 700;
+  box-shadow: 0 6px 16px -5px color-mix(in srgb, var(--mono-client) 45%, transparent), inset 0 1px 0 #ffffff4d;
+}
+body[data-theme="mono"] .composer .send:hover:not(:disabled) {
+  filter: brightness(1.07);
+  box-shadow: 0 8px 20px -4px color-mix(in srgb, var(--mono-client) 55%, transparent), 0 0 0 3px color-mix(in srgb, var(--mono-client) 16%, transparent);
+}
+body[data-theme="mono"] .inspector {
+  background: linear-gradient(180deg, #0e1015 0%, #0b0d11 100%);
+  border-left-color: var(--border-subtle);
+}
+body[data-theme="mono"] :is(.turn-usage, .mode-panel, .config-card) {
+  background: linear-gradient(180deg, var(--bg-surface) 0%, color-mix(in srgb, var(--bg-surface) 75%, var(--bg-sidebar)) 100%);
+  border-color: var(--border-subtle);
+  box-shadow: var(--shadow-sm), inset 0 1px 0 var(--highlight);
+}
+body[data-theme="mono"] .mode-tile[aria-pressed="true"],
+body[data-theme="mono"] .hydra-pair[aria-pressed="true"] {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--border-strong));
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg-raised));
+}
+body[data-theme="mono"] .tiny-dot {
+  background: var(--mono-client);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--mono-client) 65%, transparent);
+}

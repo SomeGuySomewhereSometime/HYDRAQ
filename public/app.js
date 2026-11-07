@@ -255,11 +255,16 @@ function saveSettingsDraft() {
   settingDrafts.set(settingsKey(), { model: $('#model').value, effort: $('#effort').value, sandbox: sandboxValue(), context: $('#context').value || null, fast: $('#fast').checked });
 }
 // The member shown in the composer reads its controls; the other keeps its draft or its last round's choice.
-function dualMemberSettings(record, key) {
-  const provider = record?.members[key].provider || providerId(), member = record?.members[key] || {};
+function dualMemberSettings(record, key, fallbackProvider) {
+  const member = (key && record?.members?.[key]) || {};
+  const provider = member.provider || fallbackProvider || providerId();
   if (provider === providerId()) return { model: $('#model').value, effort: $('#effort').value, ...(provider === 'cursor' ? { context: $('#context').value || null, fast: $('#fast').checked } : {}) };
   const draft = settingDrafts.get(`${draftKey(current(), selectedProject)}:${provider}`) || {};
-  return { model: draft.model || member.model, effort: draft.effort || member.effort, ...(provider === 'cursor' ? { context: draft.context ?? member.context ?? null, fast: draft.fast ?? member.fast ?? false } : {}) };
+  const defModel = providerState(provider).models?.find(m => m.isDefault) || providerState(provider).models?.[0];
+  const model = draft.model || member.model || defModel?.id || '';
+  const modelEntry = providerState(provider).models?.find(m => m.id === model) || defModel;
+  const effort = draft.effort || member.effort || modelEntry?.defaultEffort || modelEntry?.efforts?.[0] || '';
+  return { model, effort, ...(provider === 'cursor' ? { context: draft.context ?? member.context ?? modelEntry?.defaultContext ?? null, fast: draft.fast ?? member.fast ?? false } : {}) };
 }
 // Quotas follow the next request's selected models, including both participants.
 function quotaSelections() {
@@ -268,7 +273,7 @@ function quotaSelections() {
     return (roles || []).map(provider => ({provider,model:claudexUI.controls[provider+'Model']?.value,effort:claudexUI.controls[provider+'Effort']?.value,mode:'Hydra'}));
   }
   const record = dualUI?.record(current()), pending = dualUI?.pendingFor();
-  if (record) return multiKeys(record).map(key => ({provider:record.members[key].provider,...dualMemberSettings(record,key),mode:'Multi'}));
+  if (record) return multiKeys(record).filter(key=>key!==record.vacant).map(key => ({provider:record.members[key].provider,...dualMemberSettings(record,key),mode:'Multi'}));
   const principal = {provider:providerId(),model:$('#model').value,effort:$('#effort').value};
   return pending ? [{...principal,mode:'Multi'},...(pending.participants||[pending]).map(p=>({...p,mode:'Multi'}))] : [principal];
 }
@@ -315,8 +320,8 @@ const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarg
 companionUI = companionModule ? new companionModule.CompanionUI({ api, getState: () => state, getProject: companionProject, markdown, getSourceGroup: () => current()?.organization?.projectId === companionProject()?.id ? current()?.group || current()?.id || null : null, getSelectedProvider: providerId, getToken: () => token, chooseConversation: id => choose(id), choose: id => choose(id), toast }) : null;
 
 dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,markdown,elapsed,
-  describeWork:(owner,turn)=>{if(!actions)return null;const work=actions.currentWork(owner,turn);return {now:!work?[]:work.actions?.length?work.actions.map(item=>({text:actions.actionPhrase(item,{live:true,cwd:owner.cwd}),since:item.at})):[{text:work.title,since:null}],summary:activeStatuses.includes(turn.status)?'':actions.summaryLine(actions.requestSummary(owner,turn)),thought:actions.thoughtLabel?.(owner.provider)?actions.latestThought(owner,turn,Infinity):null,thoughtLabel:actions.thoughtLabel?.(owner.provider)||'',thoughtOpen:actions.thoughtOpen?(live,choice,previous)=>actions.thoughtOpen(owner.provider,live,choice,previous):null};},getSyntheses:()=>opinionUI.viewState()?.batches?.filter(batch=>batch.kind==='synthesis')||[],getKey:composerKey,getProvider:()=>selectedProvider,getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
-  loadModels:id=>id==='opencode'?checkOpenCodeModels(false):null,
+  describeWork:(owner,turn)=>{if(!actions)return null;const work=actions.currentWork(owner,turn);return {now:!work?[]:work.actions?.length?work.actions.map(item=>({text:actions.actionPhrase(item,{live:true,cwd:owner.cwd}),since:item.at})):[{text:work.title,since:null}],summary:activeStatuses.includes(turn.status)?'':actions.summaryLine(actions.requestSummary(owner,turn)),thought:actions.thoughtLabel?.(owner.provider)?actions.latestThought(owner,turn,Infinity):null,thoughtLabel:actions.thoughtLabel?.(owner.provider)||'',thoughtOpen:actions.thoughtOpen?(live,choice,previous)=>actions.thoughtOpen(owner.provider,live,choice,previous):null};},getSyntheses:()=>opinionUI.viewState()?.batches?.filter(batch=>batch.kind==='synthesis')||[],getKey:composerKey,getProvider:()=>selectedProvider,setProvider:id=>{if(current()){if(id===current().provider)switchTargets.delete(current().id);else switchTargets.set(current().id,id);}else{selectedProvider=id;try{localStorage.setItem('hydraq.provider',selectedProvider);}catch{}}},getModels:id=>providerState(id).models||[],memberSettings:dualMemberSettings,toast,refresh:async()=>{accept(await api('/api/state'));render();},beforeChange:()=>saveSettingsDraft(),changed:()=>{settingsOwner=null;modelsSignature='';render();},open:id=>choose(id),
+  loadModels:(id,force=false)=>id==='opencode'?checkOpenCodeModels(force):null,
   applySettings:(provider,settings)=>{const key=`${draftKey(current(),selectedProject)}:${provider}`;settingDrafts.set(key,{...(settingDrafts.get(key)||{}),...settings});}}):null;
 $('#dual-toggle').classList.toggle('hidden',!dualUI);
 
@@ -719,15 +724,15 @@ function syncWelcomeFleet() {
 function renderAgentDock() {
   const active = providerId();
   const locked = Boolean($('#provider')?.disabled);
-  // In a dual the bar shows the two participants, fixed: clicking one opens its settings instead of switching.
+  // In a dual the bar highlights active participants and keeps the remaining clients visible to toggle on or off.
   const dual = Boolean(dualUI?.renderDock(current()));
   for (const pill of document.querySelectorAll('#agent-dock [data-agent]')) {
     const id = pill.dataset.agent;
     const pState = state?.providers?.[id];
     const connected = pState?.connection === 'connected';
-    if (dual) pill.removeAttribute('aria-pressed'); else pill.setAttribute('aria-pressed', String(id === active));
+    if (!dual) pill.setAttribute('aria-pressed', String(id === active));
     pill.dataset.connected = String(Boolean(connected));
-    pill.disabled = dual ? sending : locked;
+    pill.disabled = dual ? sending || dualUI.memberBusy : locked;
   }
   // The brand's client lights: lit when that client is connected, in its own colour.
   const lit = [];
@@ -1432,10 +1437,12 @@ function renderSend() {
   const hasImages=imageAttachments.list().length>0;
   const openCodeNoImage=(providerId()==='opencode'&&!providerState().models?.find(m=>m.id===$('#model').value)?.images)||Boolean(dualUI?.imagesBlocked(conversation));
   imageAttachments.render(busy || sending || openCodeNoImage || providerState().capabilities?.images===false);
-  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session() || agyUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain') || Boolean(dual && dualUI.unavailable(conversation));
+  const dualIncomplete = Boolean((dual || pendingDual) && dualUI?.incomplete(conversation));
+  const dualChanging = Boolean((dual || pendingDual) && dualUI?.memberBusy);
+  $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session() || agyUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain') || Boolean(dual && dualUI.unavailable(conversation)) || dualIncomplete || dualChanging;
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
-  $('#send').textContent = sending ? 'A enviar…' : dual && busy ? 'Aguarda o fim da ronda' : dual ? dualSendLabel(dual, { writing: !dualRead(sandboxValue()) }) : pendingDual ? `Enviar a ${1+(pendingDual.participants||[pendingDual]).length} participantes ↗` : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
+  $('#send').textContent = sending ? 'A enviar…' : dualChanging ? 'A atualizar participantes…' : dualIncomplete ? 'Escolhe mais um cliente ↗' : dual && busy ? 'Aguarda o fim da ronda' : dual ? dualSendLabel(dual, { writing: !dualRead(sandboxValue()) }) : pendingDual ? `Enviar a ${1+(pendingDual.participants||[pendingDual]).length} participantes ↗` : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
   $('#steer-mode').classList.toggle('hidden', !steering && !expired);
   $('#steer-title').textContent = expired ? 'O turno desta orientação já terminou.' : '↳ Mensagem durante a execução';
   $('#steer-description').textContent = expired ? 'O texto foi guardado. Escolhe usá-lo como novo pedido ou limpa-o.' : followupDescriptions[delivery]?.[1]||'A orientação mantém o pedido atual.';
@@ -1446,7 +1453,8 @@ function renderSend() {
   $('#composer-hint').textContent = openCodeUI.session() ? 'Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ, aqui ao lado.' : nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ, aqui ao lado.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ, aqui ao lado.' : agyUI.session() ? 'Esta conversa está no Antigravity original. Sai do agy (/exit) e usa Continuar na HYDRAQ, aqui ao lado.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
   if ((dual || pendingDual) && !nativeUI.session() && !claudeUI.session() && !openCodeUI.session() && !agyUI.session()) {
     const name = key => providerName(dual.members[key].provider);
-    $('#composer-hint').textContent = dual && busy ? (dualUI.running(conversation) ? 'Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.' : workReason(workBlock()) + ' · Este projeto/pasta ou cliente está reservado.')
+    $('#composer-hint').textContent = dualChanging ? 'A aguardar a confirmação da composição do Multi.' : dualIncomplete ? 'Seleciona pelo menos dois clientes na barra acima para enviar no Multi.'
+      : dual && busy ? (dualUI.running(conversation) ? 'Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.' : workReason(workBlock()) + ' · Este projeto/pasta ou cliente está reservado.')
       : !dual || multiTargets(dual).length > 1 ? 'Enter para enviar aos participantes selecionados · respostas independentes nesta ronda'
       : `Enter para enviar só ao ${name(multiTargets(dual)[0])} · os restantes recebem esta troca quando voltares a falar com eles`;
     // Said before sending: a synthesis meant for the next round that is still being written does not go with it.
@@ -1809,10 +1817,8 @@ function chipGroup(label, source, { collapse = false, clients = false, text = op
     const chip = event.target.closest('.mode-chip');
     if (!chip || chip.disabled) return;
     open = false;
-    if (chip.dataset.value !== source.value) {
-      if (pick) pick(chip.dataset.value);
-      else { source.value = chip.dataset.value; source.dispatchEvent(new Event('change', { bubbles: true })); }
-    }
+    if (pick) pick(chip.dataset.value);
+    else if (chip.dataset.value !== source.value) { source.value = chip.dataset.value; source.dispatchEvent(new Event('change', { bubbles: true })); }
     syncModePanel();
   });
   function sync() {
@@ -1828,13 +1834,14 @@ function chipGroup(label, source, { collapse = false, clients = false, text = op
       }));
     }
     const disabled = blocked();
+    const activeClients = clients && (dualUI?.record(current()) || dualUI?.pendingFor()) ? dualUI.activeProviders(current()) : null;
     for (const chip of list.children) {
-      chip.setAttribute('aria-pressed', String(chip.dataset.value === source.value));
-      chip.disabled = disabled || Boolean(options.find(option => option.value === chip.dataset.value)?.disabled);
+      chip.setAttribute('aria-pressed', String(activeClients ? activeClients.includes(chip.dataset.value) : chip.dataset.value === source.value));
+      chip.disabled = disabled || Boolean(clients && activeClients && dualUI?.memberBusy) || Boolean(options.find(option => option.value === chip.dataset.value)?.disabled);
       if (clients) {
         const connection = state?.providers?.[chip.dataset.value]?.connection || 'disconnected';
         chip.dataset.connection = connection;
-        chip.dataset.tip = `${providerNames[chip.dataset.value] || chip.dataset.value} · ${connection === 'connected' ? 'ligado' : connection === 'connecting' ? 'a ligar' : 'desligado'}`;
+        chip.dataset.tip = `${providerNames[chip.dataset.value] || chip.dataset.value} · ${connection === 'connected' ? 'ligado' : connection === 'connecting' ? 'a ligar' : 'desligado'}${activeClients ? (activeClients.includes(chip.dataset.value) ? ' · participa no Multi (clica para desligar)' : ' · fora do Multi (clica para ligar)') : ''}`;
       }
     }
     group.hidden = Boolean(source.closest('.hidden')) || !options.length;
@@ -1989,7 +1996,7 @@ function playFusion(pair) {
 }
 /** The Hydra pair of a Dual, when its two clients make one: Codex, Claude and Gemini only. */
 function dualHydraPair(record) {
-  const clients = record ? multiKeys(record).map(k=>record.members[k].provider) : [];
+  const clients = record ? multiKeys(record).filter(k=>k!==record.vacant).map(k=>record.members[k].provider) : [];
   const eligible = HYDRA_PAIRS.filter(pair => pair.every(role => clients.includes(role))).sort((a,b)=>b.length-a.length);
   return eligible.find(pair=>pair.includes(record?.members[record.principal]?.provider)) || eligible[0] || null;
 }
@@ -2035,7 +2042,7 @@ function syncModePanel() {
   if (!state) return;
   const conversation = current(), task = hydraTask(conversation), pair = hydraPair(conversation);
   const record = pair ? null : dualUI?.record(conversation), pending = pair || conversation ? null : dualUI?.pendingFor();
-  const dualPair = record ? multiKeys(record).map(k=>record.members[k].provider) : pending ? [providerId(), ...(pending.participants||[pending]).map(p=>p.provider)] : null;
+  const dualPair = (record || pending) ? dualUI.activeProviders(conversation) : null;
   const review = !pair && Boolean(opinionUI.automaticSetting());
   const active = { normal: !pair && !dualPair && !review, dual: Boolean(dualPair), review, hydra: Boolean(pair) };
   const subtitles = {
@@ -2241,6 +2248,7 @@ document.addEventListener('keydown',event=> {
 });
 // One request to the chosen recipients of a dual conversation; a new conversation starts dual first.
 async function submitDual({ text, draftImages, imageDraftKey, importedContext, conversationAtSubmit, record, pending }) {
+  if (dualUI.memberBusy || dualUI.incomplete(conversationAtSubmit)) return;
   if (importedContext) { toast('A importação de contexto ainda não segue nas perguntas Multi. Envia-a com o Multi desligado.'); return; }
   const target = record ? (record.target==='both'?'all':record.target) : 'all', roster = record?.members || dualUI.pendingMembers(), keys = multiTargets({members:roster,target},target);
   // Read now, while the composer still shows these choices.
@@ -2273,9 +2281,10 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
       dualUI.consumePending(draftKey(conversation, selectedProject));
     }
     const attachments = await imageAttachments.upload(draftImages, conversation);
+    const revision=record.revision||0;
     const signature=JSON.stringify([record.id,text,target,settings,attachments]);
     if(dualUI.pendingSend?.signature!==signature)dualUI.pendingSend={signature,requestId:crypto.randomUUID()};
-    const result = await api(`/api/dual/${record.id}/send`, { text, requestId: dualUI.pendingSend.requestId, multiVersion:2, target, settings, ...(attachments.length ? { attachments } : {}), ...(keys.length === 1 ? { autoReview } : {}) });
+    const result = await api(`/api/dual/${record.id}/send`, { text, requestId: dualUI.pendingSend.requestId, multiVersion:2, revision, target, settings, ...(attachments.length ? { attachments } : {}), ...(keys.length === 1 ? { autoReview } : {}) });
     dualUI.pendingSend=null;
     // One recipient failed: the other already has the question, so the draft is not kept; the panel offers a resend.
     const failed = Object.keys(result.errors || {});

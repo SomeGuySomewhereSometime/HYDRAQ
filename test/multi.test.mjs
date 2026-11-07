@@ -78,3 +78,30 @@ test('Multi: contexto conserva as respostas completas dos três colegas',async t
 test('Multi: falha de criação não ativa composição parcial e a repetição reutiliza a sessão criada',async t=>{
  const e=await setup(t,2);await e.hub.endDual(e.record.id);const create=e.clients.antigravity.create.bind(e.clients.antigravity);e.clients.antigravity.create=async()=>{throw Error('CREATE-FAILED');};const body={participants:['claude','cursor','antigravity'].map(choice)};await assert.rejects(e.hub.startDual(e.c.id,body),/CREATE-FAILED/);assert.equal(e.hub.dual.activeFor(e.c.group),null);assert.equal(e.clients.cursor.conversations.length,1);assert.equal(e.clients.cursor.logs.length,0);e.clients.antigravity.create=create;const result=await e.hub.startDual(e.c.id,body);assert.equal(memberKeys(result.dual).length,4);assert.equal(e.clients.cursor.conversations.length,1);
 });
+
+
+test('Multi: o lugar desligado é persistente, impede envio e pode ser reaberto ou substituído',async t=>{
+ const e=await setup(t,2),id=e.record.id;
+ const slot=(key,enabled)=>e.hub.changeDualSlot(id,{key,enabled,revision:e.hub.dual.record(id).revision});
+ const initial=e.record.revision;
+ await slot('a',false);
+ assert.equal(e.hub.dual.record(id).principal,'b');
+ const loaded=new DualSessions({directory:e.hub.dual.directory,conversations:()=>e.hub.conversations()});
+ await loaded.load();
+ assert.equal(loaded.record(id).vacant,'a');
+ await assert.rejects(e.send('não enviar',{target:'all'}),/dois participantes ligados/);
+ await assert.rejects(e.hub.retryDual(id,{}),/dois participantes ligados/);
+ assert.equal(e.clients.codex.logs.length+e.clients.claude.logs.length,0);
+ await slot('a',true);
+ await assert.rejects(e.send('composição antiga',{revision:initial}),/Revê os destinatários/);
+ await slot('a',false);
+ await e.hub.replaceDualMember(id,{...choice('antigravity'),key:'a',multiVersion:2,revision:e.hub.dual.record(id).revision});
+ const current=e.hub.dual.record(id);
+ assert.equal(current.vacant,undefined);
+ assert.equal(current.principal,'b');
+ await e.send('agora sim',{revision:current.revision});
+ await e.idle();
+ assert.equal(e.clients.codex.logs.length,0);
+ assert.equal(e.clients.claude.logs.length,1);
+ assert.equal(e.clients.antigravity.logs.length,1);
+});

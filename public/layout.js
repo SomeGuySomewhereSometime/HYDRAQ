@@ -8,9 +8,9 @@ export const MIN_CONVERSATION = 460;
 // Linho was retired: a stored 'linho' preference is no longer valid and falls back to the default.
 export const THEMES = ['classic', 'atelier', 'mono'];
 export const APPEARANCES = [
-  { theme: 'classic', swatch: 'grafite', name: 'Grafite', description: 'Escuro neutro e sóbrio, com a cor de cada cliente.', meta: '#0e0f12' },
+  { theme: 'classic', swatch: 'grafite', name: 'Grafite', description: 'Ardósia e grafite escovada, com barra e cor de cada cliente.', meta: '#0a0c10' },
   { theme: 'atelier', swatch: 'atelier', name: 'Atelier', description: 'Ilhas de vidro sobre obsidiana, com barra de clientes.', meta: '#08090d' },
-  { theme: 'mono', swatch: 'mono', name: 'Mono', description: 'Preto e branco, com a cor de cada cliente.', meta: '#171717' },
+  { theme: 'mono', swatch: 'mono', name: 'Mono', description: 'Carbono arquitetónico e acentos cromáticos por cliente.', meta: '#101216' },
 ];
 export function appearanceOf(theme) {
   return APPEARANCES.find(entry => entry.theme === theme) || APPEARANCES[0];
