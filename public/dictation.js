@@ -14,8 +14,7 @@ export class Dictation {
     svg.append(path); this.button.append(svg);
     this.button.setAttribute('aria-pressed', 'false');
     const send = composer.querySelector('#send');
-    const actions = node('div', 'composer-send-actions');
-    send.before(actions); actions.append(this.button, send);
+    send.parentElement.prepend(this.button);
     this.panel = node('div', 'dictation-panel'); this.panel.hidden = true;
     this.status = node('span', 'dictation-status'); this.status.setAttribute('role', 'status');
     this.cancelButton = node('button', 'pill-toggle', 'Cancelar'); this.cancelButton.type = 'button';

@@ -5269,7 +5269,17 @@ body:not([data-hydra]) #composer[data-dual] { --pair-edge: linear-gradient(90deg
 .git-warning, .git-error { padding: 8px; border: 1px solid var(--border-subtle); border-radius: 6px; }
 .git-error { color: var(--danger, #e47777); }
 .git-busy { cursor: progress; }
-#git-panel-trigger[hidden] { display: none; }
+#git-panel-trigger[hidden], #git-checkpoint-trigger[hidden] { display: none; }
+#git-checkpoint-trigger { flex: 0 0 auto; }
+.composer-send-actions:has(#git-checkpoint-trigger:not([hidden])) {
+  flex-shrink: 1; min-width: 0; max-width: 100%;
+}
+.composer-send-actions:has(#git-checkpoint-trigger:not([hidden])) .send {
+  min-width: 0; height: auto; margin-left: 0; white-space: normal;
+}
+@container composer (max-width: 680px) {
+  .composer-footer:has(#git-checkpoint-trigger:not([hidden])) .composer-controls { flex-basis: 100%; }
+}
 
 .git-dialog :is(.git-status, .git-main p, .git-main h3) { margin: 4px 0; }
 .git-dialog .git-main details > label { margin: 8px 0; }

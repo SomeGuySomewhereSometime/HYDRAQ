@@ -307,13 +307,31 @@ function choose(id, projectId=selectedProject, overview=false, internal=false) {
   if(!overview)$('#prompt').focus();
 }
 const gitPanel = gitPanelModule ? new gitPanelModule.GitPanelUI({ api }) : null;
+const checkpointDrafts = new PersistentDraftMap('hydraq.git-checkpoints.v1');
 $('#git-panel-trigger').addEventListener('click', () => gitPanel?.open(project()));
+$('#git-checkpoint-trigger').addEventListener('click', () => {
+  const mode = checkpointMode(), key = composerKey(), selected = project();
+  if (!mode) return;
+  gitPanel.open(selected, { selectedCheckpoint: mode === 'hydra' && draftCheckpoint(selected, key), onCheckpoint: point => {
+    if (mode === 'hydra') {
+      if (point) checkpointDrafts.set(key, { projectId: selected.id, ...point });
+      else checkpointDrafts.delete(key);
+    }
+    toast(point ? 'Ponto de segurança guardado · ' + point.commit.slice(0, 12) : 'Associação retirada. O commit continua no histórico Git.');
+    renderSend();
+  } });
+});
 const projectUI=new ProjectUI({getState:()=>state,api,refresh:async()=>{accept(await api('/api/state'));render();},choose:id=>choose(id),openProject:id=>choose(null,id,true),newChat:id=>choose(null,id,false),toast,memory:id=>projectMemory.open(id),git:gitPanel ? p=>gitPanel.open(p) : null});
 const projectMemory=new ProjectMemoryUI({api,getState:()=>state,getCurrent:current,getProject:project,getKey:composerKey,getProvider:providerId,toast,renderImages:(target,images)=>imageAttachments.renderMessage(target,images),changed:()=>render()});
 const providerStatus = providerStatusModule && $('#provider-status') ? new providerStatusModule.ProviderStatus({root:$('#provider-status'),api,getState:()=>state,getProvider:providerId,getSelections:quotaSelections,accept,render,toast}) : null;
 if ($('#provider-status')) $('#provider-status').hidden = !providerStatus;
 const collaborationUI=new CollaborationUI({api,getState:()=>state,toast,changed:()=>render(),markdown});
 claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area:collaborationUI,toast,markdown,openConversation:id=>choose(id,selectedProject,false,true),
+  openCheckpoint: gitPanel ? task => {
+    const target = state?.projectCatalog?.projects.find(p => p.id === task.projectId && !p.archived && p.available !== false);
+    if (target) gitPanel.open(target, { taskId: task.id });
+    else toast('O projeto deste ponto de segurança está indisponível.');
+  } : null,
   openTask:id=>{const task=state?.claudex?.records.find(record=>record.id===id),member=task&&Object.values(task.members||{}).find(entry=>state.conversations.some(c=>c.id===entry.conversationId));if(member)choose(member.conversationId);else claudexUI.choose(id);},
   elapsed,changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}providerStatus?.render();}}):null;
 const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
@@ -1414,6 +1432,22 @@ function renderFollowupQueue(conversation) {
   }
 }
 
+function checkpointMode() {
+  const selected = project();
+  if (!gitPanel || !state?.claudex?.gitCheckpoints || !selected || selected.archived || selected.available === false || projectOverview ||
+      nativeUI.session() || claudeUI.session() || openCodeUI.session() || agyUI.session()) return null;
+  if (hydraOn()) {
+    const { running, canResume } = claudexUI.view;
+    return !running && !canResume && claudexUI.controls.requestMode.value === 'auto' ? 'hydra' : null;
+  }
+  return !dualRead?.(sandboxValue()) ? 'normal' : null;
+}
+
+function draftCheckpoint(selected, key) {
+  const saved = checkpointDrafts.get(key);
+  return saved?.projectId === selected?.id && typeof saved?.commit === 'string' ? saved : null;
+}
+
 function renderSend() {
   const busy = anyBusy();
   const conversation = current();
@@ -1462,6 +1496,11 @@ function renderSend() {
   }
   $('#stop').textContent = '■ Parar';
   if (hydraOn()) renderHydraSend();
+  const checkpoint = $('#git-checkpoint-trigger'), checkpointType = checkpointMode();
+  const savedPoint = checkpointType === 'hydra' && draftCheckpoint(project(), composerKey());
+  checkpoint.hidden = !checkpointType;
+  checkpoint.disabled = sending || busy || Boolean(claudexUI?.sending) || steering || expired;
+  checkpoint.textContent = savedPoint ? 'Ponto de segurança · ' + savedPoint.commit.slice(0, 8) : 'Criar ponto de segurança';
   dictationUI?.sync();
   if(dictationUI?.active)$('#send').disabled=true;
 }
@@ -1672,12 +1711,13 @@ $('#effort').addEventListener('change',()=> {
 document.addEventListener('change',event=>{if(event.target.matches('#model, #effort, [id^=cx-]'))providerStatus?.render();});
 $('#context').addEventListener('change',()=>saveSettingsDraft());
 $('#fast').addEventListener('change',()=>saveSettingsDraft());
-$('#sandbox').addEventListener('change',()=> { renderPermissionTips(); saveSettingsDraft(); renderCacheInfo(current()); dualUI?.enforceWrite(!dualRead(sandboxValue())); });
+$('#sandbox').addEventListener('change',()=> { renderPermissionTips(); saveSettingsDraft(); renderCacheInfo(current()); dualUI?.enforceWrite(!dualRead(sandboxValue())); renderSend(); });
 $('#plan-toggle').addEventListener('click',()=> {
   if (!planSupport[providerId()]) return;
   planMode = !planMode;
   renderPermissionTips(); saveSettingsDraft();
   dualUI?.enforceWrite(!dualRead(sandboxValue()));
+  renderSend();
 });
 $('#prompt').addEventListener('input',()=> {
   composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, steerTarget(), chosenDelivery());
@@ -2286,6 +2326,7 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
     if(dualUI.pendingSend?.signature!==signature)dualUI.pendingSend={signature,requestId:crypto.randomUUID()};
     const result = await api(`/api/dual/${record.id}/send`, { text, requestId: dualUI.pendingSend.requestId, multiVersion:2, revision, target, settings, ...(attachments.length ? { attachments } : {}), ...(keys.length === 1 ? { autoReview } : {}) });
     dualUI.pendingSend=null;
+    if (checkpointDrafts.has(imageDraftKey)) checkpointDrafts.delete(imageDraftKey);
     // One recipient failed: the other already has the question, so the draft is not kept; the panel offers a resend.
     const failed = Object.keys(result.errors || {});
     if (failed.length) {
@@ -2306,13 +2347,16 @@ async function submitHydra() {
   renderSend();
   if ($('#send').disabled) return;
   const text = $('#prompt').value, key = composerKey(), conversationAtSubmit = current();
+  const point = checkpointMode() === 'hydra' && draftCheckpoint(project(), key);
   sending = true;
   renderSend();
   try {
     // Hydra owns its pending request and keeps an automatic folder across retries.
     const cwd = conversationAtSubmit?.cwd || $('#cwd').value.trim();
-    const task = await claudexUI.requestInline(text.trim(), { projectId: selectedProject, cwd, conversationId: conversationAtSubmit?.id });
+    const task = await claudexUI.requestInline(text.trim(), { projectId: selectedProject, cwd, conversationId: conversationAtSubmit?.id,
+      gitCheckpoint: point || undefined });
     if (!task) return;
+    if (checkpointDrafts.has(key)) checkpointDrafts.delete(key);
     composerDrafts.clear(key, text);
     if (composerKey() === key && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
     // A task from a conversation stays in it. One from a new conversation has a conversation per participant,
@@ -2369,6 +2413,7 @@ $('#composer').addEventListener('submit',async event=> {
     }
     const attachments=await imageAttachments.upload(draftImages,conversation);
     const result = await api(`/api/conversations/${conversation.id}/send`,{text,requestId:crypto.randomUUID(),...settings,...handoff,...(attachments.length?{attachments}:{}),...(importedContext?{importId:importedContext.previewId}:{})});
+    if (checkpointDrafts.has(imageDraftKey)) checkpointDrafts.delete(imageDraftKey);
     opinionUI.consumeAutomatic(imageDraftKey);
     opinionUI.consumeAutomatic(draftKey(conversation,selectedProject));
     imageAttachments.consume(draftImages);

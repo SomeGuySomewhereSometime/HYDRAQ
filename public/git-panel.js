@@ -56,15 +56,17 @@ export class GitPanelUI {
       this.dialog.classList.remove('git-busy');
     }
   }
-  async open(project) {
+  async open(project, { onCheckpoint, selectedCheckpoint, taskId } = {}) {
     if (!project || this.busy) return;
     this.project = project;
+    this.onCheckpoint = onCheckpoint;
+    this.selectedCheckpoint = selectedCheckpoint;
     this.tab = 'changes';
     this.selection = new Map();
     this.message = '';
     this.dialog.replaceChildren();
     const header = node('header', undefined, 'project-dialog-heading');
-    const title = node('h2', 'Git · ' + project.name);
+    const title = node('h2', (taskId ? 'Alterações desde o ponto de segurança' : onCheckpoint ? 'Ponto de segurança Git' : 'Git') + ' · ' + project.name);
     title.id = 'git-panel-title';
     header.append(title, this.button('Fechar', () => this.dialog.close()));
     this.notice = node('p', '', 'git-status');
@@ -75,8 +77,33 @@ export class GitPanelUI {
     this.tabs.setAttribute('aria-label', 'Áreas do painel Git');
     this.main = node('div', undefined, 'git-main');
     this.dialog.append(header, this.notice, this.error, this.tabs, this.main);
+    if (selectedCheckpoint) this.tabs.append(this.button('Retirar associação ao pedido', () => this.finishCheckpoint(null)));
     if (!this.dialog.open) this.dialog.showModal();
-    await this.run(() => this.refresh());
+    await this.run(() => taskId ? this.checkpointChanges(taskId) : this.refresh());
+  }
+  finishCheckpoint(point) {
+    this.dialog.close();
+    this.onCheckpoint(point);
+  }
+  async checkpointChanges(taskId) {
+    this.notice.textContent = 'A ler o repositório…';
+    this.main.replaceChildren();
+    if (!this.tabs.children.length) this.tabs.append(this.button('Atualizar', () => this.checkpointChanges(taskId)));
+    const result = await this.call('checkpoint-files', { taskId });
+    this.notice.textContent = 'Ponto de segurança · ' + short(result.commit);
+    const files = node('div', undefined, 'git-files');
+    const preview = node('section', undefined, 'git-preview');
+    for (const entry of result.files) {
+      const row = node('div', undefined, 'git-file');
+      row.append(this.button(entry.status + ' · ' + entry.file, async () => {
+        const diff = await this.call('checkpoint-diff', { file: entry.file, receipt: result.receipt });
+        this.showDiff(preview, entry.file, diff, 'checkpoint-diff');
+      }, { disabled: entry.sensitive }));
+      if (entry.sensitive) row.append(node('small', 'Possível segredo'));
+      files.append(row);
+    }
+    if (!files.children.length) files.append(node('p', 'Sem alterações em relação ao ponto de segurança.'));
+    this.main.replaceChildren(node('p', 'Compara o commit guardado com a pasta atual do projeto. Inclui alterações anteriores que ficaram fora do ponto e edições posteriores, incluindo as que ainda estão sem commit.'), files, preview);
   }
   async refresh(message = '') {
     this.notice.textContent = 'A ler o repositório…';
@@ -90,8 +117,9 @@ export class GitPanelUI {
   render() {
     this.tabs.replaceChildren();
     this.main.replaceChildren();
+    if (this.selectedCheckpoint) this.tabs.append(this.button('Retirar associação ao pedido', () => this.finishCheckpoint(null)));
     if (!this.state.initialized) return this.setup();
-    for (const [id, label] of [['changes', 'Alterações'], ['history', 'Histórico'], ['branches', 'Branches'], ['remote', 'Remoto']]) {
+    if (!this.onCheckpoint) for (const [id, label] of [['changes', 'Alterações'], ['history', 'Histórico'], ['branches', 'Branches'], ['remote', 'Remoto']]) {
       const button = this.button(label, () => { this.tab = id; this.render(); });
       button.setAttribute('aria-pressed', String(id === this.tab));
       this.tabs.append(button);
@@ -143,9 +171,10 @@ export class GitPanelUI {
     message.placeholder = 'Ex.: Corrige colisões junto à parede';
     message.addEventListener('input', () => { this.message = message.value; update(); });
     const count = node('span', '');
-    const button = this.button('Criar commit local', async () => {
+    const button = this.button(this.onCheckpoint ? 'Criar ponto de segurança' : 'Criar commit local', async () => {
       const result = await this.call('commit', { receipts: [...this.selection.values()], message: message.value });
       this.message = '';
+      if (this.onCheckpoint) return this.finishCheckpoint(result);
       await this.refresh('Commit criado · ' + short(result.commit));
     }, { primary: true });
     const update = () => {
@@ -186,6 +215,13 @@ export class GitPanelUI {
     if (!list.children.length) list.append(node('p', 'Sem alterações para rever.'));
     const toolbar = node('div', undefined, 'git-toolbar');
     toolbar.append(button, count);
+    if (this.onCheckpoint) {
+      this.main.append(node('p', 'Guarda num commit local os ficheiros que selecionares. Os restantes ficam na pasta e podem aparecer na comparação. O pedido fica por enviar.'));
+      if (this.state.head) this.main.append(this.button('Usar o commit atual · ' + short(this.state.head), async () => {
+        const point = await this.call('checkpoint-current', { commit: this.state.head, branch: this.state.headRef });
+        this.finishCheckpoint(point);
+      }, { disabled: this.locked }));
+    }
     this.main.append(node('p', 'Revê o diff de cada ficheiro antes de o selecionar. ' + this.state.notice),
       ...(this.state.hooks ? [node('p', 'Há hooks configurados neste repositório. Para os executar, usa o Git no terminal.', 'git-warning')] : []),
       ...(this.state.signed ? [node('p', 'A configuração exige assinatura. Cria o commit no terminal.', 'git-warning')] : []),
@@ -198,7 +234,8 @@ export class GitPanelUI {
       (result.before?.mode !== result.after?.mode ? ' · modo ' + (result.before?.mode || '—') + ' → ' + (result.after?.mode || '—') : '')));
     if (result.reason) target.append(node('p', result.reason, 'git-warning'));
     if (result.binary || result.oversized) target.append(node('p',
-      result.binary ? 'Conteúdo binário. A seleção usa os bytes identificados abaixo.' : 'Diff demasiado grande para mostrar. A seleção usa os bytes identificados abaixo.'));
+      (result.binary ? 'Conteúdo binário.' : 'Diff demasiado grande para mostrar.') +
+      (kind === 'diff' ? ' A seleção usa os bytes identificados abaixo.' : '')));
     if (result.binary || result.oversized) target.append(node('code', (result.before?.oid || '—') + ' → ' + (result.after?.oid || '—')));
     const diff = node('pre', result.diff, 'git-diff');
     if (result.diff) {

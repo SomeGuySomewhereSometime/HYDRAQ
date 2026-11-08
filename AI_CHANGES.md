@@ -1,10 +1,12 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 198
+Versão atual: 199
 
 ## Resumo atual
 
-- Arquivo com Antigravity e Git HTTPS (entrada 198): versão 198 ativa na 4318. Arquivar e restaurar confirmados pela interface na conversa real do Multi. Envio autenticado para GitHub privado confirmado com um commit sintético. Testes focados 37/37.
+- Pontos de segurança Git (entrada 199): versão 199 ativa na 4318. Criação ou escolha de commit antes de enviar e comparação da pasta atual no cartão final do Hydra. Testes focados 129/129 e 19/19 verificações do percurso Hydra no navegador com clientes simulados.
+
+- Arquivo com Antigravity e Git HTTPS (entrada 198): guardada em `55bbf9e`. Arquivar e restaurar confirmados pela interface na conversa real do Multi. Envio autenticado para GitHub privado confirmado com um commit sintético. Testes focados 37/37.
 
 - Validação da interface (entrada 197): 4318 na versão 197, interface integrada em master e Multi real confirmado. Fluxo Git com alteração Hydra, diff e restauro validado numa cópia de TopDownCharCombat.
 
@@ -2659,3 +2661,11 @@ Versão atual: 198
 - A organização de conversas e projetos trata clientes sem coleção de aprovações. Mantém os bloqueios por atividade, reservas e pedidos de decisão. Testes focados 37/37.
 - Reinício gracioso na 4318 (PID 119820 → 126630). Cinco clientes ligados e os mesmos 127 IDs preservados. A conversa real do ensaio Multi passou por Arquivar → Restaurar → Arquivar no navegador, mantendo sessões e histórico.
 - No painel Git, pré-visualização de um único commit para um repositório GitHub privado por HTTPS. Antes da confirmação, o remoto estava vazio. Depois, a referência remota apontava para o SHA esperado e continha só o ficheiro sintético. Projeto local de ensaio arquivado. Sem envio do código do HYDRAQ ou dos projetos.
+
+
+### 199 — 2026-11-08 — Codex — ponto de segurança antes do pedido
+
+- No compositor de um projeto, os pedidos com escrita podem abrir o painel Git junto de Enviar. É possível rever e guardar ficheiros num commit local ou escolher o commit atual. O rascunho fica pronto para envio explícito.
+- O Hydra verifica projeto, branch e commit ao criar a tarefa e guarda a associação. O cartão final compara esse commit com a pasta atual, incluindo alterações ainda sem commit e edições que ficaram fora da seleção. O restauro por ficheiro continua disponível no histórico Git.
+- Testes focados 129/129. Navegador isolado com clientes simulados 19/19, incluindo troca de branch no mesmo commit, comparação após concluir e recarregar, e botões lado a lado a 390 px. Os quatro percursos anteriores do painel Git também passaram num repositório descartável.
+- Reinício gracioso na 4318 (PID 126630 → 146145) em terminal visível. O servidor confirmou o suporte aos pontos de segurança, os cinco clientes ligados e os mesmos 127 IDs de conversa e sete IDs de projeto.

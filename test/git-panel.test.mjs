@@ -7,7 +7,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import test from 'node:test';
-import { GitPanel } from '../lib/git-panel.mjs';
+import { GitPanel, verifyGitCheckpoint } from '../lib/git-panel.mjs';
 import { listChanges, repoAt } from '../lib/git-panel-repo.mjs';
 import { createHttpServer } from '../lib/http.mjs';
 
@@ -73,6 +73,47 @@ test('recusa alterações concorrentes no índice e troca de branch com o mesmo 
   assert.equal(await f.command('rev-parse', 'main'), await f.command('rev-parse', 'outra'));
   f.hub.busy = true;
   await assert.rejects(f.call('branch-create', { name: 'bloqueada' }), /Tarefa ativa/);
+});
+
+test('ponto Hydra compara o commit com a pasta atual, restringe o âmbito e protege segredos', async t => {
+  const f = await fixture(t);
+  const base = { projectId: id, commit: await f.command('rev-parse', 'HEAD'), branch: 'refs/heads/main' };
+  const project = f.hub.projects.project(id);
+  assert.deepEqual(await f.call('checkpoint-current', base), { commit: base.commit, branch: base.branch });
+  await assert.rejects(verifyGitCheckpoint(project, f.root, { ...base, projectId: 'outro' }), /deste projeto/);
+  await assert.rejects(verifyGitCheckpoint(project, f.root + '-outro', base), /deste projeto/);
+  await f.command('switch', '-c', 'outra');
+  await assert.rejects(verifyGitCheckpoint(project, f.root, base), /branch.*mudou/);
+
+  const task = { projectId: id, cwd: f.root, gitCheckpoint: base, status: 'discussing' };
+  f.hub.claudex = { record: () => task };
+  await assert.rejects(f.call('checkpoint-files', { taskId: id }), /Aguarda/);
+  task.status = 'completed';
+  task.projectId = 'outro';
+  await assert.rejects(f.call('checkpoint-files', { taskId: id }), /neste projeto/);
+  task.projectId = id;
+
+  await f.put('a.txt', 'guardado na branch\n');
+  await f.command('add', 'a.txt');
+  await f.command('commit', '-m', 'trabalho');
+  await f.put('a.txt', 'versão ainda sem commit\n');
+  await f.put('b.txt', 'só no índice\n');
+  await f.command('add', 'b.txt');
+  await f.put('b.txt', 'outro\n');
+  await f.put('notes.txt', '-----BEGIN PRIVATE KEY-----\n');
+  await f.put('asset.blend', '');
+  const assetSize = 65 * 1024 * 1024;
+  await truncate(path.join(f.root, 'asset.blend'), assetSize);
+  const listing = await f.call('checkpoint-files', { taskId: id });
+  assert.deepEqual(listing.files.map(entry => [entry.file, entry.status]), [['a.txt', 'Alterado'], ['asset.blend', 'Novo'], ['notes.txt', 'Novo']]);
+  const diff = await f.call('checkpoint-diff', { receipt: listing.receipt, file: 'a.txt' });
+  assert.match(diff.diff, /-antigo\n\+versão ainda sem commit/);
+  const binary = await f.call('checkpoint-diff', { receipt: listing.receipt, file: 'asset.blend' });
+  assert.equal(binary.binary, true);
+  assert.equal(binary.after.size, assetSize);
+  await assert.rejects(f.call('checkpoint-diff', { receipt: listing.receipt, file: 'notes.txt' }), /Possível segredo/);
+  await assert.rejects(f.call('checkpoint-diff', { receipt: listing.receipt, file: 'b.txt' }), /Atualiza/);
+  await assert.rejects(f.call('commit', { receipts: [diff.receipt], message: 'indevido' }), /expirou/);
 });
 
 test('leitura, revisão e commit bloqueiam filtros, hooks e segredos', async t => {

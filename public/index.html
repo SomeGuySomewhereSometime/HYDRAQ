@@ -178,7 +178,10 @@
                   <select id="sandbox" class="pill-select" data-tip=""><option value="workspace-write">Leitura e escrita</option><option value="read-only">Só leitura</option></select>
                 </div>
                 <button type="button" id="stop" class="stop hidden" data-tip="Interrompe o pedido em curso. Ações já feitas não são desfeitas.">■ Parar</button>
-                <button type="submit" id="send" class="send" disabled>Enviar <span>↗</span></button>
+                <div class="composer-send-actions">
+                  <button type="button" id="git-checkpoint-trigger" class="pill-toggle" hidden>Criar ponto de segurança</button>
+                  <button type="submit" id="send" class="send" disabled>Enviar <span>↗</span></button>
+                </div>
               </div>
             </form>
             <p class="composer-note"><span id="composer-hint">Enter para enviar · Shift + Enter para nova linha</span><span id="terminal-switch" class="terminal-switch" role="group" aria-label="Terminal original" hidden></span><span class="composer-note-fixed" data-tip="Os clientes originais correm no teu computador, com as suas sessões. O histórico fica guardado localmente.">◉ Execução local · sessão original</span></p>
