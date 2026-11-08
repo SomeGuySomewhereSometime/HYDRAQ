@@ -876,6 +876,8 @@ test('delegações aparecem na conversa de origem com proveniência persistida, 
   const source = await hub.create({ projectId: projectA.id, revision: hub.projects.data.revision, provider: 'codex', model: hub.snapshot().providers.codex.models[0].id });
   const foreign = await hub.create({ projectId: projectB.id, revision: hub.projects.data.revision, provider: 'codex', model: hub.snapshot().providers.codex.models[0].id });
   const voice = await hub.companion.store.ensureActiveConversation(projectA.id);
+  const foreignInfo = await hub.companion.executeTool(projectA.id, voice.id, { name: 'consultar_hydraq' }, { sourceGroupId: foreign.group });
+  assert.deepEqual(foreignInfo.sourceModels, []);
   await hub.companion.store.appendMessage(projectA.id, voice.id, { role: 'user', text: 'Conversa informal privada da mascote.', modality: 'voice' });
   await hub.companion.store.appendMessage(projectA.id, voice.id, { role: 'assistant', text: 'Resposta informal privada.', modality: 'voice' });
   await assert.rejects(hub.companion.delegateExploration(projectA.id, voice.id, { prompt: 'Pedido inválido', sourceGroupId: foreign.group }), /não pertence/);
@@ -953,19 +955,4 @@ test('retoma expirada abre sessão nova sem reenviar delegações nem apagar his
   assert.equal(client.sent.findLast(m => m.type === 'error').code, 'AUTH_ERROR');
   assert.equal(setups.length, 2);
   assert.equal(JSON.stringify(client.sent).includes('private-probe-key'), false);
-});
-
-test('cor da mascote acompanha o cliente ativo do projeto e regressa ao selecionado', async () => {
-  const { mascotColorProvider } = await import('../public/companion.js');
-  const conversations = [
-    { id: 'a', group: 'source', provider: 'claude', status: 'running', updatedAt: '2026-01-01T10:00:00Z', organization: { projectId: 'project' } },
-    { id: 'b', group: 'other', provider: 'cursor', status: 'running', updatedAt: '2026-01-01T10:01:00Z', organization: { projectId: 'project' } },
-    { id: 'c', group: 'different', provider: 'opencode', status: 'running', updatedAt: '2026-01-01T10:02:00Z', organization: { projectId: 'other-project' } },
-  ];
-  assert.equal(mascotColorProvider({ projectId: 'project', conversations, sourceGroupId: 'source', selectedProvider: 'codex' }), 'claude');
-  assert.equal(mascotColorProvider({ projectId: 'project', conversations, selectedProvider: 'codex' }), 'cursor');
-  assert.equal(mascotColorProvider({ projectId: 'other-project', conversations, selectedProvider: 'codex' }), 'opencode');
-  assert.equal(mascotColorProvider({ projectId: 'empty-project', conversations, selectedProvider: 'claude' }), 'claude');
-  assert.equal(mascotColorProvider({ projectId: 'empty-project', conversations, selectedProvider: 'claude', voiceStatus: 'responding' }), 'antigravity');
-  assert.equal(mascotColorProvider({ projectId: null, conversations, selectedProvider: 'cursor' }), 'cursor');
 });

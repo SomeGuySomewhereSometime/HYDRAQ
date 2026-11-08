@@ -19,19 +19,6 @@ const STATUS_LABELS = {
   error: 'Com erro',
 };
 
-const CLIENT_LABELS = { codex: 'Codex', claude: 'Claude Code', antigravity: 'Gemini', cursor: 'Cursor', opencode: 'OpenCode' };
-
-export function mascotColorProvider({ projectId, conversations = [], sourceGroupId = null, selectedProvider = 'codex', voiceStatus = 'offline' }) {
-  const active = conversations.filter(c => projectId && c.organization?.projectId === projectId
-    && ['starting', 'running', 'waiting'].includes(c.status) && CLIENT_LABELS[c.provider]);
-  // Prefer the conversation being watched; otherwise show the most recently started task.
-  const watched = active.find(c => sourceGroupId && (c.group || c.id) === sourceGroupId);
-  const latest = [...active].sort((a, b) => String(b.turns?.at(-1)?.startedAt || b.updatedAt || '').localeCompare(String(a.turns?.at(-1)?.startedAt || a.updatedAt || '')))[0];
-  if (watched || latest) return (watched || latest).provider;
-  if (voiceStatus === 'responding') return 'antigravity'; // Gemini Live uses the same color as Gemini.
-  return CLIENT_LABELS[selectedProvider] ? selectedProvider : 'codex';
-}
-
 const KIND_LABELS = {
   'user-statement': 'Declaração do utilizador',
   proposal: 'Proposta',
@@ -122,8 +109,8 @@ export function companionTranscriptOwners(conversations, conversation, group) {
 }
 
 export class CompanionUI {
-  constructor({ api, getState, getProject, getToken, getSourceGroup = () => null, getSelectedProvider = () => 'codex', chooseConversation, choose, toast, markdown }) {
-    Object.assign(this, { api, getState, getProject, getToken, getSourceGroup, getSelectedProvider, toast, markdown });
+  constructor({ api, getState, getProject, getToken, getSourceGroup = () => null, chooseConversation, choose, openStandaloneDelegation, toast, markdown }) {
+    Object.assign(this, { api, getState, getProject, getToken, getSourceGroup, openStandaloneDelegation, toast, markdown });
     this.drafts = new Map();
     this.refreshSequence = 0;
     this.expanded = false;
@@ -192,10 +179,7 @@ export class CompanionUI {
     if (!enabled) { this.character?.destroy(); this.character = null; }
     else if (!this.character) {
       this.character = createMascotCharacter?.() || null;
-      if (this.character) {
-        this.launcher.prepend(this.character.element);
-        this.character.setExpanded(this.open);
-      }
+      if (this.character) this.launcher.prepend(this.character.element);
     }
     this.root.classList.toggle('has-mascot', Boolean(this.character));
     this.launcher.classList.toggle('has-mascot', Boolean(this.character));
@@ -328,7 +312,6 @@ export class CompanionUI {
     this.root.classList.toggle('align-left', this.open && oldPosition.left < window.innerWidth / 2);
     this.launcher.setAttribute('aria-expanded', String(this.open));
     this.panel.classList.toggle('hidden', !this.open);
-    this.character?.setExpanded(this.open);
     this.renderLauncher();
     if (this.root.style.left) this.#placeMascot(oldPosition.left, oldPosition.top);
     if (this.open && this.projectId) {
@@ -392,15 +375,13 @@ export class CompanionUI {
 
   renderLauncher() {
     const project = this.getProject();
-    const colorProvider = mascotColorProvider({ projectId: project?.id, conversations: this.getState()?.conversations || [], sourceGroupId: this.getSourceGroup(), selectedProvider: this.getSelectedProvider(), voiceStatus: this.liveStatus });
-    this.character?.setProvider?.(colorProvider);
     if (!project) {
       this.root.dataset.status = 'offline';
       this.launcherLabel.textContent = 'Mascote';
       this.launcherState.textContent = 'Escolhe um projeto';
       this.badge.classList.add('hidden');
       this.character?.setStatus('offline');
-      this.launcher.setAttribute('aria-label', `${this.open ? 'Fechar' : 'Abrir'} mascote Hydra · escolhe um projeto · cor ${CLIENT_LABELS[colorProvider]}`);
+      this.launcher.setAttribute('aria-label', `${this.open ? 'Fechar' : 'Abrir'} mascote Hydra · escolhe um projeto`);
       return;
     }
     const status = this.effectiveStatus();
@@ -409,7 +390,7 @@ export class CompanionUI {
     this.launcherLabel.textContent = `${name} · ${project.name}`;
     this.launcherState.textContent = STATUS_LABELS[status] || status;
     this.character?.setStatus(status);
-    this.launcher.setAttribute('aria-label', `${this.open ? 'Fechar' : 'Abrir'} mascote ${name} · ${STATUS_LABELS[status] || status} · cor ${CLIENT_LABELS[colorProvider]}`);
+    this.launcher.setAttribute('aria-label', `${this.open ? 'Fechar' : 'Abrir'} mascote ${name} · ${STATUS_LABELS[status] || status}`);
     const pendingCount = this.data?.pendingNotifications?.length || 0;
     this.badge.textContent = String(pendingCount);
     this.badge.classList.toggle('hidden', pendingCount === 0);
@@ -630,19 +611,26 @@ export class CompanionUI {
       if (isConnected) { input.value = ''; this.sendTextLive(text); return; }
       submit.disabled = true;
       const submittedDraftKey = this.renderedDraftKey;
+      const projectId = this.projectId;
       try {
-        await this.api(`/api/projects/${this.projectId}/companion/tool`, { conversationId: this.data?.activeConversation?.id, sourceGroupId: this.getSourceGroup(), call: { name: 'delegar_exploracao', args: { provider: 'codex', prompt: text } } });
+        const result = await this.api(`/api/projects/${projectId}/companion/tool`, { conversationId: this.data?.activeConversation?.id, sourceGroupId: this.getSourceGroup(), call: { name: 'delegar_exploracao', args: { provider: 'codex', prompt: text } } });
         this.drafts.set(submittedDraftKey, '');
         if (this.renderedDraftKey === submittedDraftKey) {
           const currentInput = this.panel.querySelector('#companion-text-input');
           if (currentInput?.value === text) currentInput.value = '';
           await this.refresh();
         }
-        this.toast('Pedido da mascote enviado ao Codex.');
+        this.#showStandaloneDelegation(projectId, result);
+        this.toast(result.accepted ? 'Pedido da mascote enviado ao Codex.' : result.error || result.note);
       } catch (error) { this.toast(error.message); } finally { submit.disabled = false; }
     });
     this.panel.append(form);
     this.panel.append(el('p', 'companion-privacy-note', 'Só as delegações e as respostas dos modelos entram na conversa normal.'));
+  }
+
+  #showStandaloneDelegation(projectId, result) {
+    if (!this.open || this.projectId !== projectId || !result?.accepted || result.sourceGroupId || !result.targetConversationId) return;
+    this.openStandaloneDelegation?.(result.targetConversationId, projectId).catch(() => {});
   }
 
   #delegationCard(action, profile) {
@@ -1001,6 +989,7 @@ export class CompanionUI {
     }
 
     if (msg.type === 'tool_result' || msg.type === 'project_event') {
+      if (msg.name === 'delegar_exploracao') this.#showStandaloneDelegation(this.projectId, msg.output);
       this.refresh().catch(() => {});
       return;
     }

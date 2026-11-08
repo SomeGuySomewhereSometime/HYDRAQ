@@ -1,8 +1,12 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 208
+Versão atual: 210
 
 ## Resumo atual
+
+- Mascote com informação do HYDRAQ (entrada 210): consulta do catálogo e dos modelos configurados. Uma delegação sem conversa de origem abre a sua própria conversa quando o utilizador continua no mesmo projeto sem outra conversa selecionada.
+
+- Faísca no assistente do projeto (entrada 209): a versão aprovada com três cores fixas substitui a Hydra 3D. SVG animado com CSS, mantendo o painel, o arrasto e as preferências. Validada em Chromium com clientes simulados.
 
 - Galeria SVG animada (entrada 208): Faísca refinada e nova Lume em `output/mascotes-faisca-lume/index.html`, pelo método de desenho em código e CSS da série original. Comparação, cinco estados, pausa e fundo claro/escuro. Originais preservados.
 
@@ -2760,3 +2764,17 @@ Versão atual: 208
 - Criada página autónoma separada com dois SVG novos: Faísca com pescoços/cabeças no mesmo grupo animado, novas expressões e cauda; Lume celeste com orelhas de cometa, peito estrelado e órbita. Cores Claude/Codex/Antigravity conservadas. Sem ImageGen.
 - Inclui comparação original, escalas 32/48/72 px, downloads incorporados, estados demonstrativos, pausa e fundo claro/escuro. Respeita movimento reduzido.
 - Verificado no navegador: renderização, cinco estados, pausa efetiva, mudança de fundo e comparação; sem erros de consola e sem overflow na largura observada. SVG XML válido e 29 hashes originais intactos. Sem integração na app, reinício da 4318 ou commit.
+
+
+### 209 — 2026-11-08 — Codex — Faísca de três cores na aplicação
+
+- Estado anterior guardado no `master` em `638117a`, com os artefactos de `output/` mantidos localmente. A Faísca refinada aprovada é a única personagem e conserva as cores fixas Claude, Codex e Antigravity. O SVG mantém as animações CSS e reage aos estados do assistente. Quando a voz está desligada, mostra a pose de repouso da comparação.
+- Removidos a mascote 3D, os ficheiros Blender e o fallback vetorial antigo, o PNG, o GLB e a cópia local de Three.js. Mantidos o painel do projeto, o arrasto, a posição guardada e as preferências de movimento.
+- Verificado: **31/31** em Chromium com clientes simulados, incluindo paleta, movimento, interação, telemóvel e remoção dos ficheiros antigos. Testes focados do assistente, servidor e permissões **39/39**. A instância 4318 estava parada.
+
+
+### 210 — 2026-11-08 — Codex — informação e delegações da mascote
+
+- A mascote Live pode consultar modelos, predefinições e modelo da sessão, com o catálogo gratuito do OpenCode limitado à pasta do projeto. A consulta omite dados de conta e distingue catálogos antigos e configurações guardadas.
+- Delegações sem origem abrem a sua conversa na área principal, por voz e texto, se o utilizador continuar no projeto sem conversa selecionada. Com origem, o pedido e as respostas continuam a aparecer na conversa que os originou. O diálogo informal fica no painel.
+- Verificado: 42 testes focados e 28 verificações no Chromium com clientes e Gemini Live simulados. Uma delegação real anterior foi localizada na conversa própria e tinha resposta concluída. Versão ativa na 4318. A consulta local confirmou 11 modelos gratuitos no catálogo OpenCode real do projeto testado. A resposta falada do Gemini não foi testada com o serviço real.

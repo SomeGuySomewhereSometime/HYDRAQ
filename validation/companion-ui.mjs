@@ -9,12 +9,18 @@ import { Providers } from '../lib/providers.mjs';
 import { OpinionClient } from '../test/fixtures/opinion-client.mjs';
 import { createHttpServer } from '../lib/http.mjs';
 const directory = await mkdtemp(path.join(os.tmpdir(), 'hydraq-companion-ui-'));
-const clients = Object.fromEntries(['codex', 'claude', 'antigravity', 'cursor'].map(id => [id, new OpinionClient(id, path.join(directory,id), { answer: 'Resposta delegada **confirmada**.\n\n- Só leitura\n- Sem alterações' })]));
+const clients = Object.fromEntries(['codex', 'claude', 'antigravity', 'cursor', 'opencode'].map(id => [id, new OpinionClient(id, path.join(directory,id), { answer: 'Resposta delegada **confirmada**.\n\n- Só leitura\n- Sem alterações' })]));
+let catalogScope;
+clients.opencode.refreshModels = async cwd => {
+ catalogScope = cwd;
+ return { cwd, checkedAt: new Date().toISOString(), models: [{ id: 'opencode/free-test', name: 'OpenCode gratuito de ensaio', free: true }] };
+};
 const hub = new Providers({ dataDir: path.join(directory,'hub'), defaultCwd: directory, clients, git: async () => [] });
 let browser, server, liveUpstream, upstreamConnections=0;
 class FakeUpstream extends EventEmitter {
  readyState=1;
- send(raw) {const frame=JSON.parse(String(raw));if(frame.setup)queueMicrotask(()=>frame.setup.sessionResumption?.handle ? this.emit('close',1008,Buffer.from('BidiGenerateContent session not found or expired')) : this.receive({setupComplete:{}}));}
+ frames=[];
+ send(raw) {const frame=JSON.parse(String(raw));this.frames.push(frame);if(frame.setup)queueMicrotask(()=>frame.setup.sessionResumption?.handle ? this.emit('close',1008,Buffer.from('BidiGenerateContent session not found or expired')) : this.receive({setupComplete:{}}));}
  receive(frame) {this.emit('message',JSON.stringify(frame));}
  close() {this.readyState=3;this.emit('close',1000,Buffer.from(''));}
 }
@@ -22,6 +28,14 @@ hub.companion.env={GEMINI_API_KEY:'simulated-local-test'};
 hub.companion.wsFactory=()=>{upstreamConnections++;liveUpstream=new FakeUpstream();queueMicrotask(()=>liveUpstream.emit('open'));return liveUpstream;};
 let checks = 0;
 const check = (label, value) => { assert.ok(value, label); checks++; console.log('PASS ' + label); };
+async function waitFor(read) {
+ for (let attempt=0; attempt<200; attempt++) {
+  const result=read();
+  if (result) return result;
+  await new Promise(resolve=>setTimeout(resolve,25));
+ }
+ throw Error('Tempo excedido à espera da sessão Live simulada.');
+}
 try {
  await hub.load(); await hub.connectAll();
  const project = await hub.createProject({ name: 'Projeto de ensaio', root: directory, revision: hub.projects.data.revision });
@@ -75,6 +89,14 @@ try {
  try { await page.getByRole('button',{name:'Desligar voz',exact:true}).waitFor({timeout:8000}); } catch(error) { console.log(JSON.stringify({errorBanner:await page.locator('.companion-error').allTextContents(),errors,upstream:!!liveUpstream}));throw error; }
  check('retoma expirada recupera sem erro de chave no browser', upstreamConnections===2 && await page.locator('.companion-error').count()===0);
  check('sessão Live recebe a conversa de origem', hub.companion.sessions.get(project.id)?.sourceGroupId===source.id);
+ const declared = liveUpstream.frames.find(frame => frame.setup)?.setup.tools[0].functionDeclarations;
+ check('a sessão Live anuncia a consulta de configuração', declared.some(tool => tool.name==='consultar_hydraq'));
+ liveUpstream.receive({toolCall:{functionCalls:[{id:'test-models',name:'consultar_hydraq',args:{provider:'opencode'}}]}});
+ const liveInfo = await waitFor(()=>liveUpstream.frames.flatMap(frame=>frame.toolResponse?.functionResponses || []).find(result=>result.id==='test-models')?.response?.output);
+ check('catálogo OpenCode limitado à pasta do projeto', catalogScope===project.root && liveInfo.clients[0].catalog.models[0].id==='opencode/free-test');
+ check('a consulta distingue o modelo Live e o da conversa', liveInfo.companion.liveModel==='gemini-3.8-live' && liveInfo.sourceModels[0].model===source.model);
+ check('a consulta não inclui dados de conta', !Object.hasOwn(liveInfo.clients[0],'account'));
+
  await page.locator('#companion-text-input').fill('Rascunho durante a voz');
  await page.locator('#companion-text-input').evaluate(el=>{el.focus();el.setSelectionRange(5,10);});
  await page.locator('#companion-messages').evaluate(el=>{el.scrollTop=0;});
@@ -87,7 +109,22 @@ try {
  hub.companion.sessions.get(project.id).sendClient({type:'message_saved',message});hub.companion.sessions.get(project.id).sendClient({type:'message_saved',message});
  await page.getByText(message.text,{exact:true}).waitFor();
  check('mensagem guardada não duplica',await page.getByText(message.text,{exact:true}).count()===1);
+ await page.locator('#new-chat').click();
+ await waitFor(()=>hub.companion.sessions.get(project.id)?.sourceGroupId===null);
+ liveUpstream.receive({toolCall:{functionCalls:[{id:'test-standalone',name:'delegar_exploracao',args:{provider:'codex',prompt:'Exploração pedida pela voz sem conversa selecionada.'}}]}});
+ await page.locator('#messages .companion-delegated-message').filter({hasText:'Exploração pedida pela voz sem conversa selecionada.'}).waitFor();
+ await page.locator('#messages .companion-delegated-message').filter({hasText:'Resposta delegada'}).waitFor();
+ check('delegação por voz também abre a conversa própria', await page.locator('#messages .companion-delegated-message').count()===2);
  await page.getByRole('button',{name:'Desligar voz',exact:true}).click();
+ await page.locator('#new-chat').click();
+ await page.locator('#companion-text-input').fill('Exploração autónoma sem conversa selecionada.');
+ await page.getByRole('button',{name:'Delegar ao Codex',exact:true}).click();
+ await page.locator('#messages .companion-delegated-message').filter({hasText:'Exploração autónoma sem conversa selecionada.'}).waitFor();
+ await page.locator('#messages .companion-delegated-message').filter({hasText:'Resposta delegada'}).waitFor();
+ const selectedStandalone = await page.evaluate(()=>localStorage.getItem('hydraq.conversation'));
+ const delegated = hub.snapshot().conversations.find(chat=>chat.id===selectedStandalone);
+ check('sem origem, a conversa própria abre com o pedido e resposta', delegated?.organization?.companion?.sourceGroupId===null && await page.locator('#messages .companion-delegated-message').count()===2);
+
  check('sem erros JavaScript', errors.length===0);
  console.log(`${checks} verificações aprovadas.`);
 } finally {

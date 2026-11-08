@@ -5200,15 +5200,12 @@ body[data-theme="mono"] .companion-launcher, body[data-theme="mono"] .companion-
 .companion-launcher.has-mascot .companion-badge { position: absolute; right: 9px; top: 8px; z-index: 3; }
 .companion-root.has-mascot .companion-panel { height: min(780px, calc(100dvh - 205px)); }
 .companion-root.align-left { align-items: flex-start; }
-.companion-root.dragging .mascot-wander,
-.companion-root.dragging .mascot-body { animation-play-state: paused; }
 @media (max-width: 700px) {
   .companion-root.has-mascot .companion-panel { height: min(800px, calc(100dvh - 163px)); }
 }
 @media (max-height: 520px) {
   .companion-root.has-mascot .companion-panel { height: calc(100dvh - 130px); }
   .companion-root.has-mascot .mascot-character { height: 104px; }
-  .companion-root.has-mascot .mascot-wander { height: 75px; }
 }
 
 /* Multi keeps readable answer widths within the transcript, including beside both sidebars. */
