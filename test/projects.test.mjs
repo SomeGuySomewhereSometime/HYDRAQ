@@ -9,6 +9,7 @@ import { Providers } from '../lib/providers.mjs';
 import { Hydraq } from '../lib/hydraq.mjs';
 import { CodexClient } from '../lib/codex.mjs';
 import { ClaudeCode } from '../lib/claude.mjs';
+import { Antigravity } from '../lib/antigravity.mjs';
 import { createHttpServer } from '../lib/http.mjs';
 import { ComposerDrafts, draftKey } from '../public/drafts.js';
 import { conversationGroups } from '../public/projects.js';
@@ -16,9 +17,13 @@ import { conversationGroups } from '../public/projects.js';
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const waitFor=async predicate=>{const end=Date.now()+6000;while(!predicate()){if(Date.now()>end)throw Error('Tempo excedido.');await new Promise(r=>setTimeout(r,10));}};
 async function folder(t){const dir=await mkdtemp(path.join(os.tmpdir(),'hydraq-projects-'));t.after(()=>rm(dir,{recursive:true,force:true}));return dir;}
-async function setup(t){
+async function setup(t,{antigravity=false}={}){
   const dir=await mkdtemp(path.join(os.tmpdir(),'hydraq-projects-')),dataDir=dir+'/state';
   const clients={codex:new Hydraq({dataDir,defaultCwd:dir,modelMetadataPath:dir+'/unused.json',client:new CodexClient({executable:process.execPath,args:[root+'/test/fixtures/fake-codex.mjs']})}),claude:new ClaudeCode({dataDir:dataDir+'/claude',defaultCwd:dir,executable:process.execPath,prefixArgs:[root+'/test/fixtures/fake-claude.mjs']})};
+  if(antigravity)clients.antigravity=new Antigravity({
+    dataDir:dataDir+'/antigravity',defaultCwd:dir,settingsFile:dir+'/agy-settings.json',
+    executable:process.execPath,prefixArgs:[root+'/test/fixtures/fake-agy.mjs'],
+  });
   const hub=new Providers({dataDir,clients,git:async()=>null});await hub.load();await hub.connectAll();
   t.after(async()=>{try{await hub.close();}finally{await new Promise(r=>setTimeout(r,30));await rm(dir,{recursive:true,force:true});}});
   const project=async(name='Projeto',folder=dir)=>hub.createProject({name,root:folder,revision:hub.projects.data.revision});
@@ -91,6 +96,27 @@ test('arquivo bloqueia envio e tarefa ativa bloqueia arquivo; restauração cons
   await hub.organizeGroups({revision:hub.projects.data.revision,groups:[c.id],archived:false});await hub.send(c.id,'Enviado','restore');await waitFor(idle);const id=native.threadId;
   await hub.updateProject(p.id,{revision:hub.projects.data.revision,archived:true});await assert.rejects(hub.send(c.id,'Não enviar','project-archived'),/Restaura/);
   await hub.updateProject(p.id,{revision:hub.projects.data.revision,archived:false});assert.equal(native.threadId,id);
+});
+
+test('arquivo e restauro conservam o grupo com Antigravity, sem ignorar decisões pendentes de outros clientes',async t=>{
+  const {hub,clients,dir,project,chat}=await setup(t,{antigravity:true}),p=await project(),c=await chat(p.id);
+  const agy=await clients.antigravity.create({cwd:dir,model:'gemini-4-argon',effort:'low'});
+  agy.group=c.group;
+  const archive=archived=>hub.organizeGroups({groups:[c.group],archived,revision:hub.projects.data.revision});
+  assert.equal(clients.antigravity.approvals,undefined);
+  clients.codex.approvals.set('teste',{conversationId:c.id});
+  try{await assert.rejects(archive(true),/decisão pendente/);}finally{clients.codex.approvals.delete('teste');}
+  agy.status='running';
+  await assert.rejects(archive(true),/tarefa ou decisão pendente/);
+  agy.status='idle';
+  await archive(true);
+  assert.equal(hub.projects.group(c.group).archived,true);
+  await archive(false);
+  assert.equal(hub.projects.group(c.group).archived,false);
+  await hub.updateProject(p.id,{archived:true,revision:hub.projects.data.revision});
+  assert.equal(hub.projects.project(p.id).archived,true);
+  await hub.updateProject(p.id,{archived:false,revision:hub.projects.data.revision});
+  assert.deepEqual(hub.snapshot().conversations.map(entry=>entry.id).sort(),[c.id,agy.id].sort());
 });
 
 test('pasta desaparecida bloqueia antes da inferência e continua com histórico consultável',async t=>{

@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 197
+Versão atual: 198
 
 ## Resumo atual
+
+- Arquivo com Antigravity e Git HTTPS (entrada 198): versão 198 ativa na 4318. Arquivar e restaurar confirmados pela interface na conversa real do Multi. Envio autenticado para GitHub privado confirmado com um commit sintético. Testes focados 37/37.
 
 - Validação da interface (entrada 197): 4318 na versão 197, interface integrada em master e Multi real confirmado. Fluxo Git com alteração Hydra, diff e restauro validado numa cópia de TopDownCharCombat.
 
@@ -2650,3 +2652,10 @@ Versão atual: 197
 - Reinício gracioso da 4318: PID 87133 → 119820. Cinco clientes ligados e os mesmos 122 IDs de conversa preservados antes dos ensaios. Interface `f55e66f` integrada por avanço direto em master. A tag `checkpoint/antes-interface` continua em `f3fba1b`.
 - Multi real pela página: lugar desligado persistiu após recarregar e Enviar ficou bloqueado até voltar a ligar um segundo cliente. Codex Sol e Claude Haiku responderam à única ronda. Antigravity desligado não recebeu pedido. O arquivo da conversa de ensaio falhou porque a organização pressupõe uma coleção de aprovações em todos os clientes, que o Antigravity não tem.
 - Na cópia do commit `85fe0a1` de TopDownCharCombat, o painel criou o ponto de segurança `de2462dde70a`. O Hydra (Sol e Haiku) alterou exclusivamente o ficheiro de ensaio. A página mostrou o diff, restaurou a versão guardada e conservou a versão alterada numa cópia de segurança. A árvore da cópia voltou a ficar limpa, o projeto de ensaio foi arquivado e a origem conservou o estado e o diff. Sem push.
+
+
+### 198 — 2026-11-08 — Codex — arquivo com Antigravity e ensaio HTTPS
+
+- A organização de conversas e projetos trata clientes sem coleção de aprovações. Mantém os bloqueios por atividade, reservas e pedidos de decisão. Testes focados 37/37.
+- Reinício gracioso na 4318 (PID 119820 → 126630). Cinco clientes ligados e os mesmos 127 IDs preservados. A conversa real do ensaio Multi passou por Arquivar → Restaurar → Arquivar no navegador, mantendo sessões e histórico.
+- No painel Git, pré-visualização de um único commit para um repositório GitHub privado por HTTPS. Antes da confirmação, o remoto estava vazio. Depois, a referência remota apontava para o SHA esperado e continha só o ficheiro sintético. Projeto local de ensaio arquivado. Sem envio do código do HYDRAQ ou dos projetos.
