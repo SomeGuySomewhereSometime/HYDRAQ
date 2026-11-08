@@ -58,7 +58,7 @@ createInterface({input:process.stdin}).on('line',line=>{
  if(text==='permission'||text==='permission-first'){
   const toolCallId='tool-'+(++count);
   if(text!=='permission-first')update({sessionUpdate:'tool_call',toolCallId,kind:'execute',title:'python3 approved.txt',status:'in_progress',rawInput:{command:'python3 approved.txt'}});
-  request('session/request_permission',{sessionId:sid,toolCall:{toolCallId,title:'python3 approved.txt',kind:'execute'},options:[{optionId:'native-allow',name:'Allow',kind:'allow_once'},{optionId:'native-reject',name:'Reject',kind:'reject_once'}]},reply=>{
+  request('session/request_permission',{sessionId:sid,toolCall:{toolCallId,title:'python3 approved.txt',kind:'execute'},options:[{optionId:'native-allow',name:'Allow',kind:'allow_once'},{optionId:'native-always',name:'Always allow',kind:'allow_always'},{optionId:'native-reject',name:'Reject',kind:'reject_once'}]},reply=>{
    const choice=reply.result?.outcome;
    if(choice?.outcome==='cancelled'){done(m.id,'cancelled');return;}
    const allowed=choice?.optionId==='native-allow';

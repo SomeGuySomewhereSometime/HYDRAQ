@@ -38,6 +38,7 @@ try {
   check('mode panel above activity', await page.evaluate(() => document.querySelector('#mode-panel').compareDocumentPosition(document.querySelector('.activity-heading')) & Node.DOCUMENT_POSITION_FOLLOWING));
   await page.waitForFunction(()=>document.querySelector('.mode-tile[data-mode="normal"]')?.getAttribute('aria-pressed')==='true');
   check('normal active by default', await tile('normal').getAttribute('aria-pressed') === 'true');
+  check('Codex access is shown for the next request', /^Codex · Sandbox de (leitura|projeto)$/.test(await page.locator('#mode-access li').textContent()));
   check('last request shows duration', /Duração/.test(await page.locator('#turn-usage').textContent()));
   check('terminal offered in the Modo panel', /Abrir no terminal · Codex/.test(await page.locator('#inspector-terminal').textContent()) && await page.locator('#inspector-terminal').isVisible());
   for (const theme of ['classic', 'mono', 'atelier']) {
@@ -48,6 +49,7 @@ try {
   // Client chips drive the composer.
   await page.locator('#mode-setup .mode-chip[data-client="claude"]').click();
   check('client chip switches composer provider', await page.locator('#provider').inputValue() === 'claude');
+  check('native Claude access is shown', /^Claude.* · Nativo$/.test(await page.locator('#mode-access li').textContent()));
   await page.locator('#mode-setup .mode-chip[data-client="codex"]').click();
   await page.locator('#mode-setup .mode-current').click();
   check('model list expands', await page.locator('#mode-setup .mode-field:has(.mode-current) .mode-chips').isVisible());
@@ -69,6 +71,7 @@ try {
   check('settings form hidden inline', !await page.locator('#hydra-inline .cx-settings').isVisible() && !await page.locator('#cx-prompt').isVisible());
   check('intro shown', await page.locator('#hydra-inline .cx-intro').isVisible());
   check('two participant cards', await page.locator('.mode-participant').count() === 2);
+  check('Hydra shows protection for both participants', (await page.locator('#mode-access li').allTextContents()).filter(label => label.endsWith(' · Proteções Hydra')).length === 2);
   await page.screenshot({ path: out + '/hydra-new-atelier.png' });
   await page.locator('.hydra-pair[data-pair="codex+antigravity"]').click();
   check('Geminex pair applied', (await page.locator('#hydra-inline .cx-heading h1').textContent()) === 'Geminex' && await page.locator('.mode-participant[data-client="antigravity"]').count() === 1);

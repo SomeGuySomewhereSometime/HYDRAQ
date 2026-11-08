@@ -13,6 +13,8 @@ import { quotaUsageView } from './turn-quotas.js';
 import { OpinionUI, opinionResultAnchors, diagnosticsView } from './opinions.js';
 import { Layout, Tooltips, AppearanceMenu, ClientColors, APPEARANCES, COLUMNS } from './layout.js';
 // A server started before the dual routes does not serve dual.js: the composer then works without Dual.
+const permissionModule = await import('./permissions.js').catch(()=>null);
+const {PermissionControls,policyLabel,effectivePolicy}=permissionModule||{};
 const gitPanelModule = await import('./git-panel.js').catch(() => null);
 const claudexModule = await import('./claudex.js').catch(() => null);
 const dualModule = await import('./dual.js').catch(() => null);
@@ -224,16 +226,23 @@ function saferSandbox(source, existing, target) {
   return existing && rank(existing) < rank(mapped) ? existing : mapped;
 }
 // Planning is a native mode of these clients; it is stored as the request's sandbox value.
-const planSupport = { claude: true, cursor: true, antigravity: true, opencode: true, codex: false };
+const planSupport = { codex:true, claude: true, cursor: true, antigravity: true, opencode: true };
+let permissionControls = null;
 const permissionOptions = {
   opencode: [['workspace-write','Perguntar antes','OpenCode original: autorizações na conversa; sem aprovação automática nem sandbox do sistema operativo comprovada.']],
   antigravity: [['workspace-write','Executar','O agy usa a política de permissões configurada no cliente original e as restrições da sandbox.'],['accept-edits','Aceitar edições','Pede ao agy o modo accept-edits. O efeito depende também da política de permissões configurada no cliente original.']],
   claude: [['workspace-write','Perguntar antes','O Claude Code pede autorização na conversa antes de editar ficheiros ou executar comandos.'],['accept-edits','Aceitar edições','O Claude Code aplica edições de ficheiros sem perguntar; comandos continuam a pedir autorização.']],
   cursor: [['workspace-write','Executar','O Grok trabalha com as permissões nativas do Cursor; autorizações aparecem na conversa.'],['ask','Só perguntas','Modo Perguntar do Cursor: responde e analisa, sem alterar ficheiros.']],
-  codex: [['workspace-write','Leitura e escrita','O Codex pode ler e alterar ficheiros da pasta do projeto. Ações fora da sandbox pedem autorização na conversa.'],['read-only','Só leitura','O Codex só lê ficheiros. Alterações ou comandos com efeitos pedem autorização.']],
+  codex: [['workspace-write','Leitura e escrita','O Codex pode ler e alterar ficheiros da pasta do projeto. Ações fora da sandbox pedem autorização na conversa.'],['read-only','Só leitura','Usa o sandbox de leitura do Codex. Vê as proteções no painel Modo.']],
 };
 let planMode = false;
-function sandboxValue() { return planMode && planSupport[providerId()] ? 'plan' : $('#sandbox').value; }
+function sandboxValue() {
+  const policy=permissionControls?.value();
+  if(policy?.profile==='read-only')return providerId()==='codex'?'read-only':'plan';
+  if(policy?.profile==='project'&&(dualUI?.both(current())||dualUI?.pendingFor()))return providerId()==='codex'?'read-only':'plan';
+  if(policy?.profile==='project')return planMode&&providerId()!=='codex'?'plan':'workspace-write';
+  return planMode && planSupport[providerId()] && providerId()!=='codex' ? 'plan' : $('#sandbox').value;
+}
 function setSandbox(value) {
   const provider = providerId(), options = permissionOptions[provider].map(([id]) => id);
   planMode = value === 'plan' && planSupport[provider];
@@ -243,13 +252,13 @@ function setSandbox(value) {
   renderPermissionTips();
 }
 function renderPermissionTips() {
-  const provider = providerId(), supported = planSupport[provider];
+  const provider = providerId(), supported = planSupport[provider]&&(provider!=='codex'||Boolean(state?.permissions));
   $('#plan-toggle').setAttribute('aria-pressed', String(planMode && supported));
   $('#plan-toggle').dataset.tip = supported
     ? `Planear: o ${providerName(provider)} analisa e propõe um plano antes de alterar ficheiros (modo nativo). Define o objetivo do pedido; as permissões definem o acesso.`
     : 'O Codex não tem um modo Planear nesta integração. Para impedir alterações, escolhe “Só leitura” nas permissões.';
   const option = permissionOptions[provider].find(([id]) => id === $('#sandbox').value);
-  $('#sandbox').dataset.tip = `Permissões: ${option?.[2] || 'acesso do cliente ao projeto.'}${planMode && supported ? ' Em modo Planear, o cliente não altera ficheiros.' : ''}`;
+  $('#sandbox').dataset.tip = `Permissões: ${option?.[2] || 'acesso do cliente ao projeto.'}${planMode && supported ? ' Planear pede um plano ao cliente. Vê as proteções no painel Modo.' : ''}`;
 }
 function saveSettingsDraft() {
   settingDrafts.set(settingsKey(), { model: $('#model').value, effort: $('#effort').value, sandbox: sandboxValue(), context: $('#context').value || null, fast: $('#fast').checked });
@@ -334,7 +343,7 @@ claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area
   } : null,
   openTask:id=>{const task=state?.claudex?.records.find(record=>record.id===id),member=task&&Object.values(task.members||{}).find(entry=>state.conversations.some(c=>c.id===entry.conversationId));if(member)choose(member.conversationId);else claudexUI.choose(id);},
   elapsed,changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}providerStatus?.render();}}):null;
-const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
+const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {permissionPolicy:permissionControls?.value(),model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 companionUI = companionModule ? new companionModule.CompanionUI({ api, getState: () => state, getProject: companionProject, markdown, getSourceGroup: () => current()?.organization?.projectId === companionProject()?.id ? current()?.group || current()?.id || null : null, getSelectedProvider: providerId, getToken: () => token, chooseConversation: id => choose(id), choose: id => choose(id), toast }) : null;
 
 dualUI=dualModule?new dualModule.DualUI({api,getState:()=>state,getCurrent:current,markdown,elapsed,
@@ -462,7 +471,7 @@ function renderSettings(conversation) {
   $('#cwd').disabled = Boolean(conversation) || Boolean(project()) || sending;
   const locked = sending || providerState().connection !== 'connected' || anyBusy() || group.some(needsUncertaintyReview) || basis?.status === 'uncertain';
   for (const selector of ['#model', '#effort', '#sandbox', '#context', '#fast']) $(selector).disabled = locked;
-  $('#plan-toggle').disabled = locked || !planSupport[provider];
+  $('#plan-toggle').disabled = locked || !planSupport[provider] || (provider==='codex'&&!state?.permissions);
   // Questions to both models stay read-only; the composer shows the principal's read mode.
   if (dualUI?.readOnly(conversation) && !dualRead(sandboxValue())) setSandbox('plan');
   dualUI?.renderComposer(conversation, { locked });
@@ -1305,6 +1314,9 @@ function renderApprovals(conversation) {
       for (const block of tool.content || []) if (block.type === 'diff') card.append(element('pre','',`${block.path}\nAntes:\n${block.oldText || ''}\nDepois:\n${block.newText || ''}`));
       if (!(tool.content || []).some(block=>block.type==='diff') && item?.changes?.length) card.append(element('pre','',item.changes.map(change=>`${change.path}\n${change.diff || ''}`).join('\n\n')));
       const labels={allow_once:'Permitir desta vez',allow_always:'Permitir sempre',reject_once:'Recusar',reject_always:'Recusar sempre'};
+      if (client === 'Cursor' && (request.params.options || []).some(option => option.kind === 'allow_always')) {
+        card.append(element('p','', 'Permitir sempre pode guardar a autorização na configuração do Cursor para pedidos futuros.'));
+      }
       for (const option of request.params.options || []) card.append(approvalButton(labels[option.kind] || option.name,()=>respond({optionId:option.optionId}),option.kind?.startsWith('reject')));
       card.append(approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
     } else if (request.method === 'cursor/ask_question') {
@@ -1718,6 +1730,7 @@ $('#plan-toggle').addEventListener('click',()=> {
   renderPermissionTips(); saveSettingsDraft();
   dualUI?.enforceWrite(!dualRead(sandboxValue()));
   renderSend();
+  syncModePanel();
 });
 $('#prompt').addEventListener('input',()=> {
   composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, steerTarget(), chosenDelivery());
@@ -2078,6 +2091,7 @@ async function leaveHydra(task, mode) {
   if (selected !== id || current()?.claudexTask) { render(); return; }
   chooseMode(mode);
 }
+permissionControls = PermissionControls ? new PermissionControls({host:$('#permission-controls'),state:()=>state,key:composerKey,plan:()=>planMode,changed:()=>{renderSend();syncModePanel();}}) : null;
 function syncModePanel() {
   if (!state) return;
   const conversation = current(), task = hydraTask(conversation), pair = hydraPair(conversation);
@@ -2116,6 +2130,43 @@ function syncModePanel() {
   const setup = pair && claudexUI ? hydraSetup(pair) : normalSetup;
   if ($('#mode-setup').firstElementChild !== setup.element) $('#mode-setup').replaceChildren(setup.element);
   setup.sync();
+  permissionControls?.render({multi:Boolean(record||pending),lastTurn:targetMember(conversation)?.turns?.at(-1),busy:sending,fixedPolicy:task?.permissionPolicy,providers:pair||dualPair||[providerId()]});
+  $('#sandbox').hidden=Boolean(permissionControls?.value()?.profile&&permissionControls.value().profile!=='native');
+  const access = $('#mode-access');
+  const terminal = nativeUI.session() ? 'codex' : claudeUI.session() ? 'claude' : openCodeUI.session() ? 'opencode' : agyUI.session() ? 'antigravity' : null;
+  const targets = record ? multiTargets(record) : [];
+  const clients = pair || (record ? targets.map(key => record.members[key].provider) : dualPair) || [providerId()];
+  const rows = terminal ? [[terminal, 'Terminal original', 'O cliente aplica as suas permissões no terminal.']] : clients.map((id, index) => {
+    const mode = clients.length > 1 ? mapSandbox(sandboxValue(), id) : sandboxValue();
+    const policy=permissionControls?.value();
+    if(policy&&!pair) {
+      const requested=policy.profile==='project'&&clients.length>1?{...policy,profile:'read-only'}:policy;
+      const effective=effectivePolicy(id,requested,permissionControls?.roundMode()==='mixed');
+      return [id,policyLabel(effective.policy),effective.supported?'Perfil do próximo pedido. O servidor verifica os limites antes de enviar.':permissionControls?.roundMode()==='mixed'?'Este participante entra com as permissões nativas nesta ronda mista.':'Este cliente não aplica o perfil. A ronda estrita será recusada antes do envio.'];
+    }
+    if (pair) return [id, policy?policyLabel(policy):'Proteções Hydra', 'O coordenador limita as ferramentas e reserva a escrita ao implementador autorizado. Os MCP externos dependem da autorização da tarefa.'];
+    if (id === 'codex') {
+      const readOnly = mode === 'read-only';
+      const protectedRead = readOnly && providerState(id).capabilities?.protectedReadOnly;
+      return [id, readOnly ? 'Sandbox de leitura' : 'Sandbox de projeto', protectedRead
+        ? 'As escaladas são recusadas e os MCP externos herdados ficam desativados.'
+        : 'O Codex aplica o sandbox nativo. As ferramentas e a rede têm regras próprias.'];
+    }
+    if (id === 'claude' && mode === 'plan' && (clients.length > 1 || (record && targets[index] !== record.principal)) && providerState(id).capabilities?.protectedConsultation) {
+      return [id, 'Consulta limitada', 'A ronda limita as ferramentas do Claude. Os hooks e os MCP externos ficam desativados.'];
+    }
+    if (id === 'antigravity' && mode === 'plan') return [id, 'Proteção de planeamento', 'O HYDRAQ aplica um hook às ferramentas em modo Planear.'];
+    return [id, 'Nativo', 'O cliente aplica as suas permissões e confirmações.'];
+  });
+  const signature = JSON.stringify(rows);
+  if (access.dataset.signature !== signature) {
+    access.dataset.signature = signature;
+    access.replaceChildren(...rows.map(([id, label, hint]) => {
+      const item = element('li','',providerName(id) + ' · ' + label);
+      item.title = hint;
+      return item;
+    }));
+  }
 }
 // The live Hydra card follows its updates only while the person is reading the end of the conversation.
 $('#messages').addEventListener('scroll', () => { const view = $('#messages'); transcriptPinned = view.scrollHeight - view.scrollTop - view.clientHeight < 120; });
@@ -2324,7 +2375,7 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
     const revision=record.revision||0;
     const signature=JSON.stringify([record.id,text,target,settings,attachments]);
     if(dualUI.pendingSend?.signature!==signature)dualUI.pendingSend={signature,requestId:crypto.randomUUID()};
-    const result = await api(`/api/dual/${record.id}/send`, { text, requestId: dualUI.pendingSend.requestId, multiVersion:2, revision, target, settings, ...(attachments.length ? { attachments } : {}), ...(keys.length === 1 ? { autoReview } : {}) });
+    const result = await api(`/api/dual/${record.id}/send`, { permissionPolicy:permissionControls?.value(),permissionMode:permissionControls?.roundMode(),text, requestId: dualUI.pendingSend.requestId, multiVersion:2, revision, target, settings, ...(attachments.length ? { attachments } : {}), ...(keys.length === 1 ? { autoReview } : {}) });
     dualUI.pendingSend=null;
     if (checkpointDrafts.has(imageDraftKey)) checkpointDrafts.delete(imageDraftKey);
     // One recipient failed: the other already has the question, so the draft is not kept; the panel offers a resend.
@@ -2354,7 +2405,7 @@ async function submitHydra() {
     // Hydra owns its pending request and keeps an automatic folder across retries.
     const cwd = conversationAtSubmit?.cwd || $('#cwd').value.trim();
     const task = await claudexUI.requestInline(text.trim(), { projectId: selectedProject, cwd, conversationId: conversationAtSubmit?.id,
-      gitCheckpoint: point || undefined });
+      gitCheckpoint: point || undefined,permissionPolicy:permissionControls?.value() });
     if (!task) return;
     if (checkpointDrafts.has(key)) checkpointDrafts.delete(key);
     composerDrafts.clear(key, text);
@@ -2382,7 +2433,7 @@ $('#composer').addEventListener('submit',async event=> {
   const importedContext=projectMemory.pending.get(imageDraftKey);
   const conversationAtSubmit = current();
   const steeringTarget = draftMode(composerIntent, steerTarget(conversationAtSubmit)) === 'steer' ? composerIntent.turnId : null;
-  const settings = { autoReview:opinionUI.automaticSetting(), model: $('#model').value, effort: $('#effort').value, sandbox: sandboxValue(), ...(providerId()==='cursor' ? {context:$('#context').value || null,fast:$('#fast').checked} : {}) };
+  const settings = { permissionPolicy:permissionControls?.value(), autoReview:opinionUI.automaticSetting(), model: $('#model').value, effort: $('#effort').value, sandbox: sandboxValue(), ...(providerId()==='cursor' ? {context:$('#context').value || null,fast:$('#fast').checked} : {}) };
   const settingsDraftKey = settingsKey(conversationAtSubmit);
   const handoff = switching(conversationAtSubmit) ? { provider: providerId(), handoffMode: $('#handoff-mode').value, sandbox: sandboxValue() } : {};
   const dualAtSubmit = dualUI?.record(conversationAtSubmit), dualPending = dualUI?.pendingFor();

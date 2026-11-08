@@ -14,10 +14,10 @@ import { turnFacts } from '../lib/handoff.mjs';
 
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const waitFor=async predicate=>{const deadline=Date.now()+4000;while(!predicate()){if(Date.now()>deadline)throw new Error('Tempo excedido.');await new Promise(r=>setTimeout(r,10));}};
-async function setup(t) {
+async function setup(t, {guarded=false}={}) {
   const directory=await mkdtemp(path.join(os.tmpdir(),'hydraq-agy-test-'));
   const settingsFile=path.join(directory,'settings.json');
-  const options={dataDir:path.join(directory,'state'),defaultCwd:directory,settingsFile,executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-agy.mjs')],env:{...process.env,GEMINI_API_KEY:'must-be-removed',ANTHROPIC_API_KEY:'must-be-removed',FAKE_AGY_BRAIN:path.join(directory,'brain')}};
+  const options={dataDir:path.join(directory,'state'),defaultCwd:directory,settingsFile,...(guarded?{hooksFile:path.join(directory,'hooks.json'),guardDirectory:path.join(directory,'guard')}:{}),executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-agy.mjs')],env:{...process.env,GEMINI_API_KEY:'must-be-removed',ANTHROPIC_API_KEY:'must-be-removed',FAKE_AGY_BRAIN:path.join(directory,'brain'),...(guarded?{FAKE_AGY_HOOKS:path.join(directory,'hooks.json')}:{})}};
   const client=new Antigravity(options);
   await client.load();await client.connect();
   const cleanupClients=[client];
@@ -175,7 +175,7 @@ test('queda nativa não reenvia nem declara conclusão; reinício conserva o est
 });
 
 test('clientes independentes preservam histórico Codex e encaminham pedidos, bloqueando tarefas simultâneas',async t=> {
-  const {client:agy,directory,cleanupClients}=await setup(t);
+  const {client:agy,directory,cleanupClients}=await setup(t,{guarded:true});
   const codex=new Hydraq({dataDir:path.join(directory,'codex'),defaultCwd:directory,client:new CodexClient({executable:process.execPath,args:[path.join(root,'test/fixtures/fake-codex.mjs')]})});
   const hub=new Providers({clients:{codex,antigravity:agy}});cleanupClients.push(codex);await codex.load();await hub.connect('codex');
   const c=await hub.create({provider:'codex',cwd:directory,model:'gpt-test',effort:'low'});
@@ -223,7 +223,7 @@ test('histórico gravado a meio de uma resposta reabre como incerto e sem indica
 });
 
 test('HTTP escolhe cliente por conversa e encaminha autorizações Codex pelo identificador completo',async t=> {
-  const {client:agy,directory,cleanupClients}=await setup(t);
+  const {client:agy,directory,cleanupClients}=await setup(t,{guarded:true});
   const codex=new Hydraq({dataDir:path.join(directory,'codex'),defaultCwd:directory,client:new CodexClient({executable:process.execPath,args:[path.join(root,'test/fixtures/fake-codex.mjs')]})});
   cleanupClients.push(codex);await codex.load();
   const hub=new Providers({clients:{codex,antigravity:agy}});await hub.connect('codex');

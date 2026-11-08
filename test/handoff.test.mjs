@@ -21,7 +21,7 @@ async function setup(t,env={}) {
   await writeFile(metadataFile,JSON.stringify({client_version:'0.159.0',fetched_at:new Date().toISOString(),models:[]}));
   const clientEnv={...process.env,FAKE_CODEX_LOG:codexLog,FAKE_CODEX_SETTINGS_LOG:path.join(directory,'codex-settings.log'),...env};
   const codex=new Hydraq({dataDir:path.join(directory,'state'),defaultCwd:directory,modelMetadataPath:metadataFile,client:new CodexClient({executable:process.execPath,args:[path.join(root,'test/fixtures/fake-codex.mjs')],env:clientEnv})});
-  const antigravity=new Antigravity({dataDir:path.join(directory,'state/antigravity'),defaultCwd:directory,settingsFile:path.join(directory,'agy.json'),executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-agy.mjs')],env:clientEnv});
+  const antigravity=new Antigravity({dataDir:path.join(directory,'state/antigravity'),defaultCwd:directory,settingsFile:path.join(directory,'agy.json'),executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-agy.mjs')],env:{...clientEnv,FAKE_AGY_HOOKS:path.join(directory,'hooks.json')},hooksFile:path.join(directory,'hooks.json'),guardDirectory:path.join(directory,'guard')});
   const claude=new ClaudeCode({dataDir:path.join(directory,'state/claude'),defaultCwd:directory,executable:process.execPath,prefixArgs:[path.join(root,'test/fixtures/fake-claude.mjs')],env:clientEnv});
   const hub=new Providers({clients:{codex,antigravity,claude},git:async()=>[' M app.js','?? novo.txt'],inspect:async()=>({files:{},warnings:[],complete:true})});
   await hub.load();await Promise.all(['codex','antigravity','claude'].map(id=>hub.connect(id)));

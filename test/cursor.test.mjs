@@ -22,6 +22,20 @@ async function setup(t,env={}) {
  return {directory,credentialFile,client,options,clients,log:async()=> (await readFile(path.join(directory,'prompts.log'),'utf8')).trim().split('\n').map(JSON.parse)};
 }
 
+test('o Cursor delegado só apresenta e aceita autorizações pontuais',async t=>{
+ const {options,clients,directory}=await setup(t);
+ const client=new Cursor({...options,persistentApprovals:false});clients.push(client);
+ await client.load();await client.connect();
+ const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low',sandbox:'ask'});
+ await client.send(c.id,'permission','restricted');
+ await waitFor(()=>c.status==='waiting');
+ const request=client.snapshot().approvals[0];
+ assert.deepEqual(request.params.options.map(o=>o.kind),['allow_once','reject_once']);
+ await assert.rejects(client.respond(request.id,{optionId:'native-always'}),/anunciadas/);
+ await client.respond(request.id,{optionId:'native-reject'});
+ await waitFor(()=>c.status==='completed');
+});
+
 test('Grok: raciocínio por partes com a chave oculta, lista de tarefas com merge e plano no pedido seguinte',async t=>{
  const {client,directory}=await setup(t);await client.connect();
  const c=await client.create({cwd:directory,model:'grok-4.7',effort:'low'});

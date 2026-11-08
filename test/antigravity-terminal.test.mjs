@@ -38,7 +38,7 @@ async function setup(t) {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'hydraq-agy-terminal-'));
   const home = path.join(directory, 'agy-home');
   await mkdir(path.join(home, 'conversations'), { recursive: true });
-  const options = { dataDir: path.join(directory, 'state'), defaultCwd: directory, settingsFile: path.join(directory, 'settings.json'), executable: process.execPath, prefixArgs: [path.join(root, 'test/fixtures/fake-agy.mjs')] };
+  const options = { dataDir: path.join(directory, 'state'), defaultCwd: directory, settingsFile: path.join(directory, 'settings.json'), hooksFile: path.join(directory, 'hooks.json'), guardDirectory: path.join(directory, 'guard'), env: {...process.env, FAKE_AGY_HOOKS: path.join(directory, 'hooks.json')}, executable: process.execPath, prefixArgs: [path.join(root, 'test/fixtures/fake-agy.mjs')] };
   const agy = new Antigravity(options);
   const git = { lines: [' M a.txt'] };
   const hub = new Providers({ dataDir: path.join(directory, 'hub'), defaultCwd: directory, git: async () => git.lines,

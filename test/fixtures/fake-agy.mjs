@@ -24,7 +24,7 @@ if(args.includes('/usage')) {
   console.log(JSON.stringify({status:'SUCCESS',num_turns:0,command:{name:'usage',data:{groups:[{name:'Gemini Models',buckets:[{id:'gemini-weekly',window:'weekly',remaining_fraction:.97,reset_time:'2026-11-01T20:52:22Z'},{id:'gemini-5h',window:'5h',remaining_fraction:.99,reset_time:'2026-10-28T17:08:46Z'}]}]}}}));process.exit(0);
 }
 if(args.includes('--dangerously-skip-permissions'))process.exit(9);
-if(!args.includes('--sandbox') || !args.includes('--disable-slash-commands'))process.exit(8);
+if(!args.includes('--disable-slash-commands'))process.exit(8);
 if(process.env.GEMINI_API_KEY||process.env.ANTHROPIC_API_KEY)process.exit(7);
 const nativeId=args.includes('--conversation')?args[args.indexOf('--conversation')+1]:'native-'+process.pid;
 const model=args[args.indexOf('--model')+1];

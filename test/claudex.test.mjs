@@ -148,8 +148,8 @@ test('Codex ClaudeX desativa MCP e apps herdados só na sua sessão',async t=>{
  client.client.call=async(method,params)=>{calls.push({method,params});return method==='config/read'?{config:{mcp_servers:{'external.with.dot':{command:'test',tool_timeout_sec:null}},apps:{external:{enabled:true}}}}:{thread:{id:'native'}};};
  const settings={internal:'claudex',contextMcp:{name:'hydraq_cx_test_codex',file:'/tmp/test-cx-lease',command:'node',args:[],env:{},names:['read_dialogue']}};
  await client.ensureThread('local',settings);const config=calls.find(c=>c.method==='thread/start').params.config;
- assert.equal(config.mcp_servers['external.with.dot'].enabled,false);assert.equal(config.apps.external.enabled,false);assert.equal('tool_timeout_sec' in config.mcp_servers['external.with.dot'],false);assert.equal(config['features.apps'],false);assert.equal(config['features.plugins'],false);assert.equal(config['features.hooks'],false);assert.equal(config['features.browser_use'],false);assert.ok(config.mcp_servers.hydraq_cx_test_codex.enabled_tools.includes('read_dialogue'));
- client.loaded.clear();calls.length=0;await client.ensureThread('local',{});assert.equal(calls.some(c=>c.method==='config/read'),false);assert.equal(calls[0].params.config['features.apps'],undefined);
+ assert.equal(config.mcp_servers['external.with.dot'].enabled,false);assert.equal(config.apps.external.enabled,false);assert.equal('tool_timeout_sec' in config.mcp_servers['external.with.dot'],false);assert.equal(config['features.apps'],false);assert.equal(config['features.plugins'],false);assert.equal(config['features.hooks'],false);assert.equal(config['features.browser_use'],false);assert.ok(config.mcp_servers.hydraq_cx_test_codex.enabled_tools.includes('read_dialogue'));assert.equal(config.mcp_servers.hydraq_cx_test_codex.tools.read_dialogue.approval_mode,'approve');
+ client.loaded.clear();conversation.sandbox='workspace-write';calls.length=0;await client.ensureThread('local',{});assert.equal(calls.some(c=>c.method==='config/read'),false);assert.equal(calls[0].params.config['features.apps'],undefined);
 });
 
 

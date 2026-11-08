@@ -544,13 +544,13 @@ test('uma ferramenta chamada com o parâmetro errado diz quais são os certos',a
  await x.call('antigravity','initial_position',{text:'Análise',intent:'implement',authorizationQuote:'Implementa a alteração de value.txt para after e testa.',revision:x.r.revision});assert.equal(x.r.positions.antigravity,'Análise');
 });
 
-test('um hook escrito antes de um replaneamento continua a ser detetado',{skip:noBwrap},async t=>{
+test('um hook escrito antes de um replaneamento exige confirmação antes de voltar a planear',{skip:noBwrap},async t=>{
  const x=await setup(t);await x.plan();await mkdir(x.cwd+'/sub/.git/hooks',{recursive:true});await writeFile(x.cwd+'/sub/.git/hooks/pre-commit','#!/bin/sh\n');
  await x.cx.answer(x.r.id,{requestId:'answer:replan',provider:'codex',questions:[],decision:'accept',answers:{q:'Muda o formato'}});
  await x.call('codex','request_replan',{answerSeq:x.r.messages.findLast(m=>m.type==='answer').seq,reason:'A resposta muda o plano.'});x.finish();
- await wait(()=>x.r.workflow.phase==='planning'&&x.roles.every(k=>x.cx.native(x.r,k).status==='running'));await x.plan();
- await writeFile(x.cwd+'/value.txt','after');await x.call(x.r.author,'implementation_done',{...await x.read(x.r.author),summary:'Alterado value.txt; verificar conteúdo.'});x.finish();
  await wait(()=>x.r.status==='paused');assert.equal(x.r.pause.kind,'reserved');assert.match(x.r.error,/pre-commit/);
+ await settled(x);await x.cx.resume(x.r.id);
+ await wait(()=>x.r.workflow.phase==='planning'&&x.roles.every(k=>x.cx.native(x.r,k).status==='running'));await x.plan();
 });
 
 test('parar depois de escrever avisa de hooks e de ficheiros ignorados alterados, não só de código',{skip:noBwrap},async t=>{
@@ -572,6 +572,15 @@ test('pastas reservadas alteradas durante a escrita pausam antes da revisão; a 
  await wait(()=>x.r.status==='paused');assert.equal(x.r.pause.kind,'reserved');assert.match(x.r.error,/sub\/\.git\/hooks\/pre-commit/);assert.equal(x.r.workflow.phase,'implementing');assert.equal(x.r.workflow.snapshot,undefined);
  await settled(x);await x.cx.resume(x.r.id);await x.phase('validating');assert.equal(x.r.workflow.round,1);
  assert.equal(JSON.stringify(await x.read('claude')).includes('pre-commit'),false,'o estado interno não vai para os modelos');
+});
+
+test('Codex deteta mudanças reservadas no fim de um turno sem proposta de implementação',{skip:noBwrap},async t=>{
+ const x=await setup(t);await x.plan();
+ await mkdir(x.cwd+'/.hydraq');await writeFile(x.cwd+'/.hydraq/new.json','{}');
+ x.finish();
+ await wait(()=>x.r.status==='paused');
+ assert.equal(x.r.pause.kind,'reserved');assert.match(x.r.error,/\.hydraq/);
+ assert.equal(x.r.workflow.phase,'implementing');
 });
 
 test('sem conseguir preparar os testes, ninguém recebe escrita',{skip:noBwrap},async t=>{
@@ -829,7 +838,7 @@ test('cópia: um encerramento a meio de aplicar é retomado até ao fim, mesmo c
  clearInterval(x.cx.timer);clearTimeout(x.cx.scheduled);x.cx.loaded=false;await x.cx.queue;await rm(x.cx.directory+'/owner.json');x.cx.ownsLock=false;
  const recovered=new ClaudeX({hub:x.hub,directory:x.cx.directory,prepare:x.cx.prepare});await recovered.load();assert.equal(recovered.error,undefined);
  const r=recovered.record(x.r.id);assert.equal(r.status,'paused');assert.equal(await stat(r.workspace.folder+'/aplicacao/plano.json').then(()=>true,()=>false),true);
- await recovered.resume(r.id);await wait(()=>r.status==='completed'&&r.workspace.left);assert.equal(await readFile(x.cwd+'/a.txt','utf8'),'a');assert.equal(await readFile(x.cwd+'/b.txt','utf8'),'b');assert.equal(await readFile(x.cwd+'/value.txt','utf8'),'after');assert.equal(r.result.unvalidated,undefined);assert.equal(await stat(r.workspace.folder).then(()=>true,()=>false),false);
+ await recovered.resume(r.id);await wait(()=>r.status==='completed'&&r.workspace.left&&r.workspace.removed);assert.equal(await readFile(x.cwd+'/a.txt','utf8'),'a');assert.equal(await readFile(x.cwd+'/b.txt','utf8'),'b');assert.equal(await readFile(x.cwd+'/value.txt','utf8'),'after');assert.equal(r.result.unvalidated,undefined);assert.equal(await stat(r.workspace.folder).then(()=>true,()=>false),false);
  await recovered.close();x.r.status='completed';x.cx.raw=await readFile(x.cx.directory+'/state.json','utf8');
 });
 

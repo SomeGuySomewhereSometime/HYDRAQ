@@ -59,6 +59,35 @@ test('recusa credenciais API antes de qualquer pedido de inferência', async t=>
   assert.deepEqual(hydraq.models,[]);
 });
 
+test('Só leitura do Codex pede a política sem escaladas e recusa um pedido de autorização inesperado', async t => {
+  const {hydraq,client,directory} = await setup(t);
+  await hydraq.connect();
+  const chat = await conversation(hydraq,directory);
+  await hydraq.send(chat.id,'hello','native-first');
+  await waitFor(()=>chat.status === 'completed');
+  const thread = chat.threadId, nativeProcess = client.process;
+  const policies = [], configs = [];
+  const call = client.call.bind(client);
+  client.call = (method, params, ...rest) => {
+    if (['thread/start','turn/start','thread/resume'].includes(method)) policies.push(params.approvalPolicy);
+    if (method === 'thread/resume') configs.push(params.config);
+    return call(method, params, ...rest);
+  };
+  await hydraq.send(chat.id,'approval','read-only',{sandbox:'read-only'});
+  await waitFor(()=>chat.status === 'completed');
+  assert.deepEqual(policies,['never','never']);
+  assert.notEqual(client.process,nativeProcess);
+  assert.equal(chat.threadId,thread);
+  assert.equal(configs[0].mcp_servers.external.enabled,false);
+  assert.equal(hydraq.approvals.size,0);
+  assert.equal(chat.messages.at(-1).text,'Escalada recusada');
+  policies.length=0;
+  await hydraq.send(chat.id,'hello','workspace-write',{sandbox:'workspace-write'});
+  await waitFor(()=>chat.status === 'completed');
+  assert.deepEqual(policies,['on-request','on-request']);
+  assert.equal(configs[1].mcp_servers,undefined);
+});
+
 test('uma única tarefa, interrupção e recusa de repetições concorrentes', async t=> {
   const {hydraq,directory} = await setup(t);
   await hydraq.connect();

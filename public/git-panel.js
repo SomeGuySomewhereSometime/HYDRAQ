@@ -61,6 +61,7 @@ export class GitPanelUI {
     this.project = project;
     this.onCheckpoint = onCheckpoint;
     this.selectedCheckpoint = selectedCheckpoint;
+    this.state = null;
     this.tab = 'changes';
     this.selection = new Map();
     this.message = '';
@@ -85,19 +86,23 @@ export class GitPanelUI {
     this.dialog.close();
     this.onCheckpoint(point);
   }
-  async checkpointChanges(taskId) {
-    this.notice.textContent = 'A ler o repositório…';
+  async checkpointChanges(taskId, message = '') {
+    this.notice.textContent = message || 'A ler o repositório…';
     this.main.replaceChildren();
     if (!this.tabs.children.length) this.tabs.append(this.button('Atualizar', () => this.checkpointChanges(taskId)));
     const result = await this.call('checkpoint-files', { taskId });
-    this.notice.textContent = 'Ponto de segurança · ' + short(result.commit);
+    this.notice.textContent = message || 'Ponto de segurança · ' + short(result.commit);
     const files = node('div', undefined, 'git-files');
     const preview = node('section', undefined, 'git-preview');
     for (const entry of result.files) {
       const row = node('div', undefined, 'git-file');
       row.append(this.button(entry.status + ' · ' + entry.file, async () => {
         const diff = await this.call('checkpoint-diff', { file: entry.file, receipt: result.receipt });
-        this.showDiff(preview, entry.file, diff, 'checkpoint-diff');
+        this.showDiff(preview, entry.file, diff, 'checkpoint-diff', () => {
+          preview.append(this.button('Pré-visualizar restauro', () => this.restorePreview(preview, {
+            file: entry.file, commit: result.commit,
+          }, message => this.checkpointChanges(taskId, message))));
+        });
       }, { disabled: entry.sensitive }));
       if (entry.sensitive) row.append(node('small', 'Possível segredo'));
       files.append(row);
@@ -129,7 +134,7 @@ export class GitPanelUI {
     if (this.state.recovery) this.recovery();
     ({ changes: () => this.changes(), history: () => this.history(), branches: () => this.branches(), remote: () => this.remote() })[this.tab]();
   }
-  get locked() { return Boolean(this.state.blocked || this.state.recovery); }
+  get locked() { return Boolean(this.state?.blocked || this.state?.recovery); }
   setup() {
     const ignore = node('textarea');
     ignore.rows = 12;
@@ -297,14 +302,19 @@ export class GitPanelUI {
     }
     if (!files.children.length) files.append(node('p', 'As árvores são iguais.'));
   }
-  async restorePreview(detail, body) {
+  async restorePreview(detail, body, onRestored = message => {
+    this.tab = 'changes';
+    return this.refresh(message);
+  }) {
     const result = await this.call('restore-preview', body);
     this.showDiff(detail, result.file, result, 'restore', () => {
-      detail.append(node('p', 'O conteúdo atual será guardado num ponto de segurança. A operação altera a pasta de trabalho.'),
+      const note = result.after === null
+        ? 'O ficheiro não existia no ponto selecionado. Será removido da pasta de trabalho e o conteúdo atual será guardado num ponto de segurança.'
+        : 'O conteúdo atual será guardado num ponto de segurança. A operação altera a pasta de trabalho.';
+      detail.append(node('p', note),
         this.button('Restaurar ficheiro', async () => {
           await this.call('restore', { receipt: result.receipt });
-          this.tab = 'changes';
-          await this.refresh('Ficheiro restaurado. O ponto de segurança está em Histórico.');
+          await onRestored('Ficheiro restaurado. O ponto de segurança está em Histórico.');
         }, { disabled: this.locked, primary: true }));
     });
   }

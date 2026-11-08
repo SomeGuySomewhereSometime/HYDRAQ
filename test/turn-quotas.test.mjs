@@ -126,7 +126,7 @@ test('os três clientes medem no envio normal, preservam o resultado e não repe
     client: new CodexClient({ executable: process.execPath, args: [path.resolve('test/fixtures/fake-codex.mjs')] }),
   });
   clients.claude = new ClaudeCode(options('claude'));
-  clients.antigravity = new Antigravity({ ...options('agy'), settingsFile: root + '/absent' });
+  clients.antigravity = new Antigravity({ ...options('agy'), settingsFile: root + '/absent',hooksFile:root+'/hooks.json',guardDirectory:root+'/guard',env:{...process.env,FAKE_AGY_HOOKS:root+'/hooks.json'} });
   for (const [provider, client] of Object.entries(clients)) {
     await client.load();
     await client.connect();

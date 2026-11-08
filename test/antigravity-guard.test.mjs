@@ -1,12 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile, readFile, mkdir, access } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile, mkdir, access, symlink } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { Antigravity } from '../lib/antigravity.mjs';
-import { GUARD_HOOK, guardPaths, readOnlyPolicy, readOnlyCommand, shellWords, publicUrl, decide, guardCommand, ensureGuard, openGuard, closeGuard, guardDecisions } from '../lib/antigravity-guard.mjs';
+import { GUARD_HOOK, guardPaths, readOnlyPolicy, readOnlyCommand, shellWords, decide, guardCommand, ensureGuard, openGuard, closeGuard, guardDecisions } from '../lib/antigravity-guard.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const waitFor = async predicate => { const deadline = Date.now() + 4000; while (!predicate()) { if (Date.now() > deadline) throw new Error('Tempo excedido.'); await new Promise(r => setTimeout(r, 10)); } };
@@ -14,9 +14,19 @@ const exists = file => access(file).then(() => true, () => false);
 const temporary = async t => { const directory = await mkdtemp(path.join(os.tmpdir(), 'hydraq-agy-guard-')); t.after(() => rm(directory, { recursive: true, force: true })); return directory; };
 const call = (name, args, stepIdx = 1, conversationId = 'conv-1234') => ({ conversationId, stepIdx, toolCall: { name, args }, artifactDirectoryPath: '/home/x/.gemini/antigravity-cli/brain/' + conversationId });
 
-test('só leitura: leitura, comandos simples e artefactos do agy passam; escrita, comandos que alteram, MCP e endereços locais não', () => {
-  const policy = readOnlyPolicy(), answer = (name, args) => decide(call(name, args), policy).decision;
-  for (const name of ['read_file', 'view_file', 'list_dir', 'grep_search', 'search_web']) assert.equal(answer(name, {}), 'ask', name);
+test('só leitura: caminhos do projeto, comandos simples e artefactos da sessão respeitam o hook', async t => {
+  const directory = await temporary(t), cwd = path.join(directory, 'project');
+  await mkdir(cwd);
+  await writeFile(path.join(directory, 'fora.txt'), 'exterior');
+  await symlink(path.join(directory, 'fora.txt'), path.join(cwd, 'atalho'));
+  const policy = readOnlyPolicy(cwd), answer = (name, args) => decide(call(name, args), policy).decision;
+  for (const name of ['read_file', 'view_file', 'list_dir', 'grep_search']) {
+    assert.equal(answer(name, { Path: cwd }), 'ask', name);
+    assert.equal(answer(name, {}), 'deny', name);
+    assert.equal(answer(name, { Path: '../fora.txt' }), 'deny', name);
+    assert.equal(answer(name, { Path: 'atalho' }), 'deny', name);
+  }
+  assert.equal(answer('search_web', { Query: 'exterior' }), 'deny');
   assert.equal(answer('write_file', { Path: '/home/x/.gemini/antigravity-cli/brain/conv-1234/task.md' }), 'ask');
   for (const target of ['/projeto/x.txt', '/home/x/.gemini/antigravity-cli/brain/conv-1234/../../settings.json', '/home/x/.gemini/antigravity-cli/brain/conv-12345/x', 'relativo.txt']) assert.equal(answer('write_file', { Path: target }), 'deny', target);
   for (const name of ['write_to_file', 'replace_file_content', 'multi_replace_file_content']) assert.equal(answer(name, { TargetFile: '/projeto/x' }), 'deny', name);
@@ -36,10 +46,8 @@ test('só leitura: leitura, comandos simples e artefactos do agy passam; escrita
   for (const line of ["find . -name sentinel.txt -de''lete", 'find . -name x "-del"ete', "find . -name x '-delete'", 'find . -name x -rm', "rg --p''re ./processor HYDRAQ input.txt", 'rg --hostname-bin=./x foo', 'git grep --op=sh x', "git grep --open-f''iles=sh x", 'git grep -nOsh x', 'git cat-file --filt HEAD:x', 'git diff --ext', 'find . -name *.js', 'rg foo lib/*', 'git log -- *.mjs', 'find . -name -[d]elete', "find . -name 'x", 'cat "a', 'ls\vx', 'ls\x00x']) assert.ok(!readOnlyCommand(line), line);
   for (const line of ["find . -name '*.mjs' -not -path './node_modules/*'", 'find . ! -name x', 'ls *.md', 'grep -n "a b" lib/*.mjs', "git log --oneline -- 'lib/*.mjs'", 'git grep -n foo', 'git diff --stat', 'git show --name-only HEAD', 'cat "README.md"', "rg -g '*.mjs' guard", 'find . -name x #-delete', 'grep -n "it\'s" a.txt']) assert.ok(readOnlyCommand(line), line);
 
-  for (const url of ['https://antigravity.google/docs', 'http://example.com/a?b=1']) assert.ok(publicUrl(url), url);
-  for (const url of ['http://127.0.0.1:4318/api/bootstrap', 'http://localhost:4318', 'http://[::1]:4318', 'http://10.0.0.1', 'http://192.168.1.2', 'http://172.20.0.1', 'http://169.254.169.254', 'http://2130706433', 'http://0x7f000001', 'http://printer.local', 'http://router', 'file:///etc/passwd', 'http://user:pw@example.com', 'ftp://example.com', 'nope']) assert.ok(!publicUrl(url), url);
   assert.equal(answer('read_url_content', { Url: 'http://127.0.0.1:4318/api/bootstrap' }), 'deny');
-  assert.equal(answer('read_url_content', { Url: 'https://antigravity.google/docs' }), 'ask');
+  assert.equal(answer('read_url_content', { Url: 'https://antigravity.google/docs' }), 'deny');
 });
 
 test('as palavras do filtro são as que a bash do agy passa ao programa', () => {
@@ -56,8 +64,8 @@ test('o hook corre pelo shell, regista cada passo e só falha fechado nas conver
   const run = (input, line = command) => JSON.parse(execFileSync('sh', ['-c', line], { input: typeof input === 'string' ? input : JSON.stringify(input) }).toString());
   assert.equal(run(call('write_file', { Path: '/p/x' })).decision, 'ask', 'sem regra: fluxo normal do agy');
   assert.equal(run('não é JSON').decision, 'ask');
-  await openGuard(directory, 'conv-1234');
-  assert.equal(run(call('read_file', { Path: '/p/README.md' }, 2)).decision, 'ask');
+  await openGuard(directory, 'conv-1234', readOnlyPolicy(directory));
+  assert.equal(run(call('read_file', { Path: directory }, 2)).decision, 'ask');
   assert.equal(run(call('write_file', { Path: '/p/x.txt' }, 4)).decision, 'deny');
   assert.equal(run(call('run_command', { CommandLine: 'ls -la' }, 6)).decision, 'allow');
   assert.equal(run(call('run_command', { CommandLine: 'touch y.txt' }, 8)).decision, 'deny');

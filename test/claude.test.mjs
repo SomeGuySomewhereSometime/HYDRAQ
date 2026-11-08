@@ -101,6 +101,7 @@ test('autorizações nativas passam pela interface e recusas ficam registadas',a
 test('depois de aprovar um plano, o pedido seguinte volta a Planear; num pedido dual o plano não sai de Planear',async t=> {
   const {client,directory}=await setup(t,{FAKE_CLAUDE_PLAN_LOG:path.join(os.tmpdir(),`hydraq-plan-${process.pid}-${Date.now()}.json`)});
   const planLog=client.env.FAKE_CLAUDE_PLAN_LOG;t.after(()=>rm(planLog,{force:true}));
+  const launchLog=client.env.FAKE_CLAUDE_INFERENCE_ARGS_LOG=path.join(directory,'consulta-argv.json');
   const hub=new Providers({clients:{claude:client}});
   await hub.connect('claude');
   const c=await hub.create({provider:'claude',cwd:directory,model:'haiku',effort:'low',sandbox:'plan'});
@@ -115,12 +116,17 @@ test('depois de aprovar um plano, o pedido seguinte volta a Planear; num pedido 
   await hub.send(c.id,'olá','p2',{sandbox:'plan'});await waitFor(()=>chat.status==='completed'&&answer('p2'));
   assert.match(answer('p2'),/modo plan/);assert.notEqual(pidOf('p2'),pidOf('p0'));
   await client.send(c.id,'plan-approval','p3',{model:'haiku',effort:'low',sandbox:'plan',planOnly:true});await waitFor(()=>chat.status==='completed'&&answer('p3'));
+  const args=JSON.parse(await readFile(launchLog,'utf8'));
+  assert.ok(args.includes('--strict-mcp-config'));
+  assert.equal(args[args.indexOf('--mcp-config')+1],'{"mcpServers":{}}');
+  assert.equal(args[args.indexOf('--tools')+1],'Read,Glob,Grep,AskUserQuestion,ExitPlanMode');
+  assert.equal(JSON.parse(args[args.indexOf('--settings')+1]).disableAllHooks,true);
   assert.equal(hub.snapshot().approvals.length,0);
   const response=JSON.parse(await readFile(planLog,'utf8'));
   assert.equal(response.behavior,'deny');assert.match(response.message,/continua em Planear/);
   assert.equal(chat.items.findLast(i=>i.tool==='ExitPlanMode'||i.title==='ExitPlanMode'||i.id?.startsWith('plan_'))?.status,'completed');
   await hub.send(c.id,'olá','p4',{sandbox:'plan'});await waitFor(()=>chat.status==='completed'&&answer('p4'));
-  assert.match(answer('p4'),/modo plan/);assert.equal(pidOf('p4'),pidOf('p2'));
+  assert.match(answer('p4'),/modo plan/);assert.notEqual(pidOf('p4'),pidOf('p2'), 'a consulta Multi usa um processo separado do Planear nativo');
 });
 
 test('interrupção termina o turno sem matar a sessão; queda fica incerta e não reenvia',async t=> {

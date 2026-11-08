@@ -41,7 +41,7 @@ const progressStart = () => {
 createInterface({input:process.stdin}).on('line',line=> {
   const message = JSON.parse(line);
   if (!message.method) {
-    if (message.id === approval) { complete(approval.startsWith('elicit-') ? JSON.stringify(message.result) : `Decisão: ${message.result.decision}`); approval = null; }
+    if (message.id === approval) { complete(message.error ? 'Escalada recusada' : approval.startsWith('elicit-') ? JSON.stringify(message.result) : `Decisão: ${message.result.decision}`); approval = null; }
     return;
   }
   const result = value => send({id:message.id,result:value});
@@ -49,6 +49,7 @@ createInterface({input:process.stdin}).on('line',line=> {
   if (message.method === 'account/rateLimits/read') result({rateLimits:{limitId:'codex',primary:{usedPercent:25,windowDurationMins:300,resetsAt:1900000000},secondary:{usedPercent:60,windowDurationMins:10080,resetsAt:1900005000}}});
   if (message.method === 'account/read') result({account:{type:process.env.FAKE_AUTH || 'chatgpt',planType:'test'},requiresOpenaiAuth:true});
   if (message.method === 'experimentalFeature/list') result({data:[{name:'reasoning_effort_override',stage:'underDevelopment',enabled:process.env.FAKE_REASONING_UPDATES !== 'false',defaultEnabled:false}]});
+  if (message.method === 'config/read') result({config:{mcp_servers:{external:{command:'fake-mcp'}}}});
   if (message.method === 'model/list') result({data:[
     {id:'gpt-test',model:'gpt-test',displayName:'Modelo de teste',isDefault:true,hidden:false,defaultReasoningEffort:'low',supportedReasoningEfforts:[{reasoningEffort:'low'},{reasoningEffort:'high'}]},
     {id:'gpt-other',model:'gpt-other',displayName:'Outro modelo',isDefault:false,hidden:false,defaultReasoningEffort:'medium',supportedReasoningEfforts:[{reasoningEffort:'medium'},{reasoningEffort:'high'}]},
@@ -63,7 +64,7 @@ createInterface({input:process.stdin}).on('line',line=> {
     else result({thread:threads.get(message.params.threadId)||{id:message.params.threadId},model:'gpt-test',reasoningEffort:'low'});
   }
   if (message.method === 'turn/start') {
-    if (!['readOnly','workspaceWrite'].includes(message.params.sandboxPolicy?.type)) { send({id:message.id,error:{message:'É necessária uma política explícita por turno'}}); return; }
+    if (!message.params.permissions && !['readOnly','workspaceWrite'].includes(message.params.sandboxPolicy?.type)) { send({id:message.id,error:{message:'É necessária uma política explícita por turno'}}); return; }
     if (process.env.FAKE_CODEX_SETTINGS_LOG) appendFileSync(process.env.FAKE_CODEX_SETTINGS_LOG,JSON.stringify(message.params)+'\n');
     const text = message.params.input[0].text;
     if (process.env.FAKE_CODEX_LOG) appendFileSync(process.env.FAKE_CODEX_LOG, JSON.stringify(text)+'\n');

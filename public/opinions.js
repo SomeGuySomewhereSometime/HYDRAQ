@@ -511,6 +511,7 @@ export class OpinionUI{
   const preview=p.description||p.reason||p.toolCall?.title||p.displayName||p.toolName||p.message||request.method;
   card.append(node('p','',preview));const input=p.input||p.toolCall?.rawInput;if(input)card.append(node('pre','',typeof input==='string'?input:JSON.stringify(input,null,2)));
   if(request.method==='session/request_permission'){
+   if(job.provider==='cursor'&&p.options?.some(option=>option.kind==='allow_always'))card.append(node('p','opinion-caption','Permitir sempre pode guardar a autorização na configuração do Cursor para pedidos futuros.'));
    for(const option of p.options||[])card.append(this.button(option.name||option.optionId,()=>send({optionId:option.optionId})));
   }else if(['elicitation/create','mcpServer/elicitation/request'].includes(request.method)){
    try{const form=elicitationForm(p.requestedSchema);card.append(form.container,this.button('Responder',()=>{try{send({action:'accept',content:form.read()});}catch(e){this.toast(e.message);}}),this.button('Recusar',()=>send({action:'decline'})));}catch(e){card.append(node('p','opinion-error',e.message),this.button('Recusar',()=>send({action:'decline'})));}

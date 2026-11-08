@@ -1,8 +1,26 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 199
+Versão atual: 208
 
 ## Resumo atual
+
+- Galeria SVG animada (entrada 208): Faísca refinada e nova Lume em `output/mascotes-faisca-lume/index.html`, pelo método de desenho em código e CSS da série original. Comparação, cinco estados, pausa e fundo claro/escuro. Originais preservados.
+
+- Nova série visual (entrada 207): Nori v2, Vértice v2, Faísca v2 e Nimbo v1 em `output/mascotes-astra-v2/`. O utilizador restringiu o foco a Faísca e Nimbo; as restantes ficaram guardadas. São estudos PNG estáticos, ainda sem animação. Os 29 ficheiros da série anterior foram preservados por SHA-256.
+
+- Mascotes melhoradas 2.0 e duas novas originais (entrada 206): criada `output/mascotes-antigravity/index.html` sem alterar os originais em `output/mascotes-codex/`. Inclui versões melhoradas de Nori 2.0, Vértice 2.0 e Faísca 2.0, duas criações originais (Prisma e Kora), e as cinco variantes Trio (Claude · Codex · Antigravity). SVG/PNG exportados e verificados no navegador até 320 px sem erros JS.
+
+- Faísca Trio (entrada 205): preferência visual do utilizador; cor da parte inferior por escolher. Seis opções locais — grafite, pérola, lilás, petróleo, bordô e dourado — alteram apenas a base e a cauda, preservando as cabeças e pescoços. Comparação em `output/mascotes-codex/faisca-opcoes-cores.png`.
+
+- Mascotes Trio (entrada 204): versões adicionais de Nori, Vértice e Faísca com cabeças e pescoços Claude (laranja), Codex (verde) e Antigravity (azul), da esquerda para a direita. Originais preservados, exportação SVG e comparação PNG; página verificada até 320 px.
+
+- Propostas de mascote (entrada 203): Nori, Vértice e Faísca em `output/mascotes-codex/index.html`, com comparação animada, cores dos cinco clientes, estados e exportação SVG. Página verificada no navegador até 320 px; mascote integrada e servidor 4318 intactos.
+
+- Perfis comuns de permissões (entrada 202): Só leitura, Projeto confinado e Nativo por pedido, Planear independente, controlos de rede e MCP e rondas Multi estritas ou mistas. Política conservada nas retomas e delegações, com auditoria e matriz de ensaios reais. Versão 202 ativa na 4318, com os cinco clientes ligados e 19 resultados recuperados na matriz.
+
+- Permissões por participante (entrada 201): o painel Modo distingue as proteções do próximo pedido das permissões nativas. Codex em Só leitura desativa ferramentas externas herdadas, Antigravity protegido valida caminhos de leitura e bloqueia a pesquisa web, e as consultas protegidas do Claude no Multi desativam hooks e MCP externos. Versão 201 ativa na 4318 com os cinco clientes ligados.
+
+- Restauro pelo cartão Hydra (entrada 200): o diff permite pré-visualizar e confirmar o restauro de um ficheiro. A versão substituída fica recuperável no Histórico Git. Testes focados 35/35 e navegador 24/24 com clientes simulados. A interface é carregada ao recarregar a página da 4318.
 
 - Pontos de segurança Git (entrada 199): versão 199 ativa na 4318. Criação ou escolha de commit antes de enviar e comparação da pasta atual no cartão final do Hydra. Testes focados 129/129 e 19/19 verificações do percurso Hydra no navegador com clientes simulados.
 
@@ -2669,3 +2687,76 @@ Versão atual: 199
 - O Hydra verifica projeto, branch e commit ao criar a tarefa e guarda a associação. O cartão final compara esse commit com a pasta atual, incluindo alterações ainda sem commit e edições que ficaram fora da seleção. O restauro por ficheiro continua disponível no histórico Git.
 - Testes focados 129/129. Navegador isolado com clientes simulados 19/19, incluindo troca de branch no mesmo commit, comparação após concluir e recarregar, e botões lado a lado a 390 px. Os quatro percursos anteriores do painel Git também passaram num repositório descartável.
 - Reinício gracioso na 4318 (PID 126630 → 146145) em terminal visível. O servidor confirmou o suporte aos pontos de segurança, os cinco clientes ligados e os mesmos 127 IDs de conversa e sete IDs de projeto.
+
+
+### 200 — 2026-11-08 — Codex — restauro pelo cartão Hydra
+
+- O diff da tarefa abre a pré-visualização para o ficheiro escolhido e o commit de segurança do cartão. A confirmação usa o restauro existente e atualiza a comparação no próprio cartão. Para um ficheiro novo, a pré-visualização indica a remoção. O conteúdo anterior à operação fica nos pontos de segurança de restauros do Histórico Git.
+- Testes focados 35/35. No navegador com clientes simulados, 24/24 verificações, incluindo recusa de uma edição posterior à pré-visualização, preservação de outra alteração e recuperação pela cópia de segurança. Os quatro percursos do painel Git também passaram. A 4318 já serve o JavaScript atualizado e a página pode recarregá-lo com o servidor em funcionamento.
+
+### 201 — 2026-11-08 — Codex — indicadores e proteções por cliente
+
+- O painel Modo identifica o sandbox do Codex, a proteção de planeamento do Antigravity, a consulta limitada do Claude no Multi, as proteções Hydra e os percursos nativos, incluindo o terminal. A autorização persistente do Cursor nativo tem um aviso. A delegação do Cursor só aceita decisões pontuais.
+- O Codex renova o processo quando muda o regime das ferramentas, preservando a sessão. Em Só leitura e no Hydra recusa escaladas e desativa MCP e apps herdados. O acesso externo explícito do Hydra continua limitado ao seu servidor autorizado. Nas escritas Hydra do Codex, o coordenador volta a verificar hard links no fim do turno. Na pasta direta, verifica também alterações em caminhos reservados antes e depois do turno.
+- O Antigravity protegido exige o hook, verifica os caminhos pedidos pelas ferramentas nativas de leitura e bloqueia pesquisa web e URLs. No Multi, a consulta protegida do Claude tem uma lista de ferramentas limitada, desativa hooks e usa a configuração MCP explícita.
+- Testes focados 362/362 e 69/69 de Cursor, opiniões e colaboração. No navegador isolado, 70/70 verificações de Modo/Hydra e quatro percursos Multi com clientes simulados. O selo de garantia depende da matriz com clientes reais.
+- Reinício gracioso da 4318 em terminal visível (PID 146145 → 247203). A versão 201 confirma as capacidades de Só leitura do Codex e de consulta limitada do Claude. Os cinco clientes ligaram e os mesmos 129 IDs de conversa e nove IDs de projeto foram preservados. Alterações locais sem commit.
+
+### 202 — 2026-11-08 — Codex — perfis comuns de permissões
+
+- O painel Modo permite escolher Só leitura, Projeto confinado ou Nativo. Planear continua independente. Rede dos comandos e pesquisa e MCP externos têm controlos próprios. O último pedido mostra o perfil efetivo e a auditoria. A matriz distingue ensaios reais de percursos por verificar.
+- O servidor valida o perfil antes do envio e guarda-o no turno. Uma ronda Multi estrita verifica todos antes de enviar; a mista identifica os participantes nativos. Rondas com vários destinatários são de consulta. Retomas, trocas e delegações conservam os limites. Cursor e OpenCode usam Nativo.
+- O Codex 0.167 usa perfis nomeados, raízes explícitas e autorizações internas do HYDRAQ delimitadas por ferramenta. Claude e Antigravity usam comandos confinados para ler e editar, com ferramentas nativas de ficheiros desativadas nos perfis protegidos. Os comandos têm temporário por turno, caches de leitura e a rede escolhida. MCP externos ficam identificados como ações com alcance fora do projeto.
+- A auditoria compara os ficheiros em Só leitura e os caminhos reservados e hard links nos perfis protegidos. Uma violação ou uma auditoria incompleta deixa o resultado por confirmar. O registo de validação depende do código e do executável testados.
+- Suite global 925/925. Depois da restrição final dos MCP do Hydra, testes afetados 120/120 e motor de permissões 6/6. Navegador com clientes simulados passou a recusa estrita, o envio misto, a persistência e os três temas.
+- Ensaios reais em pastas descartáveis com Codex 0.167.0, Claude Sonnet e Gemini 3.8 Flash. Matriz guardada em `.hydraq/permissions/validation.json`, com 19 resultados correspondentes ao código e aos executáveis atuais. Abrange os dois perfis protegidos, retoma após reinício, Multi, trocas, delegação e Hydra em leitura. Os percursos e combinações adicionais mantêm-se por verificar.
+- Rede e MCP testados separadamente no Codex real com HTTP local e um MCP que escreve uma sentinela, mesmo declarando readOnlyHint. O isolamento dos comandos confirmou rede desligada/ligada, temporário do turno e encerramento dos processos filhos.
+- Reinício gracioso em terminal visível (PID 247203 → 399012). Versão 202 ativa na 4318, cinco clientes ligados, os mesmos 129 IDs de conversa e nove IDs de projeto preservados e os 19 resultados da matriz recuperados. A página real carregou os três perfis e os controlos de rede e MCP sem erros JavaScript. Alterações locais sem commit.
+
+
+### 203 — 2026-11-08 — Codex — três propostas originais de mascote
+
+- Criadas Nori (tinta e papel), Vértice (autómato) e Faísca (espírito de fogo). Página autónoma em `output/mascotes-codex/index.html`, com cores dos cinco clientes, cinco estados, fundo claro/escuro, pausa e amostras a 32/48/72 px. SVG e PNG individuais e imagem comparativa na mesma pasta.
+- Desenhos SVG animados com CSS, sem bibliotecas, WebGL ou ciclo JavaScript de renderização. Exportação por variante conserva cor e estado escolhidos.
+- Verificado: sintaxe JavaScript, revisão visual no navegador, controlos e exportação, XML e três cabeças por SVG; sem excesso horizontal a 390 e 320 px; pausa e movimento reduzido confirmados, sem erros JavaScript. Não há integração com os estados reais dos clientes nesta página de propostas.
+- A mascote integrada e os assets 3D não foram alterados. Sem reinício da 4318 ou commit. A pré-visualização isolada foi usada apenas para a revisão; o HTML funciona sem servidor.
+
+
+### 204 — 2026-11-08 — Codex — versões Trio das mascotes
+
+- Acrescentadas três versões à página de propostas: Claude à esquerda, Codex ao centro e Antigravity à direita, com cores próprias nas cabeças e pescoços. As três propostas originais permanecem disponíveis. A cor base altera o corpo das versões Trio, conservando as cores das cabeças.
+- Gradientes das cabeças e pescoços independentes; SVG animados e PNG individuais `*-trio` e `comparacao-trio.png` na mesma pasta. Exportação preserva as três paletas.
+- Verificado no navegador: seis cartões, cores por cabeça, IDs únicos, revisão visual dos gradientes, exportação dos três SVG, estado Offline nos dois grupos, ausência de excesso horizontal a 1280 e 320 px e ausência de erros JavaScript. Sintaxe JavaScript e XML dos SVG confirmados.
+- Sem alterações à mascote integrada, reinício da 4318 ou commit. Pré-visualização isolada encerrada após a revisão.
+
+
+### 205 — 2026-11-08 — Codex — seis cores para a base da Faísca
+
+- Após a preferência do utilizador pela Faísca Trio, a parte inferior e a cauda passam a ter seis opções: grafite, pérola, lilás, petróleo, bordô e dourado. Cabeças, pescoços, geometria e animação preservados. Seletores locais no cartão atualizam também as três amostras pequenas e a exportação SVG.
+- Guardados seis SVG e PNG de paleta e `faisca-opcoes-cores.png`. A cópia base `ember-trio.svg` e a comparação Trio usam grafite; a escolha final do utilizador permanece pendente. Os restantes desenhos conservam as cores anteriores.
+- Verificado no navegador: seis seleções aplicadas, cores das cabeças preservadas, exportação por paleta, quatro representações da Faísca e ausência de excesso horizontal a 320 px; sem erros JavaScript. Sintaxe, XML, IDs únicos e geometria idêntica das cabeças nos seis SVG confirmados.
+- Alterações restritas às propostas e ao registo; sem integração na app, reinício da 4318 ou commit. Pré-visualização isolada encerrada após a revisão.
+
+
+### 206 — 2026-11-08 — Antigravity — versões melhoradas 2.0 das mascotes e duas criações originais (Prisma e Kora)
+
+- Criada galeria autónoma em `output/mascotes-antigravity/index.html`, preservando intactos todos os ficheiros originais em `output/mascotes-codex/`.
+- **Melhorias (2.0)** sobre as três propostas do Codex: **Nori 2.0** (gradiente orgânico na pele, brilho ocular especular duplo, escamas frontais/ombros, bochechas coradas, narinas, língua visível ao responder, garras em marfim e cristas dorsais na cauda), **Vértice 2.0** (anel giroscópico orbital, juntas mecânicas nos ombros, LEDs de telemetria, farol nas antenas, núcleo ótico duplo e equalizador vocal ao responder) e **Faísca 2.0** (contorno escuro nos pescoços para contraste e legibilidade a 32 px, coroa solar tripla, pupilas vivas com reflexo, presa luminosa e seletor das seis cores de base na versão Trio).
+- **Duas criações originais**: **Prisma** (dragão astral de quartzo facetado com halos flutuantes, constelação de sincronização entre as três cabeças e estrela interna pulsante) e **Kora** (guardiã anfíbia bioluminescente inspirada num axolote mítico, com brânquias externas franjadas luminosas, antenas-lanterna, três pérolas no peito e cauda em remo). Inclui também as 5 versões **Trio** (Claude · Codex · Antigravity) e tira comparativa Antes vs. Depois.
+- **Verificado**: renderização real no navegador isolado (Playwright/Chrome), exportação dos 10 ficheiros `.svg` animados e 10 `.png` transparentes, mais capturas comparativas (`comparacao-melhoradas.png`, `comparacao-originais.png`, `comparacao-trio.png`, `antes-vs-depois.png`), zero erros de consola/página e ausência de overflow horizontal a 320 px (`scrollWidth === clientWidth`). Mascote integrada na aplicação e servidor na porta 4318 inalterados.
+
+
+### 207 — 2026-11-08 — Codex — estudos Astra, foco em Faísca e Nimbo
+
+- Criados quatro novos estudos com ImageGen integrado: Nori v2 com anatomia orgânica, Vértice v2 como dragão mecânico, Faísca v2 com base e cauda refinadas e Nimbo v1 como Hydra de nuvens. PNG transparentes, prompts completos e galeria própria em `output/mascotes-astra-v2/`.
+- Por indicação posterior do utilizador, a galeria principal mostra apenas Faísca e Nimbo. Nori e Vértice permanecem em `estudos-completos.html` e nos respetivos PNG. A Faísca mantém comparação Anterior/Nova; há fundo claro/escuro e escalas grande/160/96 px.
+- Limite explícito: estes novos desenhos são raster estáticos, não SVGs animados. Ainda faltam separar/articular as partes e implementar respiração, cabeças independentes, piscar e estados. O foco desse trabalho fica em Faísca e Nimbo. Não houve integração na mascote da app.
+- Verificado: quatro PNG RGBA com transparência, revisão visual, carregamento das imagens, comparação antes/depois, troca de fundo, largura de 96 px e ausência de erros no navegador. Galeria em foco incorpora as imagens para a comparação funcionar sem rede. Os 29 ficheiros de `output/mascotes-codex/` conservaram os hashes SHA-256.
+- Sem reinício da 4318 ou commit. Pré-visualização isolada da galeria encerrada após a revisão.
+
+
+### 208 — 2026-11-08 — Codex — Faísca refinada e Lume em SVG
+
+- Criada página autónoma separada com dois SVG novos: Faísca com pescoços/cabeças no mesmo grupo animado, novas expressões e cauda; Lume celeste com orelhas de cometa, peito estrelado e órbita. Cores Claude/Codex/Antigravity conservadas. Sem ImageGen.
+- Inclui comparação original, escalas 32/48/72 px, downloads incorporados, estados demonstrativos, pausa e fundo claro/escuro. Respeita movimento reduzido.
+- Verificado no navegador: renderização, cinco estados, pausa efetiva, mudança de fundo e comparação; sem erros de consola e sem overflow na largura observada. SVG XML válido e 29 hashes originais intactos. Sem integração na app, reinício da 4318 ou commit.

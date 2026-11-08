@@ -262,6 +262,7 @@ export class CollaborationUI {
         const locations=tool?.locations||item?.locations;if(locations?.length)card.append(node('p','',`Caminhos: ${locations.map(l=>l.path).join(', ')}`));
         for (const block of tool?.content || []) if (block.type === 'diff') card.append(node('pre', '', `${block.path}\nAntes:\n${block.oldText || ''}\nDepois:\n${block.newText || ''}`));
         if(!(tool?.content||[]).some(b=>b.type==='diff')&&item?.changes?.length)card.append(node('pre','',item.changes.map(c=>`${c.path}\n${c.diff||''}`).join('\n')));
+        if (r.params.options?.some(option => option.kind === 'allow_always')) card.append(node('p','col-hint','Permitir sempre pode guardar a autorização na configuração do Cursor para pedidos futuros.'));
         for (const o of r.params.options || []) card.append(this.button(({ allow_once: 'Permitir desta vez', allow_always: 'Permitir sempre', reject_once: 'Recusar', reject_always: 'Recusar sempre' })[o.kind] || o.name, async () => { await respond({ optionId: o.optionId }); this.approvalSignature = ''; await this.refresh(true); }));
       } else if(r.method==='claude/canUseTool'){
         card.append(node('pre','',`${r.params.toolName}\n${JSON.stringify(r.params.input||{},null,2)}`));for(const decision of ['accept','decline'])card.append(this.button(decision==='accept'?'Permitir leitura':'Recusar',async()=>{await respond({decision});this.approvalSignature='';await this.refresh(true);}));

@@ -223,3 +223,16 @@ test('o agy continua a encontrar os parâmetros das ferramentas e as suas notas,
   const write=spawnSync('/usr/bin/bash',['-c',confinedCommand('touch '+notes+'/x',cwd,true,[notes])],{cwd});assert.notEqual(write.status,0);assert.equal(await exists(notes+'/x'),false);
  }
 });
+
+test('perfil comum conserva o temporário do turno e mata filhos ao terminar o comando',{skip:noBwrap},async t=>{
+ const {cwd,base}=await project(t),tmp=base+'/turn-tmp';await mkdir(tmp);
+ const policy={tmp,network:false,protectedPaths:['.git','.hydraq']};
+ const confined=command=>spawnSync('/usr/bin/bash',['-c',confinedCommand(command,cwd,true,[],null,policy)],{cwd,encoding:'utf8',timeout:10000});
+ const saved=confined('echo KEEP > /tmp/shared');
+ assert.equal(saved.status,0,saved.stderr);
+ const reused=confined('cat /tmp/shared');assert.equal(reused.stdout.trim(),'KEEP');
+ const child=confined("python3 -c \"import subprocess;subprocess.Popen(['python3','-c',\\\"import time;from pathlib import Path;time.sleep(1);Path('late').write_text('LATE')\\\"],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,start_new_session=True)\"");
+ assert.equal(child.status,0,child.stderr);
+ await new Promise(resolve=>setTimeout(resolve,1500));
+ assert.equal(await exists(cwd+'/late'),false);
+});

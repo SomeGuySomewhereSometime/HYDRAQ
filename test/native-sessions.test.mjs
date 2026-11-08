@@ -11,7 +11,7 @@ import {OpinionClient} from './fixtures/opinion-client.mjs';
 
 const root = new URL('../', import.meta.url).pathname;
 const wait = async fn => { const until = Date.now() + 6000; while (!fn()) { if (Date.now() > until) throw Error('Timeout'); await new Promise(r => setTimeout(r, 10)); } };
-async function setup(t, {project = false, review = false} = {}) {
+async function setup(t, {project = false, review = false,sandbox='read-only'} = {}) {
   const dir = await mkdtemp('/tmp/hydraq-native-test-');
   const log = path.join(dir, 'inputs.log');
   const codex = new Hydraq({dataDir: dir + '/state', defaultCwd: dir,
@@ -23,7 +23,7 @@ async function setup(t, {project = false, review = false} = {}) {
   await hub.load(); await hub.connect('codex'); await hub.connect('claude');
   let p;
   if (project) p = await hub.createProject({name: 'Native', root: dir, revision: 0});
-  const chat = await hub.create({provider: 'codex', cwd: dir, projectId: p?.id, revision: hub.projects.data.revision, model: 'gpt-test', effort: 'low', sandbox: 'read-only'});
+  const chat = await hub.create({provider: 'codex', cwd: dir, projectId: p?.id, revision: hub.projects.data.revision, model: 'gpt-test', effort: 'low', sandbox});
   const c = codex.conversation(chat.id);
   await hub.send(c.id, 'seed', 'seed'); await wait(() => c.status === 'completed');
   if (review) await hub.automaticReviews.policy(c.id, {trigger: 'all', scope: 'conversation', returnMode: 'always', participants: [{provider: 'claude', model: 'haiku', effort: 'low'}]});
@@ -125,7 +125,7 @@ test('desligar terminal em execução conserva o pedido e bloqueia transferênci
 });
 
 test('aprovação no terminal e resposta concorrente na HYDRAQ resolvem uma só vez', async t => {
-  const {hub, codex, c} = await setup(t); const {call, ws, events} = await peer(t, hub, c);
+  const {hub, codex, c} = await setup(t,{sandbox:'workspace-write'}); const {call, ws, events} = await peer(t, hub, c);
   await call('turn/start', {threadId: c.threadId, input: [{type: 'text', text: 'approval'}]});
   await wait(() => events.some(m => m.method.endsWith('/requestApproval')));
   const request = events.find(m => m.method.endsWith('/requestApproval'));
@@ -243,7 +243,7 @@ test('imagem local é guardada, enviada e conservada na projeção sem contexto 
 });
 
 test('reconexão recupera aprovação pendente e repetição do ID não reenvia o pedido', async t => {
-  const {hub, c, codex} = await setup(t); const first = await peer(t, hub, c);
+  const {hub, c, codex} = await setup(t,{sandbox:'workspace-write'}); const first = await peer(t, hub, c);
   const params = {threadId:c.threadId,clientUserMessageId:'stable-message',input:[{type:'text',text:'approval'}]};
   const admitted = await first.call('turn/start', params);
   await wait(() => codex.approvals.size === 1);
