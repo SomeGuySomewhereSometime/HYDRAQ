@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 196
+Versão atual: 197
 
 ## Resumo atual
+
+- Validação da interface (entrada 197): 4318 na versão 197, interface integrada em master e Multi real confirmado. Fluxo Git com alteração Hydra, diff e restauro validado numa cópia de TopDownCharCombat.
 
 - Correções à barra Multi (entrada 196): a composição aguarda confirmação do servidor, o envio rejeita revisões antigas, o lugar desligado fica persistido e bloqueia o envio, o principal mantém-se ao reordenar rascunhos e o OpenCode carrega o catálogo antes de entrar. Testes focados 42/42, quatro cenários da barra e 33/33 verificações do Multi no navegador. Guardado localmente na branch `codex/interface-hydraq`. Sem reinício da 4318.
 
@@ -2641,3 +2643,10 @@ Versão atual: 196
 - Numa dupla, o lugar desligado fica no estado persistido. A barra mantém um participante ligado após recarregar. Novo envio e reenvio ficam suspensos até ligar o mesmo cliente ou escolher outro. As rondas antigas mantêm os seus participantes.
 - O principal de um rascunho acompanha o cliente ao reordenar os lugares. Se o OpenCode ainda não tiver catálogo para a pasta, a barra carrega-o e valida um modelo antes de enviar a alteração. O ponto de um cliente desligado fica discreto mesmo se o cliente estiver ligado ao serviço.
 - Testes focados **42/42** (`dual-ui`, `dual`, `multi`, `layout`). Navegador isolado com clientes simulados confirma remoção atrasada, bloqueio de Enviar, destinatários reais da ronda, persistência após recarregar, catálogo OpenCode e principal do rascunho. Regressão Multi no navegador **33/33**. Guardado localmente na branch `codex/interface-hydraq`. A 4318 requer reinício para carregar a nova rota.
+
+
+### 197 — 2026-11-07 — Codex — ativação e ensaio da interface
+
+- Reinício gracioso da 4318: PID 87133 → 119820. Cinco clientes ligados e os mesmos 122 IDs de conversa preservados antes dos ensaios. Interface `f55e66f` integrada por avanço direto em master. A tag `checkpoint/antes-interface` continua em `f3fba1b`.
+- Multi real pela página: lugar desligado persistiu após recarregar e Enviar ficou bloqueado até voltar a ligar um segundo cliente. Codex Sol e Claude Haiku responderam à única ronda. Antigravity desligado não recebeu pedido. O arquivo da conversa de ensaio falhou porque a organização pressupõe uma coleção de aprovações em todos os clientes, que o Antigravity não tem.
+- Na cópia do commit `85fe0a1` de TopDownCharCombat, o painel criou o ponto de segurança `de2462dde70a`. O Hydra (Sol e Haiku) alterou exclusivamente o ficheiro de ensaio. A página mostrou o diff, restaurou a versão guardada e conservou a versão alterada numa cópia de segurança. A árvore da cópia voltou a ficar limpa, o projeto de ensaio foi arquivado e a origem conservou o estado e o diff. Sem push.
