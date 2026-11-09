@@ -19,7 +19,9 @@ server.on('error', error => {
 });
 server.listen(port, '127.0.0.1', () => {
   console.log(`HYDRAQ disponível em http://127.0.0.1:${server.address().port}`);
-  hydraq.connectAll().then(results=>results.forEach((result,i)=>{if(result.status==='rejected')console.error(`${Object.values(hydraq.snapshot().providers)[i].name}: ${result.reason.message}`);}));
+  hydraq.connectAll().then(results => results.forEach(result => {
+    if (result.status === 'rejected') console.error(`${result.provider}: ${result.reason.message}`);
+  }));
 });
 let closing = false;
 async function close() {

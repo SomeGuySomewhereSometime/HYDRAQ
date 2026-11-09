@@ -29,11 +29,11 @@ test('layout preferences fall back to defaults when missing or invalid', () => {
   assert.equal(value.inspector.width, PANEL_LIMITS.inspector.max);
   assert.equal(value.inspector.open, false);
   assert.equal(value.prose, 'comfortable');
-  assert.equal(value.theme, 'atelier');
+  assert.equal(value.theme, 'mono');
   assert.equal(readLayout(JSON.stringify({ prose: 'full', theme: 'classic' })).prose, 'full');
   assert.equal(readLayout(JSON.stringify({ theme: 'classic' })).theme, 'classic');
   assert.equal(readLayout(JSON.stringify({ theme: 'atelier' }), 'classic').theme, 'classic');
-  assert.equal(readLayout(JSON.stringify({ theme: 'invalido' }), 'outro').theme, 'atelier');
+  assert.equal(readLayout(JSON.stringify({ theme: 'invalido' }), 'outro').theme, 'mono');
 });
 
 test('panel widths stay within limits and leave room for the conversation', () => {
@@ -50,7 +50,7 @@ test('appearance offers Grafite, Atelier and Mono; removed themes, Linho include
   const { THEMES, APPEARANCES, appearanceOf } = await import('../public/layout.js');
   assert.deepEqual(THEMES, ['classic', 'atelier', 'mono']);
   assert.deepEqual(APPEARANCES.map(entry => entry.name), ['Grafite', 'Atelier', 'Mono']);
-  assert.equal(defaultLayout().theme, 'atelier');
+  assert.equal(defaultLayout().theme, 'mono');
   assert.equal(readLayout(JSON.stringify({ theme: 'linho' })).theme, defaultLayout().theme);
   assert.equal(readLayout(null, 'linho').theme, defaultLayout().theme);
   assert.equal(appearanceOf('linho').name, 'Grafite');

@@ -31,8 +31,9 @@ export class ProviderStatus {
   }
   render() {
     const providers = this.getState()?.providers || {}, now = this.now();
-    const selections = (this.getSelections?.() || [{ provider: this.getProvider(), model: null }]).filter(s => s.provider);
-    const signature = JSON.stringify([selections, Math.floor(now / 60_000), ...Object.keys(names).map(id => [providers[id]?.models, providers[id]?.catalog, providers[id]?.quotas, providers[id]?.connection, this.busy.has(id)])]);
+    const selections = (this.getSelections?.() || [{ provider: this.getProvider(), model: null }]).filter(s => s.provider && providers[s.provider]?.enabled !== false && !providers[s.provider]?.disabling);
+    const visibleClients = tracked.filter(id => providers[id] && providers[id].enabled !== false && !providers[id].disabling);
+    const signature = JSON.stringify([selections, Math.floor(now / 60_000), ...Object.keys(names).map(id => [providers[id]?.models, providers[id]?.catalog, providers[id]?.quotas, providers[id]?.connection, providers[id]?.enabled, providers[id]?.disabling, this.busy.has(id)])]);
     if (signature === this.signature) return; this.signature = signature;
     const focused = document.activeElement?.dataset.quotaRefresh;
     this.active.replaceChildren(); this.body.replaceChildren();
@@ -41,8 +42,8 @@ export class ProviderStatus {
       const match = selectedQuotas(selection.provider, selection.model, provider.quotas?.windows, model);
       this.active.append(this.selectedCard(selection, provider, model, match, now));
     }
-    for (const id of tracked) if (providers[id]) this.body.append(this.providerCard(id, providers[id], now));
-    this.summary.replaceChildren(el('span', '', 'Todos os clientes e modelos'), el('span', 'quota-browser-count', `${tracked.filter(id => providers[id]).length} clientes`));
+    for (const id of visibleClients) this.body.append(this.providerCard(id, providers[id], now));
+    this.summary.replaceChildren(el('span', '', 'Todos os clientes e modelos'), el('span', 'quota-browser-count', `${visibleClients.length} clientes`));
     if (focused) this.root.querySelector(`[data-quota-refresh="${focused}"]`)?.focus({ preventScroll: true });
   }
   refreshButton(id, provider, compact = false) {

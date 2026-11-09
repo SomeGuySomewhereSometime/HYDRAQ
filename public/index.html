@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#101114">
+  <meta name="theme-color" content="#101216">
   <title>HYDRAQ · Agentes locais</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/style.css">
   <link rel="stylesheet" href="/mascot-character.css">
   <script type="module" src="/app.js"></script>
 </head>
-<body data-sidebar="open" data-inspector="open" data-theme="atelier">
+<body data-sidebar="open" data-inspector="open" data-theme="mono">
   <div class="app-shell">
     <aside class="sidebar" id="projects-sidebar" aria-label="Projetos e conversas">
       <a class="brand" href="/" aria-label="HYDRAQ início"><svg class="mono-brand-art" viewBox="0 0 1780 436" aria-hidden="true" focusable="false" display="none" hidden>
@@ -54,7 +54,7 @@
         </div>
         <nav class="view-tabs" aria-label="Áreas da aplicação"><button id="tab-conversations" type="button" aria-controls="chat-workspace" aria-selected="true" data-tip="Conversas com um cliente de cada vez, com passagem de contexto entre clientes.">Conversas</button><button id="tab-collaboration" type="button" aria-controls="collaboration-view" aria-selected="false" data-tip="Equipa: o Codex planeia, o Grok executa e o Claude pode rever.">Colaboração</button><button id="tab-claudex" type="button" aria-controls="claudex-view" aria-selected="false" data-tip="Hydra: dois ou três clientes investigam juntos e preparam uma resposta comum; num pedido de alterações, o principal escreve e todos reveem e testam. Também disponível nas Conversas, no painel Modo." hidden>Hydra</button></nav>
         <button id="command-palette-trigger" class="command-trigger" type="button" data-tip="Abrir paleta rápida de comandos, conversas, projetos e clientes (Ctrl+K)"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Comandos</span><kbd>⌃K</kbd></button>
-        <button id="theme-toggle" class="theme-switch" type="button" data-tip="Escolher a aparência"><span class="appearance-swatch" data-swatch="atelier" aria-hidden="true"></span><span id="theme-label">Atelier</span><svg class="ui-icon theme-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <button id="theme-toggle" class="theme-switch" type="button" data-tip="Escolher a aparência"><span class="appearance-swatch" data-swatch="mono" aria-hidden="true"></span><span id="theme-label">Mono</span><svg class="ui-icon theme-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
         <div class="connection-state" id="connection-state" data-tip="Estado da ligação ao cliente escolhido.">A ligar ao Codex…</div>
         <button id="inspector-toggle" class="icon-button panel-toggle" type="button" aria-controls="inspector" aria-expanded="true" data-tip="Mostrar ou esconder o último pedido, a atividade e as configurações"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M15 4v16"/></svg><span class="sr-only">Painel de atividade</span></button>
       </header>
@@ -214,6 +214,26 @@
           <details id="settings-details" class="settings-details">
             <summary>Configurações e detalhes</summary>
             <div class="config-card">
+              <section id="provider-settings" class="settings-block provider-settings" aria-labelledby="provider-settings-title" hidden>
+                <p id="provider-settings-title" class="settings-title">Clientes</p>
+                <p class="reading-hint">Aplicam-se a todos os projetos deste HYDRAQ.</p>
+                <div id="provider-settings-list"></div>
+                <p id="provider-settings-error" class="reading-hint" role="status" hidden></p>
+              </section>
+              <section id="google-ai-settings" class="settings-block" aria-labelledby="google-ai-title" hidden>
+                <p id="google-ai-title" class="settings-title">Google AI Studio</p>
+                <p class="reading-hint">Chave para a voz Live da mascote, em todos os projetos.</p>
+                <form id="google-ai-form" autocomplete="off">
+                  <label for="google-ai-key">Chave API</label>
+                  <input id="google-ai-key" type="password" maxlength="512" autocomplete="new-password" spellcheck="false" autocapitalize="none" placeholder="Colar chave API" aria-describedby="google-ai-status">
+                  <div class="google-ai-actions">
+                    <button id="google-ai-save" type="submit" class="text-button">Guardar chave</button>
+                    <button id="google-ai-remove" type="button" class="text-button" disabled>Remover chave</button>
+                  </div>
+                </form>
+                <p id="google-ai-status" class="reading-hint" role="status"></p>
+                <p class="reading-hint">Guardada apenas neste computador. Aplica-se à próxima ligação Live.</p>
+              </section>
               <section class="next-request" aria-labelledby="next-request-title">
                 <p class="settings-title" id="next-request-title">Próximo pedido</p>
                 <div class="next-request-grid" id="next-request-grid"></div>

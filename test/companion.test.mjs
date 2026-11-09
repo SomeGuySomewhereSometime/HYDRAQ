@@ -308,6 +308,27 @@ test('proveniência da mascote na memória oficial do projeto é validada sem po
   assert.equal((indexed.items || indexed.conversations || []).length, 0);
 });
 
+test('chave Google AI Studio guardada é usada no Live e continua ocultada após substituição', async t => {
+  let upstream;
+  let upstreamUrl;
+  const env = await createTestEnv(t, { wsFactory: url => {
+    upstreamUrl = url;
+    upstream = new EventEmitterSocket();
+    queueMicrotask(() => upstream.emit('open'));
+    return upstream;
+  } });
+  env.hub.companion.env = { GEMINI_API_KEY: 'environment-fallback-key' };
+  await env.hub.companion.saveGoogleAi({ apiKey: 'saved-live-key' });
+  const clientSocket = new FakeClientSocket();
+  env.hub.companion.attachWebSocket(clientSocket, { projectId: env.projectA.id });
+  await waitFor(() => upstream);
+  assert.equal(new URL(upstreamUrl).searchParams.get('key'), 'saved-live-key');
+  await env.hub.companion.saveGoogleAi({ apiKey: 'replacement-live-key' });
+  upstream.emit('close', 1008, Buffer.from('Error saved-live-key replacement-live-key'));
+  await waitFor(() => clientSocket.sent.some(frame => frame.type === 'error'));
+  assert.doesNotMatch(JSON.stringify(clientSocket.sent), /saved-live-key|replacement-live-key/);
+});
+
 test('protocolo Live: sinais VAD (mãos-livres vs carregar para falar), interactionStatus, interrupção, goAway e erro 429 sem ciclo infinito', async t => {
   const upstreamFrames = [];
   let activeUpstream = null;

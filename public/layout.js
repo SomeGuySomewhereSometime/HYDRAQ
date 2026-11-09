@@ -47,7 +47,7 @@ export const TEXT_SIZE = { min: 13, max: 22, initial: 15 };
 const validTextSize = value => Number.isInteger(value) && value >= TEXT_SIZE.min && value <= TEXT_SIZE.max;
 
 export function defaultLayout() {
-  return { sidebar: { width: PANEL_LIMITS.sidebar.initial, open: true }, inspector: { width: PANEL_LIMITS.inspector.initial, open: true }, prose: 'comfortable', column: 'full', textSize: TEXT_SIZE.initial, theme: 'atelier', colors: { ...DEFAULT_COLORS } };
+  return { sidebar: { width: PANEL_LIMITS.sidebar.initial, open: true }, inspector: { width: PANEL_LIMITS.inspector.initial, open: true }, prose: 'comfortable', column: 'full', textSize: TEXT_SIZE.initial, theme: 'mono', colors: { ...DEFAULT_COLORS } };
 }
 
 /** Accepts only known fields, so a stale or edited preference cannot break the page. */

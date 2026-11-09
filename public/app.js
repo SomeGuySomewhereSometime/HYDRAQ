@@ -129,6 +129,108 @@ const openCodeUI = new OpenCodeSessionsUI({api,state:()=>state,current,toast,cha
 const agyUI = new AntigravitySessionsUI({api,state:()=>state,current,toast,changed:renderTerminal,refresh:async()=>{accept(await api('/api/state'));render();}});
 // Opens the settings at a section that needs the person: a failed launch's command or a confirmation.
 function revealSettings(target){layout.toggle('inspector',true);$('#inspector-tabs [data-inspector-view=system]')?.click();$('#settings-details').open=true;(target||$('#settings-details')).scrollIntoView({block:'nearest'});}
+const providerSettingsPending = new Set();
+let googleAiPending = false;
+
+function renderGoogleAiSettings() {
+  const configuration = state?.googleAi;
+  const panel = $('#google-ai-settings');
+  panel.hidden = !configuration;
+  if (!configuration) return;
+  $('#google-ai-key').disabled = googleAiPending || Boolean(configuration.error);
+  $('#google-ai-save').disabled = googleAiPending || Boolean(configuration.error);
+  $('#google-ai-remove').disabled = googleAiPending || !configuration.saved || Boolean(configuration.error);
+  $('#google-ai-status').textContent = googleAiPending ? 'A guardar…' : configuration.error ||
+    (configuration.source === 'settings' ? 'Chave guardada. Será usada na próxima ligação Live.' :
+      configuration.source === 'environment' ? 'A usar a chave do ambiente do servidor. Podes guardar outra aqui.' : 'Ainda não foi configurada uma chave.');
+  $('#google-ai-key').placeholder = configuration.saved ? 'Colar uma nova chave para substituir' : 'Colar chave API';
+}
+
+async function saveGoogleAi(remove = false) {
+  if (googleAiPending || !state?.googleAi) return;
+  const input = $('#google-ai-key');
+  if (!remove && !input.value.trim()) { input.focus(); toast('Cola a chave Google AI Studio antes de guardar.'); return; }
+  googleAiPending = true;
+  renderGoogleAiSettings();
+  try {
+    state.googleAi = await api('/api/settings/google-ai', remove ? { remove: true } : { apiKey: input.value.trim() });
+    input.value = '';
+    toast(remove ? 'Chave guardada removida.' : 'Chave Google AI Studio guardada.');
+  } catch (error) { toast(error.message); }
+  finally { googleAiPending = false; renderGoogleAiSettings(); }
+}
+
+$('#google-ai-form').addEventListener('submit', event => { event.preventDefault(); saveGoogleAi(); });
+$('#google-ai-remove').addEventListener('click', () => saveGoogleAi(true));
+window.addEventListener('pagehide', () => { $('#google-ai-key').value = ''; });
+
+let providerSettingsSignature;
+const providerIsOff = info => info?.enabled === false || info?.disabling === true;
+
+async function changeProvider(id, enabled) {
+  if (!state?.providerSettings || providerSettingsPending.has(id)) return;
+  providerSettingsPending.add(id);
+  renderProviderSettings();
+  try {
+    accept(await api('/api/providers/settings', { provider: id, enabled, revision: state.providerSettings.revision }));
+  } catch (error) {
+    if (error.status === 409) await api('/api/state').then(accept).catch(() => {});
+    toast(error.message);
+  } finally {
+    providerSettingsPending.delete(id);
+    render();
+  }
+}
+
+function renderProviderSettings() {
+  const panel = $('#provider-settings');
+  if (!panel) return;
+  const configuration = state?.providerSettings;
+  panel.hidden = !configuration;
+  if (!configuration) return;
+  const entries = Object.entries(state.providers);
+  const signature = JSON.stringify([configuration, [...providerSettingsPending], entries.map(([id, info]) => [id, info.enabled, info.disabling, info.connection, info.connectionError])]);
+  if (signature === providerSettingsSignature) return;
+  providerSettingsSignature = signature;
+  const list = $('#provider-settings-list');
+  const focused = list.contains(document.activeElement) ? document.activeElement.dataset.providerControl : null;
+  list.replaceChildren(...entries.map(([id, info]) => {
+    const label = { antigravity: 'Antigravity (Gemini)', cursor: 'Cursor (Grok)', opencode: 'OpenCode · gratuitos' }[id] || info.name || providerName(id);
+    const row = element('div', 'provider-settings-row');
+    const status = info.disabling ? 'A desligar…' : !info.enabled ? 'Desativado' : info.connection === 'connected' ? 'Pronto' : info.connection === 'connecting' ? 'A ligar…' : 'Sem ligação';
+    const identity = element('div');
+    identity.append(element('strong', '', label), element('small', '', info.connectionError ? status + ' · ' + info.connectionError : status));
+    const button = element('button', 'text-button', info.enabled ? 'Ligado' : 'Desligado');
+    button.type = 'button';
+    button.setAttribute('role', 'switch');
+    button.setAttribute('aria-label', label);
+    button.setAttribute('aria-checked', String(info.enabled));
+    button.dataset.providerControl = id;
+    button.disabled = Boolean(configuration.error || info.disabling || providerSettingsPending.has(id) || (!info.enabled && info.connectionError));
+    button.addEventListener('click', () => changeProvider(id, !info.enabled));
+    row.append(identity, button);
+    if (info.connection === 'disconnected' && (info.enabled || info.connectionError)) {
+      const retry = element('button', 'text-button', info.enabled ? 'Tentar ligar' : 'Tentar desligar');
+      retry.type = 'button';
+      retry.dataset.providerControl = id + '-retry';
+      retry.disabled = Boolean(configuration.error || info.disabling || providerSettingsPending.has(id));
+      retry.addEventListener('click', async () => {
+        if (!info.enabled) return changeProvider(id, false);
+        retry.disabled = true;
+        try { accept(await api('/api/connect', { provider: id })); }
+        catch (error) { toast(error.message); }
+        finally { retry.disabled = false; render(); }
+      });
+      row.append(retry);
+    }
+    return row;
+  }));
+  if (focused) list.querySelector(`[data-provider-control="${focused}"]`)?.focus({ preventScroll: true });
+  const error = $('#provider-settings-error');
+  error.textContent = configuration.error || '';
+  error.hidden = !configuration.error;
+}
+
 const terminalSections = {codex:nativeUI,claude:claudeUI,opencode:openCodeUI,antigravity:agyUI};
 const terminalSwitch = new TerminalSwitch({host:$('#terminal-switch'),state:()=>state,current:terminalConversation,dual:()=>dualUI,choose,reveal:revealSettings,sections:terminalSections,toast});
 // The same control in the Modo panel, next to the client and model it continues, with room for the steps.
@@ -173,9 +275,10 @@ function providerState(id = providerId()) { const info=state?.providers?.[id] ||
 const resolvedOpenCodeScopes=new Map(),openCodeChecks=new Map();
 function openCodeCwd(){return current()?.cwd||project()?.root||$('#cwd').value||state?.defaultCwd||'';}
 async function checkOpenCodeModels(force=false){
-  const cwd=openCodeCwd();if(!cwd)return;
+  const cwd=openCodeCwd();if(!cwd || providerIsOff(state?.providers?.opencode))return;
   const old=openCodeChecks.get(cwd);if(old?.promise)return old.promise;
-  if(!force&&!providerState('opencode').catalog?.stale&&old?.at&&Date.now()-old.at<10*60_000)return;
+  const catalog=providerState('opencode').catalog;
+  if(!force&&catalog&&!catalog.stale&&old?.at&&Date.now()-old.at<10*60_000)return;
   const promise=api('/api/opencode/models',{cwd,force}).then(result=>{resolvedOpenCodeScopes.set(cwd,result.catalog.cwd);accept(result.state);render();return result.catalog;}).finally(()=>openCodeChecks.set(cwd,{at:Date.now()}));
   openCodeChecks.set(cwd,{at:Date.now(),promise});return promise;
 }
@@ -434,6 +537,10 @@ function renderSettings(conversation) {
   const pendingSettings = !switching(conversation) ? conversation?.handoffState?.settings : null;
   const defaults=!conversation?project()?.defaults?.clients?.[provider]||{}:{};
   const baseline = JSON.stringify([!conversation?project()?.defaults:null,basis?.id,basis?.model,basis?.effort,basis?.sandbox,basis?.context,basis?.fast,pendingSettings]);
+  for (const option of $('#provider').options) {
+    option.disabled = providerIsOff(state?.providers?.[option.value]);
+    option.hidden = option.disabled && option.value !== provider && !dualUI?.record(conversation);
+  }
   $('#provider').value = provider;
   // In a dual, talking to one model, the client field replaces that participant (asked first in a dialog).
   $('#provider').disabled = sending || Boolean(conversation && (anyBusy() || group.some(needsUncertaintyReview))) || Boolean(dualUI?.pendingFor() || (dualUI?.record(conversation) && dualUI.both(conversation)));
@@ -490,7 +597,11 @@ function renderSettings(conversation) {
   // The handoff mode lives with the conversation; it only acts when the next request changes client.
   $('#handoff-box').classList.toggle('hidden', !conversation || Boolean(conversation.claudexTask));
   $('#handoff-box').classList.toggle('is-active', switching(conversation));
-  $('#handoff-mode').disabled = locked;
+  const sourceOff = conversation && providerIsOff(state?.providers?.[conversation.provider]);
+  const modelHandoff = $('#handoff-mode').querySelector('[value="model"]');
+  if (modelHandoff) modelHandoff.disabled = Boolean(sourceOff);
+  if (sourceOff) $('#handoff-mode').value = 'quick';
+  $('#handoff-mode').disabled = locked || Boolean(sourceOff);
   if (conversation) {
     const source = providerName(conversation.provider), target = switching(conversation) ? providerName() : 'outro cliente';
     $('#handoff-hint').textContent = ($('#handoff-mode').value === 'quick'
@@ -746,13 +857,13 @@ function syncWelcomeFleet() {
     const connected = pState?.connection === 'connected';
     card.dataset.active = String(id === active);
     card.dataset.connected = String(Boolean(connected));
-    card.disabled = locked;
+    card.disabled = locked || providerIsOff(pState);
     const dot = card.querySelector('[data-fleet-dot]');
     if (dot) dot.dataset.connected = String(Boolean(connected));
     const meta = card.querySelector('[data-fleet-meta]');
     if (meta && pState) {
       const defModel = pState.models?.find(m => m.isDefault) || pState.models?.[0];
-      const statusText = connected ? 'Ligado' : pState.connection === 'connecting' ? 'A ligar…' : 'Desligado';
+      const statusText = providerIsOff(pState) ? 'Desativado nas Configurações' : connected ? 'Ligado' : pState.connection === 'connecting' ? 'A ligar…' : 'Desligado';
       meta.textContent = defModel ? `${statusText} · ${defModel.name || defModel.id}` : statusText;
     }
   }
@@ -768,7 +879,10 @@ function renderAgentDock() {
     const connected = pState?.connection === 'connected';
     if (!dual) pill.setAttribute('aria-pressed', String(id === active));
     pill.dataset.connected = String(Boolean(connected));
-    pill.disabled = dual ? sending || dualUI.memberBusy : locked;
+    const off = providerIsOff(pState);
+    pill.dataset.providerDisabled = String(off);
+    pill.disabled = off || (dual ? sending || dualUI.memberBusy : locked);
+    if (off) pill.dataset.tip = `${providerName(id)} · desativado nas Configurações.`;
   }
   // The brand's client lights: lit when that client is connected, in its own colour.
   const lit = [];
@@ -1615,6 +1729,10 @@ function render() {
   if (!state) return;
   if (selected && !state.conversations.some(conversation => conversation.id === selected)) selected = null;
   const conversation = current();
+  if (!conversation && !project()?.defaults?.provider && !draftProviders.has(composerKey()) && providerIsOff(state.providers?.[selectedProvider])) {
+    const active = Object.entries(state.providers).find(([, info]) => !providerIsOff(info) && info.connection === 'connected');
+    if (active) selectedProvider = active[0];
+  }
   if(conversation)selectedProject=conversation.organization?.projectId||null;
   if(selectedProject&&!state.projectCatalog?.projects.some(p=>p.id===selectedProject)){selectedProject=null;projectOverview=false;}
   $('.workspace').classList.toggle('hidden',projectOverview);
@@ -1626,7 +1744,10 @@ function render() {
   renderTerminal();
   opinionUI.renderAutomatic();
   const connection = providerState().connection;
+  const off = providerIsOff(state.providers?.[providerId()]);
+  renderProviderSettings();
   const account = providerState().account;
+  renderGoogleAiSettings();
   const name = providerName();
   document.body.dataset.provider = providerId();
   $('#connection-state').dataset.connected = String(connection === 'connected');
@@ -1634,18 +1755,27 @@ function render() {
   renderClientGlyph(providerId());
   $('#prompt-label').textContent = `Pedido para o ${name}`;
   $('#approvals').setAttribute('aria-label',`Pedidos do ${name}`);
-  $('#connection-state').textContent = {connected:`● ${name} ligado`,connecting:`◌ A ligar ao ${name}…`,disconnected:`○ ${name} desligado`}[connection];
+  $('#connection-state').textContent = off ? `○ ${name} desativado` : {connected:`● ${name} ligado`,connecting:`◌ A ligar ao ${name}…`,disconnected:`○ ${name} desligado`}[connection];
   $('#connection-dot').classList.toggle('connected',connection === 'connected');
   $('#account-label').textContent = account ? ({ opencode: 'OpenCode · apenas modelos gratuitos', cursor: 'Conta do Cursor · autenticação privada', antigravity: 'Sessão do agy · quota do plano', claude: `Claude · ${account.planType}` }[providerId()] || `ChatGPT · ${account.planType}`) : (connection === 'connecting' ? 'A verificar sessão…' : 'Sessão por verificar');
   $('#client-status').dataset.connection=connection;
   $('#client-status').dataset.tip=`${name} · ${connection==='connected'?'ligado':connection==='connecting'?'a ligar':'desligado'} · ${$('#account-label').textContent}. Ver ligação e detalhes.`;
+  $('#reconnect').textContent = off ? 'Gerir clientes' : 'Voltar a ligar';
   $('#reconnect').classList.toggle('hidden',connection !== 'disconnected');
   const visibleTitle=conversation?conversationGroups(state).find(g=>g.id===conversation.group)?.title||conversation.title:'';
   renderTopbar(conversation, visibleTitle);
   const focus = focusConversation(conversation);
   const notice = (project()?.archived?'Projeto arquivado. Restaura-o nas definições para continuar.':current()?.organization?.archived?'Conversa arquivada. Restaura-a no menu da conversa para continuar.':project()?.available===false?project().folderError:null) || providerState().connectionError || focus?.error || conversation?.error;
   $('#notice').textContent = notice || '';
-  $('#notice').classList.toggle('hidden',!notice);
+  if (off && state.providerSettings) {
+    const available = Object.values(state.providers).some(info => !providerIsOff(info));
+    const text = available ? `${name} está desativado. Podes ativá-lo ou escolher outro cliente.` : 'Todos os clientes estão desativados. Ativa um para começar.';
+    const manage = element('button', 'text-button', 'Gerir clientes');
+    manage.type = 'button';
+    manage.addEventListener('click', () => revealSettings($('#provider-settings')));
+    $('#notice').replaceChildren(document.createTextNode([notice, text].filter(Boolean).join(' ') + ' '), manage);
+  }
+  $('#notice').classList.toggle('hidden',!notice && !off);
   renderSettings(conversation);
   syncNextRequest();
   renderAgentDock();
@@ -2059,7 +2189,7 @@ function playFusion(pair) {
 /** The Hydra pair of a Dual, when its two clients make one: Codex, Claude and Gemini only. */
 function dualHydraPair(record) {
   const clients = record ? multiKeys(record).filter(k=>k!==record.vacant).map(k=>record.members[k].provider) : [];
-  const eligible = HYDRA_PAIRS.filter(pair => pair.every(role => clients.includes(role))).sort((a,b)=>b.length-a.length);
+  const eligible = HYDRA_PAIRS.filter(pair => pair.every(role => clients.includes(role) && !providerIsOff(state?.providers?.[role]))).sort((a,b)=>b.length-a.length);
   return eligible.find(pair=>pair.includes(record?.members[record.principal]?.provider)) || eligible[0] || null;
 }
 function chooseMode(mode) {
@@ -2133,8 +2263,9 @@ function syncModePanel() {
   for (const button of pairButtons) {
     const on = Boolean(pair) && button.dataset.pair === pair.join('+');
     button.setAttribute('aria-pressed', String(on));
-    button.disabled = sending || Boolean(task && !on);
-    button.dataset.tip = task ? (task.inPlace ? 'A dupla fica fixa até a tarefa terminar. Para outra dupla, volta a Normal ou Multi e escolhe Hydra outra vez.' : 'A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.') : `${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
+    const disabledClients = button.dataset.pair.split('+').filter(id => providerIsOff(state?.providers?.[id]));
+    button.disabled = sending || Boolean(task && !on) || disabledClients.length > 0;
+    button.dataset.tip = disabledClients.length ? 'Ativa em Configurações → Clientes: ' + disabledClients.map(providerName).join(', ') + '.' : task ? (task.inPlace ? 'A dupla fica fixa até a tarefa terminar. Para outra dupla, volta a Normal ou Multi e escolhe Hydra outra vez.' : 'A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.') : `${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
   }
   const setup = pair && claudexUI ? hydraSetup(pair) : normalSetup;
   if ($('#mode-setup').firstElementChild !== setup.element) $('#mode-setup').replaceChildren(setup.element);
@@ -2223,7 +2354,9 @@ function buildPaletteCommands(query = '') {
     const hay = `${group} ${title} ${subtitle} ${badge}`.toLocaleLowerCase('pt');
     if (!q || hay.includes(q)) entries.push({ group, title, subtitle, badge, action });
   };
+  if (state?.providerSettings) add('Clientes locais', 'Gerir clientes', 'Ativar ou desativar clientes no HYDRAQ', 'Configurações', () => revealSettings($('#provider-settings')));
   for (const [id, label] of Object.entries(providerNames)) {
+    if (providerIsOff(state?.providers?.[id])) continue;
     const connected = state?.providers?.[id]?.connection === 'connected';
     add('Clientes Locais', `Usar ${label}`, connected ? 'Ligado · mudar para este motor' : 'Desligado · selecionar motor', id === providerId() ? 'Ativo' : label, () => {
       collaborationUI.show('conversations');
@@ -2497,6 +2630,7 @@ $('#stop').addEventListener('click',async()=> {
   finally { $('#stop').disabled = false; }
 });
 $('#reconnect').addEventListener('click',async()=> {
+  if (providerIsOff(state?.providers?.[providerId()])) { revealSettings($('#provider-settings')); return; }
   $('#reconnect').disabled = true;
   try { accept(await api('/api/connect',{provider:providerId()})); render(); }
   catch (error) { toast(error.message); }

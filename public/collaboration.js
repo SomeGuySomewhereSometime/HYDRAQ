@@ -144,13 +144,16 @@ export class CollaborationUI {
     const state = this.getState(), summary = state?.collaboration?.sessions.find(s => s.id === this.selected), ownBusy = active.has(this.detail?.status) || active.has(summary?.status);
     const block=state?.workLocks?.find(lock=>workConflict(lock,{cwd:this.detail?.cwd||this.controls.cwd.value,projectId:this.detail?.projectId||this.controls.project.value,resources:['collaboration']}));
     const busy = state?.workLocks ? Boolean(block) : state?.collaboration?.busy || state?.handoff || state?.conversations.some(c => ['starting', 'running', 'waiting'].includes(c.status));
-    this.send.disabled = !state || !this.prompt.value.trim() || this.sending || busy || ownBusy || state.collaboration?.error || this.detail?.status === 'uncertain' || !this.controls.model.value || !this.controls.workerEffort.value || (this.controls.reviewer.value && !this.controls.reviewModel.value);
+    const off = ['codex', 'cursor', ...(this.controls.reviewer.value ? ['claude'] : [])].filter(id => state?.providers?.[id]?.enabled === false || state?.providers?.[id]?.disabling);
+    const reviewOption = this.controls.reviewer.querySelector('option[value=claude]');
+    if (reviewOption) reviewOption.disabled = state?.providers?.claude?.enabled === false || state?.providers?.claude?.disabling === true;
+    this.send.disabled = !state || off.length > 0 || !this.prompt.value.trim() || this.sending || busy || ownBusy || state.collaboration?.error || this.detail?.status === 'uncertain' || !this.controls.model.value || !this.controls.workerEffort.value || (this.controls.reviewer.value && !this.controls.reviewModel.value);
     this.send.textContent = this.sending ? 'A enviar…' : 'Enviar ↗'; this.stop.classList.toggle('hidden', !ownBusy);
     for (const k of ['model', 'effort', 'workerEffort', 'context','reviewer']) this.controls[k].disabled = Boolean(ownBusy || this.sending);
     for(const k of ['reviewModel','reviewEffort']){this.controls[k].parentElement.classList.toggle('hidden',!this.controls.reviewer.value);this.controls[k].disabled=Boolean(ownBusy||this.sending||!this.controls.reviewer.value);}
     this.controls.fast.disabled = Boolean(ownBusy || this.sending || !state?.providers.cursor?.models.find(m => m.id === 'grok-4.7')?.supportsFast);
     this.scopeHint.textContent=(this.detail?this.detail.projectId:this.controls.project.value)?'Contexto partilhado apenas com este projeto.':'Sem projeto associado: esta colaboração não partilha memória nem aparece na atividade de projetos.';
-    this.hint.textContent = this.detail?.approvals.length ? 'Responde à decisão pendente acima. A espera não cancela a tarefa.' : ownBusy ? 'Podes preparar o próximo pedido. Parar interrompe o ciclo.' : block ? workReason(block)+' · Projeto/pasta ou recurso reservado.' : 'Enter para enviar · Shift + Enter para nova linha';
+    this.hint.textContent = this.detail?.approvals.length ? 'Responde à decisão pendente acima. A espera não cancela a tarefa.' : ownBusy ? 'Podes preparar o próximo pedido. Parar interrompe o ciclo.' : off.length ? 'Ativa em Configurações → Clientes: ' + off.map(id => state.providers[id].name || id).join(', ') + '.' : block ? workReason(block)+' · Projeto/pasta ou recurso reservado.' : 'Enter para enviar · Shift + Enter para nova linha';
   }
   async refresh(force = false) {
     if(this.loading){if(force)this.pendingRefresh=true;return;}

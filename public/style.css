@@ -5662,3 +5662,32 @@ body[data-theme="mono"] .tiny-dot {
 .permission-controls details{font-size:11px;max-width:100%;overflow-x:auto}
 .permission-controls table{width:100%;border-collapse:collapse;font-size:10px}
 .permission-controls th,.permission-controls td{text-align:left;padding:4px;border-bottom:1px solid var(--border);overflow-wrap:anywhere}
+
+/* Controlos globais dos clientes. */
+.google-ai-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.provider-settings-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .45rem;
+  padding: .55rem 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+}
+.provider-settings-row > div {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+.provider-settings-row small {
+  display: block;
+  opacity: .75;
+  overflow-wrap: anywhere;
+}
+#agent-dock [data-provider-disabled="true"] {
+  opacity: .45;
+}

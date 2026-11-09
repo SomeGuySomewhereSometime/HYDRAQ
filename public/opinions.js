@@ -319,7 +319,7 @@ export class OpinionUI{
   stage.grid.dataset.reviewers=String(stage.reviewers.length);
   const steps=reviewSteps(cycle,jobs,stage.context),signature=JSON.stringify(steps);
   if(stage.steps.signature!==signature){stage.steps.signature=signature;stage.steps.replaceChildren(...steps.map((s,i)=>this.step(s,i)));}
-  const note=cycle?.error||(['completed','needs-decision','suspended','cancelled'].includes(cycle?.status)?cycle.reason:'')||'';
+  const note=cycle?.error||(['completed','needs-decision','skipped','suspended','cancelled'].includes(cycle?.status)?cycle.reason:'')||'';
   stage.note.textContent=note;stage.note.hidden=!note;stage.note.classList.toggle('opinion-error',Boolean(cycle?.error));
   this.stageActions(stage,entries,pending);this.applyStageView(stage);this.applyFocus(stage);
   return changed;

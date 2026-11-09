@@ -1,8 +1,14 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 210
+Versão atual: 213
 
 ## Resumo atual
+
+- Mono por omissão (entrada 213): aparência inicial e recuperação de preferências inválidas usam Mono. O HTML inicial, o seletor e a cor do navegador acompanham a predefinição; escolhas válidas já guardadas continuam a ser respeitadas.
+
+- Chave Google AI Studio (entrada 212): campo em Configurações para guardar, substituir ou remover a chave da voz Live da mascote. Persistência privada local, estado sem segredos e aplicação na próxima ligação Live. Testes focados 20/20 e gravação, recarregamento e remoção confirmados no Chrome com chave fictícia. Serviço Google real por validar.
+
+- Interruptores globais dos clientes (entrada 211): escolhe que clientes arrancam em Configurações → Clientes. O histórico e as sessões são conservados. A desativação é recusada enquanto o cliente tem trabalho em curso.
 
 - Mascote com informação do HYDRAQ (entrada 210): consulta do catálogo e dos modelos configurados. Uma delegação sem conversa de origem abre a sua própria conversa quando o utilizador continua no mesmo projeto sem outra conversa selecionada.
 
@@ -2778,3 +2784,22 @@ Versão atual: 210
 - A mascote Live pode consultar modelos, predefinições e modelo da sessão, com o catálogo gratuito do OpenCode limitado à pasta do projeto. A consulta omite dados de conta e distingue catálogos antigos e configurações guardadas.
 - Delegações sem origem abrem a sua conversa na área principal, por voz e texto, se o utilizador continuar no projeto sem conversa selecionada. Com origem, o pedido e as respostas continuam a aparecer na conversa que os originou. O diálogo informal fica no painel.
 - Verificado: 42 testes focados e 28 verificações no Chromium com clientes e Gemini Live simulados. Uma delegação real anterior foi localizada na conversa própria e tinha resposta concluída. Versão ativa na 4318. A consulta local confirmou 11 modelos gratuitos no catálogo OpenCode real do projeto testado. A resposta falada do Gemini não foi testada com o serviço real.
+
+### 211 — 2026-11-08 — Codex — interruptores globais dos clientes
+
+- Codex, Claude Code, Antigravity, Cursor e OpenCode podem ser ligados ou desligados em Configurações → Clientes. Preferência privada e persistente, com revisão para evitar alterações concorrentes entre separadores. Arranque seletivo, histórico acessível e retoma da sessão nativa.
+- O servidor impede novos envios, delegações e consultas nos clientes desativados. O Multi mantém a composição e valida todos os destinatários antes de enviar. Revisões automáticas indicam os revisores desativados e conservam os pareceres parciais.
+- Suíte completa: 931/931. Clientes simulados confirmaram a retoma nos cinco transportes, o arranque com todos desativados, a concorrência de envio, a rejeição de revisões antigas e as revisões parciais. Quatro cenários em Chromium confirmaram a sincronização entre separadores, a passagem rápida, o bloqueio Multi e a reativação. A 4318 foi atualizada para a versão 211 (PID 654166), com os cinco clientes reais ligados e 130 conversas preservadas. Falta validar o ciclo de desligar, reativar e retomar uma sessão real.
+
+
+### 212 — 2026-11-09 — Codex — chave Google AI Studio nas configurações
+
+- Configurações → Google AI Studio permite guardar, substituir e remover a chave da mascote Live. Campo de palavra-passe limpo após sucesso; sem cópia para o armazenamento do navegador. A chave guardada tem prioridade sobre GEMINI_API_KEY e aplica-se à próxima ligação Live, sem reinício.
+- Persistência em `.hydraq/google-ai.json`, fora do Git, com escrita atómica e permissões 0600. API local autenticada devolve apenas o estado; validação e limite de tamanho, ficheiros inválidos preservados e erros Live ocultam também as chaves anteriores de sessões ainda abertas.
+- Verificado: 20/20 testes focados de configurações, mascote e clientes, incluindo persistência, remoção, autenticação, origem, permissões e ligação Live simulada. Chrome confirmou guardar uma chave fictícia, recarregar com o estado preservado e remover. Sem chamada ao Google real. A instância habitual estava parada; não foi necessário interromper sessões. Versão 212 ativa na porta 4318 (PID 109553), num terminal visível, com os cinco clientes ligados e 130 conversas preservadas. A configuração real confirmou uma chave existente no ambiente, sem a expor nem substituir.
+
+
+### 213 — 2026-11-09 — Codex — aparência Mono por omissão
+
+- Mono passa a ser a aparência inicial para navegadores sem preferências ou com valores inválidos. HTML inicial, nome e amostra do seletor e cor do navegador alinhados, evitando mostrar Atelier antes de carregar o JavaScript. Preferências válidas existentes conservadas.
+- Atualizadas as expectativas dos testes de disposição para a nova predefinição. Verificado: cinco testes de disposição e suíte completa 936/936, sem falhas nem ignorados, antes do commit conjunto das configurações pendentes. Apenas interface; a instância ativa serve os novos ficheiros ao recarregar a página. Artefactos de `output/` mantidos locais.

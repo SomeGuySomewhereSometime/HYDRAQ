@@ -158,9 +158,20 @@ export class ProjectUI {
     if(!project){form.append(this.button('Escolher ou criar pasta',()=>chooseFolder({api:this.api,initial:root.value||undefined,onChoose:value=>{root.value=value;root.dispatchEvent(new Event('change'));},toast:this.toast})),el('p','','Se escreveres uma pasta que ainda não existe, será criada ao guardar.'));}
     const provider=this.field(form,'Cliente inicial',this.select([['','Usar preferência atual'],...Object.entries(names)],project?.defaults?.provider||''));
     const defaults=structuredClone(project?.defaults||{}),clients=defaults.clients||{};
+    const isDisabled = id => state.providers[id]?.enabled === false || state.providers[id]?.disabling;
+    for (const option of provider.options) {
+      if (!isDisabled(option.value)) continue;
+      option.textContent += ' · desativado';
+      option.disabled = option.value !== defaults.provider;
+    }
     const advanced=el('details');advanced.append(el('summary','','Modelos e raciocínio por cliente'));const fields={};
     for(const [id,label]of Object.entries(names)){
       const section=el('fieldset');section.append(el('legend','',label));const models=state.providers[id]?.models||[],saved=clients[id]||{};
+      if (isDisabled(id)) {
+        section.append(el('p', '', ['Cliente desativado nas Configurações', saved.model, saved.effort].filter(Boolean).join(' · ')));
+        advanced.append(section);
+        continue;
+      }
       const options=[['','Usar catálogo atual'],...models.map(m=>[m.id,m.name||m.id])];if(saved.model&&!models.some(m=>m.id===saved.model))options.push([saved.model,`${saved.model} · indisponível`]);
       const model=this.field(section,'Modelo',this.select(options,saved.model||''));const effort=this.field(section,'Raciocínio',this.select([['','Automático']],''));
       const context=id==='cursor'?this.field(section,'Contexto',this.select([['','Automático']],'')):null;
@@ -172,7 +183,7 @@ export class ProjectUI {
     const save=this.button('Guardar',()=>{});save.type='submit';form.append(save);
     if(project)form.append(this.button(project.archived?'Restaurar projeto':'Arquivar projeto',()=>this.submit(form,async()=>{if(await this.mutate(`/api/projects/${project.id}`,{archived:!project.archived}))this.dialog.close();})));
     form.addEventListener('submit',event=>{event.preventDefault();this.submit(form,async()=>{
-      const next={clients:{}};if(provider.value)next.provider=provider.value;
+      const next={clients:Object.fromEntries(Object.entries(clients).filter(([id]) => isDisabled(id)))};if(provider.value)next.provider=provider.value;
       for(const [id,f]of Object.entries(fields)){const value={};for(const key of ['model','effort','context'])if(f[key]?.value)value[key]=f[key].value;if(f.fast?.value)value.fast=f.fast.value==='on';if(Object.keys(value).length)next.clients[id]=value;}
       const result=await this.mutate(project?`/api/projects/${project.id}`:'/api/projects',{name:name.value,root:root.value,defaults:next});
       if(result){this.open.add(result.id);this.dialog.close();this.openProject(result.id);}

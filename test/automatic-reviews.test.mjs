@@ -172,3 +172,23 @@ test('síntese automática pede resposta completa e respeita o formato e permiss
  assert.match(prompt,/resposta final completa e autónoma/);assert.match(prompt,/não te limites a comentar as críticas/);assert.match(prompt,/incluindo pedidos para responder apenas/);assert.match(prompt,/cliente\/modelo que as sugeriu/);assert.match(prompt,/Compara JSON e SQLite em três frases/);assert.match(prompt,/não atribuas sugestões que não recebeste/);
  assert.equal(main.logs[1].settings.sandbox,'read-only');assert.equal(hub.automaticReviews.cycles.length,1);assert.equal(main.logs.length,2);
 });
+
+test('uma política guardada conserva o revisor desativado e só executa os restantes', async t => {
+  const { hub, c, main, workers } = await setup(t);
+  const participants = ['claude', 'cursor'].map(provider => ({ provider, model: 'test', effort: 'low' }));
+  await hub.automaticReviews.policy(c.id, config({ scope: 'conversation', participants }));
+  await hub.changeProviderSettings({ provider: 'claude', enabled: false, revision: 0 });
+  await hub.send(c.id, 'Revisão parcial', 'partial-off');
+  await wait(() => hub.automaticReviews.cycles[0]?.status === 'needs-decision');
+  assert.deepEqual(workers.map(worker => worker.provider), ['cursor']);
+  assert.equal(main.logs.length, 1);
+  assert.match(hub.automaticReviews.cycles[0].reason, /parcial.*claude/i);
+  assert.deepEqual(hub.automaticReviews.policies[c.id].participants.map(p => p.provider), ['claude', 'cursor']);
+
+  await hub.changeProviderSettings({ provider: 'cursor', enabled: false, revision: 1 });
+  await hub.send(c.id, 'Sem revisores ativos', 'all-off');
+  await wait(() => hub.automaticReviews.cycles[1]?.status === 'skipped');
+  assert.match(hub.automaticReviews.cycles[1].reason, /claude.*cursor/i);
+  assert.equal(main.logs.length, 2);
+  assert.equal(workers.length, 1);
+});
