@@ -1,3 +1,7 @@
+import { locale as uiLocale } from './i18n.js';
+import { t as uiText } from './i18n.js';
+import { setupLanguage } from './i18n.js';
+setupLanguage(document);
 import { NativeSessionsUI, OpenCodeSessionsUI, AntigravitySessionsUI, TerminalSwitch } from './native-sessions.js';
 import { ClaudeSessionsUI } from './claude-sessions.js';
 import { workConflict, workReason } from './work-locks.js';
@@ -140,22 +144,22 @@ function renderGoogleAiSettings() {
   $('#google-ai-key').disabled = googleAiPending || Boolean(configuration.error);
   $('#google-ai-save').disabled = googleAiPending || Boolean(configuration.error);
   $('#google-ai-remove').disabled = googleAiPending || !configuration.saved || Boolean(configuration.error);
-  $('#google-ai-status').textContent = googleAiPending ? 'A guardar…' : configuration.error ||
-    (configuration.source === 'settings' ? 'Chave guardada. Será usada na próxima ligação Live.' :
-      configuration.source === 'environment' ? 'A usar a chave do ambiente do servidor. Podes guardar outra aqui.' : 'Ainda não foi configurada uma chave.');
-  $('#google-ai-key').placeholder = configuration.saved ? 'Colar uma nova chave para substituir' : 'Colar chave API';
+  $('#google-ai-status').textContent = googleAiPending ? uiText('A guardar…') : configuration.error ||
+    (configuration.source === 'settings' ? uiText('Chave guardada. Será usada na próxima ligação Live.') :
+      configuration.source === 'environment' ? uiText('A usar a chave do ambiente do servidor. Podes guardar outra aqui.') : uiText('Ainda não foi configurada uma chave.'));
+  $('#google-ai-key').placeholder = configuration.saved ? uiText('Colar uma nova chave para substituir') : uiText('Colar chave API');
 }
 
 async function saveGoogleAi(remove = false) {
   if (googleAiPending || !state?.googleAi) return;
   const input = $('#google-ai-key');
-  if (!remove && !input.value.trim()) { input.focus(); toast('Cola a chave Google AI Studio antes de guardar.'); return; }
+  if (!remove && !input.value.trim()) { input.focus(); toast(uiText('Cola a chave Google AI Studio antes de guardar.')); return; }
   googleAiPending = true;
   renderGoogleAiSettings();
   try {
     state.googleAi = await api('/api/settings/google-ai', remove ? { remove: true } : { apiKey: input.value.trim() });
     input.value = '';
-    toast(remove ? 'Chave guardada removida.' : 'Chave Google AI Studio guardada.');
+    toast(remove ? uiText('Chave guardada removida.') : uiText('Chave Google AI Studio guardada.'));
   } catch (error) { toast(error.message); }
   finally { googleAiPending = false; renderGoogleAiSettings(); }
 }
@@ -195,12 +199,12 @@ function renderProviderSettings() {
   const list = $('#provider-settings-list');
   const focused = list.contains(document.activeElement) ? document.activeElement.dataset.providerControl : null;
   list.replaceChildren(...entries.map(([id, info]) => {
-    const label = { antigravity: 'Antigravity (Gemini)', cursor: 'Cursor (Grok)', opencode: 'OpenCode · gratuitos' }[id] || info.name || providerName(id);
+    const label = { antigravity: 'Antigravity (Gemini)', cursor: 'Cursor (Grok)', opencode: uiText('OpenCode · gratuitos') }[id] || info.name || providerName(id);
     const row = element('div', 'provider-settings-row');
-    const status = info.disabling ? 'A desligar…' : !info.enabled ? 'Desativado' : info.connection === 'connected' ? 'Pronto' : info.connection === 'connecting' ? 'A ligar…' : 'Sem ligação';
+    const status = info.disabling ? uiText('A desligar…') : !info.enabled ? uiText('Desativado') : info.connection === 'connected' ? uiText('Pronto') : info.connection === 'connecting' ? uiText('A ligar…') : uiText('Sem ligação');
     const identity = element('div');
     identity.append(element('strong', '', label), element('small', '', info.connectionError ? status + ' · ' + info.connectionError : status));
-    const button = element('button', 'text-button', info.enabled ? 'Ligado' : 'Desligado');
+    const button = element('button', 'text-button', info.enabled ? uiText('Ligado') : uiText('Desligado'));
     button.type = 'button';
     button.setAttribute('role', 'switch');
     button.setAttribute('aria-label', label);
@@ -210,7 +214,7 @@ function renderProviderSettings() {
     button.addEventListener('click', () => changeProvider(id, !info.enabled));
     row.append(identity, button);
     if (info.connection === 'disconnected' && (info.enabled || info.connectionError)) {
-      const retry = element('button', 'text-button', info.enabled ? 'Tentar ligar' : 'Tentar desligar');
+      const retry = element('button', 'text-button', info.enabled ? uiText('Tentar ligar') : uiText('Tentar desligar'));
       retry.type = 'button';
       retry.dataset.providerControl = id + '-retry';
       retry.disabled = Boolean(configuration.error || info.disabling || providerSettingsPending.has(id));
@@ -242,8 +246,8 @@ const layout = new Layout();
 new Tooltips();
 const imageAttachments = new ImageAttachments({composer:$('#composer'),getKey:()=>composerKey(),getToken:()=>token,isBusy:()=>anyBusy() || sending,changed:()=>renderSend(),toast});
 dictationUI = dictationModule ? new dictationModule.Dictation({composer:$('#composer'),input:$('#prompt'),getKey:composerKey,getToken:()=>token,changed:()=>{if(state)renderSend();},toast}) : null;
-const statusLabels = { idle: 'Pronta', starting: 'A iniciar…', running: 'A trabalhar…', waiting: 'A aguardar a tua resposta', completed: 'Concluída', interrupted: 'Interrompida', failed: 'Falhou', uncertain: 'Estado por confirmar', inProgress: 'Em execução' };
-const effortLabels = { default: 'Automático', none: 'Sem raciocínio', minimal: 'Mínimo', low: 'Leve', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo', ultra: 'Ultra' };
+const statusLabels = { idle: uiText('Pronta'), starting: uiText('A iniciar…'), running: uiText('A trabalhar…'), waiting: uiText('A aguardar a tua resposta'), completed: uiText('Concluída'), interrupted: uiText('Interrompida'), failed: uiText('Falhou'), uncertain: uiText('Estado por confirmar'), inProgress: uiText('Em execução') };
+const effortLabels = { default: uiText('Automático'), none: uiText('Sem raciocínio'), minimal: uiText('Mínimo'), low: uiText('Leve'), medium: uiText('Médio'), high: uiText('Alto'), xhigh: 'Muito alto', max: uiText('Máximo'), ultra: 'Ultra' };
 
 // Snapshots arrive by SSE and in request responses; an older one never replaces a newer one.
 function accept(next) {
@@ -266,7 +270,7 @@ async function api(route, body) {
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const result = await response.json();
-  if (!response.ok) throw Object.assign(new Error(result.error || 'O pedido não foi concluído.'),{status:response.status,code:result.code,beforeSend:result.beforeSend,confirm:result.confirm});
+  if (!response.ok) throw Object.assign(new Error(result.error || uiText('O pedido não foi concluído.')),{status:response.status,code:result.code,beforeSend:result.beforeSend,confirm:result.confirm});
   return result;
 }
 
@@ -332,11 +336,11 @@ function saferSandbox(source, existing, target) {
 const planSupport = { codex:true, claude: true, cursor: true, antigravity: true, opencode: true };
 let permissionControls = null;
 const permissionOptions = {
-  opencode: [['workspace-write','Perguntar antes','OpenCode original: autorizações na conversa; sem aprovação automática nem sandbox do sistema operativo comprovada.']],
-  antigravity: [['workspace-write','Executar','O agy usa a política de permissões configurada no cliente original e as restrições da sandbox.'],['accept-edits','Aceitar edições','Pede ao agy o modo accept-edits. O efeito depende também da política de permissões configurada no cliente original.']],
-  claude: [['workspace-write','Perguntar antes','O Claude Code pede autorização na conversa antes de editar ficheiros ou executar comandos.'],['accept-edits','Aceitar edições','O Claude Code aplica edições de ficheiros sem perguntar; comandos continuam a pedir autorização.']],
-  cursor: [['workspace-write','Executar','O Grok trabalha com as permissões nativas do Cursor; autorizações aparecem na conversa.'],['ask','Só perguntas','Modo Perguntar do Cursor: responde e analisa, sem alterar ficheiros.']],
-  codex: [['workspace-write','Leitura e escrita','O Codex pode ler e alterar ficheiros da pasta do projeto. Ações fora da sandbox pedem autorização na conversa.'],['read-only','Só leitura','Usa o sandbox de leitura do Codex. Vê as proteções no painel Modo.']],
+  opencode: [['workspace-write',uiText('Perguntar antes'),uiText('OpenCode original: autorizações na conversa; sem aprovação automática nem sandbox do sistema operativo comprovada.')]],
+  antigravity: [['workspace-write',uiText('Executar'),uiText('O agy usa a política de permissões configurada no cliente original e as restrições da sandbox.')],['accept-edits',uiText('Aceitar edições'),uiText('Pede ao agy o modo accept-edits. O efeito depende também da política de permissões configurada no cliente original.')]],
+  claude: [['workspace-write',uiText('Perguntar antes'),uiText('O Claude Code pede autorização na conversa antes de editar ficheiros ou executar comandos.')],['accept-edits',uiText('Aceitar edições'),uiText('O Claude Code aplica edições de ficheiros sem perguntar; comandos continuam a pedir autorização.')]],
+  cursor: [['workspace-write',uiText('Executar'),uiText('O Grok trabalha com as permissões nativas do Cursor; autorizações aparecem na conversa.')],['ask',uiText('Só perguntas'),uiText('Modo Perguntar do Cursor: responde e analisa, sem alterar ficheiros.')]],
+  codex: [['workspace-write',uiText('Leitura e escrita'),uiText('O Codex pode ler e alterar ficheiros da pasta do projeto. Ações fora da sandbox pedem autorização na conversa.')],['read-only',uiText('Só leitura'),uiText('Usa o sandbox de leitura do Codex. Vê as proteções no painel Modo.')]],
 };
 let planMode = false;
 function sandboxValue() {
@@ -358,10 +362,10 @@ function renderPermissionTips() {
   const provider = providerId(), supported = planSupport[provider]&&(provider!=='codex'||Boolean(state?.permissions));
   $('#plan-toggle').setAttribute('aria-pressed', String(planMode && supported));
   $('#plan-toggle').dataset.tip = supported
-    ? `Planear: o ${providerName(provider)} analisa e propõe um plano antes de alterar ficheiros (modo nativo). Define o objetivo do pedido; as permissões definem o acesso.`
-    : 'O Codex não tem um modo Planear nesta integração. Para impedir alterações, escolhe “Só leitura” nas permissões.';
+    ? uiText`Planear: o ${providerName(provider)} analisa e propõe um plano antes de alterar ficheiros (modo nativo). Define o objetivo do pedido; as permissões definem o acesso.`
+    : uiText('O Codex não tem um modo Planear nesta integração. Para impedir alterações, escolhe “Só leitura” nas permissões.');
   const option = permissionOptions[provider].find(([id]) => id === $('#sandbox').value);
-  $('#sandbox').dataset.tip = `Permissões: ${option?.[2] || 'acesso do cliente ao projeto.'}${planMode && supported ? ' Planear pede um plano ao cliente. Vê as proteções no painel Modo.' : ''}`;
+  $('#sandbox').dataset.tip = uiText`Permissões: ${option?.[2] || uiText('acesso do cliente ao projeto.')}${planMode && supported ? uiText(' Planear pede um plano ao cliente. Vê as proteções no painel Modo.') : ''}`;
 }
 function saveSettingsDraft() {
   settingDrafts.set(settingsKey(), { model: $('#model').value, effort: $('#effort').value, sandbox: sandboxValue(), context: $('#context').value || null, fast: $('#fast').checked });
@@ -402,7 +406,7 @@ function saveComposerDraft() {
   if(settingsOwner===settingsKey())saveSettingsDraft();
 }
 function choose(id, projectId=selectedProject, overview=false, internal=false) {
-  if(sending&&!internal){toast('Aguarda a confirmação do envio antes de mudar de conversa.');return;}
+  if(sending&&!internal){toast(uiText('Aguarda a confirmação do envio antes de mudar de conversa.'));return;}
   dictationUI?.cancel();
   saveComposerDraft();
   collaborationUI.show('conversations',false);
@@ -429,7 +433,7 @@ $('#git-checkpoint-trigger').addEventListener('click', () => {
       if (point) checkpointDrafts.set(key, { projectId: selected.id, ...point });
       else checkpointDrafts.delete(key);
     }
-    toast(point ? 'Ponto de segurança guardado · ' + point.commit.slice(0, 12) : 'Associação retirada. O commit continua no histórico Git.');
+    toast(point ? uiText('Ponto de segurança guardado · ') + point.commit.slice(0, 12) : uiText('Associação retirada. O commit continua no histórico Git.'));
     renderSend();
   } });
 });
@@ -442,11 +446,11 @@ claudexUI=claudexModule?new claudexModule.ClaudeXUI({api,getState:()=>state,area
   openCheckpoint: gitPanel ? task => {
     const target = state?.projectCatalog?.projects.find(p => p.id === task.projectId && !p.archived && p.available !== false);
     if (target) gitPanel.open(target, { taskId: task.id });
-    else toast('O projeto deste ponto de segurança está indisponível.');
+    else toast(uiText('O projeto deste ponto de segurança está indisponível.'));
   } : null,
   openTask:id=>{const task=state?.claudex?.records.find(record=>record.id===id),member=task&&Object.values(task.members||{}).find(entry=>state.conversations.some(c=>c.id===entry.conversationId));if(member)choose(member.conversationId);else claudexUI.choose(id);},
   elapsed,changed:()=>{if(!state)return;renderMessages(current());if(transcriptPinned&&hydraHost.parentElement===$('#messages'))$('#messages').scrollTop=$('#messages').scrollHeight;if(hydraOn()){renderSend();syncModePanel();}providerStatus?.render();}}):null;
-const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error('Conclui ou cancela a troca de cliente antes de incorporar pareceres.');return {permissionPolicy:permissionControls?.value(),model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
+const opinionUI=new OpinionUI({api,getKey:composerKey,getState:()=>state,getTarget:current,getSettings:()=>{if(switching(current()))throw Error(uiText('Conclui ou cancela a troca de cliente antes de incorporar pareceres.'));return {permissionPolicy:permissionControls?.value(),model:$('#model').value,effort:$('#effort').value,sandbox:sandboxValue(),...(providerId()==='cursor'?{context:$('#context').value||null,fast:$('#fast').checked}:{})};},refresh:async()=>{accept(await api('/api/state'));render();},toast,markdown});
 async function openStandaloneDelegation(id, projectId) {
   const canOpen = () => !current() && !sending && companionProject()?.id === projectId
     && collaborationUI.view === 'conversations';
@@ -473,7 +477,7 @@ function populateEfforts(value) {
   }));
   $('#effort').value = model?.efforts?.includes(value) ? value : model?.defaultEffort || model?.efforts?.[0] || '';
   $('#model-description').textContent = model?.description || '';
-  $('#model').dataset.tip = `Modelo do próximo pedido${model?.description ? `: ${model.description}` : '.'}`;
+  $('#model').dataset.tip = uiText`Modelo do próximo pedido${model?.description ? `: ${model.description}` : '.'}`;
 }
 
 function populateCursorOptions(context, fast = false) {
@@ -492,13 +496,13 @@ function draftSettings(conversation = current()) {
 }
 
 function cacheSupport(model) {
-  if(providerId()==='opencode')return {status:'unknown',label:'Sessão nativa OpenCode',detail:'A sessão e o histórico são mantidos. Só modelos gratuitos do fornecedor OpenCode; cache lida comunicada nativamente. Não usa a quota ChatGPT ou Claude.'};
-  if (providerId() === 'cursor') return { status: 'unknown', label: 'Sessão nativa do Cursor', detail: 'O Grok retoma o mesmo ID nativo. Mudar raciocínio, contexto ou Fast não garante reutilização de cache. O ACP não comunicou contadores de tokens nos ensaios.' };
-  if (providerId() === 'claude') return { status: 'unknown', label: 'Cache de prompts do Claude', detail: 'A conversa retoma a sessão original do Claude Code pelo mesmo ID. A cache do servidor é por modelo e expira; mudar de modelo pode reprocessar o contexto. Os contadores mostram a cache efetivamente lida.' };
-  if (providerId() === 'antigravity') return { status: 'unknown', label: 'Sessão nativa do Antigravity', detail: 'Gemini e Claude usam a sessão original do agy. Mudanças de modelo ou raciocínio retomam a conversa pelo mesmo ID; não há garantia de reutilização da cache.' };
-  if (model?.supportsReasoningEffortUpdates === false) return { status: 'unsupported', label: 'Pode reprocessar contexto', detail: 'Este modelo não anuncia a mudança de raciocínio que conserva o prefixo. A sessão mantém-se, mas a cache pode ser afetada.' };
-  if (model?.supportsReasoningEffortUpdates === true && providerState().reasoningUpdates?.enabled) return { status: 'supported', label: 'Conserva o prefixo ao mudar raciocínio', detail: 'Suporte anunciado pelo Codex e opção ativa. Funcionalidade experimental: conserva o prefixo no mesmo modelo; reutilizar a cache continua a depender da sua disponibilidade.' };
-  return { status: 'unknown', label: 'Preservação não confirmada', detail: 'Não há confirmação suficiente para este modelo nesta ligação. A sessão mantém-se; não se garante a reutilização da cache ao mudar o raciocínio.' };
+  if(providerId()==='opencode')return {status:'unknown',label:uiText('Sessão nativa OpenCode'),detail:uiText('A sessão e o histórico são mantidos. Só modelos gratuitos do fornecedor OpenCode; cache lida comunicada nativamente. Não usa a quota ChatGPT ou Claude.')};
+  if (providerId() === 'cursor') return { status: 'unknown', label: uiText('Sessão nativa do Cursor'), detail: uiText('O Grok retoma o mesmo ID nativo. Mudar raciocínio, contexto ou Fast não garante reutilização de cache. O ACP não comunicou contadores de tokens nos ensaios.') };
+  if (providerId() === 'claude') return { status: 'unknown', label: uiText('Cache de prompts do Claude'), detail: uiText('A conversa retoma a sessão original do Claude Code pelo mesmo ID. A cache do servidor é por modelo e expira; mudar de modelo pode reprocessar o contexto. Os contadores mostram a cache efetivamente lida.') };
+  if (providerId() === 'antigravity') return { status: 'unknown', label: uiText('Sessão nativa do Antigravity'), detail: uiText('Gemini e Claude usam a sessão original do agy. Mudanças de modelo ou raciocínio retomam a conversa pelo mesmo ID; não há garantia de reutilização da cache.') };
+  if (model?.supportsReasoningEffortUpdates === false) return { status: 'unsupported', label: uiText('Pode reprocessar contexto'), detail: uiText('Este modelo não anuncia a mudança de raciocínio que conserva o prefixo. A sessão mantém-se, mas a cache pode ser afetada.') };
+  if (model?.supportsReasoningEffortUpdates === true && providerState().reasoningUpdates?.enabled) return { status: 'supported', label: uiText('Conserva o prefixo ao mudar raciocínio'), detail: uiText('Suporte anunciado pelo Codex e opção ativa. Funcionalidade experimental: conserva o prefixo no mesmo modelo; reutilizar a cache continua a depender da sua disponibilidade.') };
+  return { status: 'unknown', label: uiText('Preservação não confirmada'), detail: uiText('Não há confirmação suficiente para este modelo nesta ligação. A sessão mantém-se; não se garante a reutilização da cache ao mudar o raciocínio.') };
 }
 
 function renderCacheInfo(conversation) {
@@ -508,29 +512,29 @@ function renderCacheInfo(conversation) {
   view.dataset.support = info.status;
   view.replaceChildren(element('strong', '', info.label), element('p', '', info.detail));
   const basis = conversation ? targetMember(conversation) : null;
-  if (switching(conversation)) view.append(element('p', 'model-switch-warning', `Vais continuar no ${providerName()}: a cache e o raciocínio interno do ${providerName(conversation.provider)} não passam de um cliente para outro; segue a passagem de contexto.`));
-  else if (conversation && model && model.id !== conversation.model) view.append(element('p', 'model-switch-warning', 'Vais mudar de modelo: a conversa mantém-se, mas a cache do modelo anterior pode não ser reutilizada.'));
-  const source = element('a', '', 'Como funciona');
+  if (switching(conversation)) view.append(element('p', 'model-switch-warning', uiText`Vais continuar no ${providerName()}: a cache e o raciocínio interno do ${providerName(conversation.provider)} não passam de um cliente para outro; segue a passagem de contexto.`));
+  else if (conversation && model && model.id !== conversation.model) view.append(element('p', 'model-switch-warning', uiText('Vais mudar de modelo: a conversa mantém-se, mas a cache do modelo anterior pode não ser reutilizada.')));
+  const source = element('a', '', uiText('Como funciona'));
   source.href = { opencode: 'https://opencode.ai/v2/docs/cli/acp/', cursor: 'https://cursor.com/docs/cli/acp', antigravity: 'https://antigravity.google/docs/cli/headless/', claude: 'https://code.claude.com/docs/en/headless' }[providerId()] || 'https://developers.openai.com/api/docs/guides/reasoning#change-reasoning-mid-conversation';
   source.target = '_blank'; source.rel = 'noopener noreferrer';
   view.append(source);
-  $('#settings-hint').textContent = !conversation ? 'Aplicam-se ao primeiro pedido.' : !switching(conversation) ? 'Mesmo histórico e sessão. As escolhas aplicam-se ao próximo pedido.' : basis ? `Retoma a sessão do ${providerName()} desta conversa.` : `Cria uma sessão do ${providerName()} ligada a esta conversa.`;
+  $('#settings-hint').textContent = !conversation ? uiText('Aplicam-se ao primeiro pedido.') : !switching(conversation) ? uiText('Mesmo histórico e sessão. As escolhas aplicam-se ao próximo pedido.') : basis ? uiText`Retoma a sessão do ${providerName()} desta conversa.` : uiText`Cria uma sessão do ${providerName()} ligada a esta conversa.`;
   const table = element('table');
-  const head = element('tr'); head.append(element('th', '', 'Modelo'), element('th', '', 'Ao mudar raciocínio'));
+  const head = element('tr'); head.append(element('th', '', uiText('Modelo')), element('th', '', uiText('Ao mudar raciocínio')));
   table.append(head);
   for (const entry of providerState().models) {
     const row = element('tr');
-    row.append(element('td', '', entry.name || entry.id), element('td', '', { supported: 'Conserva prefixo*', unsupported: 'Pode reprocessar', unknown: 'Não confirmado' }[cacheSupport(entry).status]));
+    row.append(element('td', '', entry.name || entry.id), element('td', '', { supported: uiText('Conserva prefixo*'), unsupported: uiText('Pode reprocessar'), unknown: uiText('Não confirmado') }[cacheSupport(entry).status]));
     table.append(row);
   }
-  $('#model-capabilities').replaceChildren(table, element('p', '', { opencode: 'Variantes anunciadas pelo catálogo atual. Sessão preservada; cache lida comunicada nativamente.', cursor: 'A sessão é preservada; o ACP não confirma cache nem consumo por modelo.', antigravity: 'O protocolo do agy não confirma preservação de cache por modelo.', claude: 'O Claude Code não anuncia preservação por modelo; a cache lida aparece nos contadores de cada pedido.' }[providerId()] || '* Mesmo modelo, com a opção experimental ativa. Não garante acerto de cache.'));
+  $('#model-capabilities').replaceChildren(table, element('p', '', { opencode: uiText('Variantes anunciadas pelo catálogo atual. Sessão preservada; cache lida comunicada nativamente.'), cursor: uiText('A sessão é preservada; o ACP não confirma cache nem consumo por modelo.'), antigravity: uiText('O protocolo do agy não confirma preservação de cache por modelo.'), claude: uiText('O Claude Code não anuncia preservação por modelo; a cache lida aparece nos contadores de cada pedido.') }[providerId()] || uiText('* Mesmo modelo, com a opção experimental ativa. Não garante acerto de cache.')));
 }
 
 function renderSettings(conversation) {
   const owner = settingsKey(conversation);
   const provider = providerId();
   const routineOpenCode=state?.providers?.opencode?.permissionProfile==='routine';
-  permissionOptions.opencode=[routineOpenCode?['workspace-write','Trabalho habitual autorizado','Leitura, edição, comandos e pesquisa autorizados. Acesso externo, ficheiros .env e ferramentas adicionais podem pedir confirmação.']:['workspace-write','Perguntar antes','OpenCode original: autorizações na conversa; sem aprovação automática nem sandbox do sistema operativo comprovada.']];
+  permissionOptions.opencode=[routineOpenCode?['workspace-write',uiText('Trabalho habitual autorizado'),uiText('Leitura, edição, comandos e pesquisa autorizados. Acesso externo, ficheiros .env e ferramentas adicionais podem pedir confirmação.')]:['workspace-write',uiText('Perguntar antes'),uiText('OpenCode original: autorizações na conversa; sem aprovação automática nem sandbox do sistema operativo comprovada.')]];
   const permissionProfile=provider==='opencode'&&routineOpenCode?'routine':'default';
   const basis = conversation ? targetMember(conversation) : null;
   const group = members(conversation);
@@ -544,10 +548,10 @@ function renderSettings(conversation) {
   $('#provider').value = provider;
   // In a dual, talking to one model, the client field replaces that participant (asked first in a dialog).
   $('#provider').disabled = sending || Boolean(conversation && (anyBusy() || group.some(needsUncertaintyReview))) || Boolean(dualUI?.pendingFor() || (dualUI?.record(conversation) && dualUI.both(conversation)));
-  $('#provider-hint').textContent = { opencode: 'OpenCode original · apenas gratuitos do fornecedor OpenCode', cursor: 'Cursor original · Grok da tua conta', antigravity: 'agy original · Gemini e Claude da tua conta', claude: 'Claude Code original · sessão claude.ai existente', codex: 'Codex original · sessão ChatGPT existente' }[provider] + (conversation ? ' · podes mudar de cliente entre pedidos' : '');
-  $('#provider').dataset.tip = `Cliente: ${$('#provider-hint').textContent}.${conversation ? ' Escolher outro cliente nesta conversa faz uma passagem de contexto no próximo pedido.' : ''}`;
-  $('#permissions-hint').textContent = { opencode: 'Autorizações e perguntas na conversa. Planear usa o agente nativo; sem sandbox do sistema operativo comprovada. Sem aprovação automática. Só o fornecedor OpenCode gratuito, sem subagentes nesta versão.', cursor: 'Autorizações, perguntas e planos aparecem na conversa. Planear/Perguntar são modos nativos; isolamento do sistema operativo não comprovado. Sem orientação do turno ativo.', antigravity: 'Políticas nativas do agy. Durante a execução: redirecionar com interrupção confirmada e retoma, ou enviar depois. Não há injeção no mesmo turno nativo.', claude: 'Autorizações na conversa. Durante a execução: orientar na próxima oportunidade, redirecionar agora ou enviar depois. Orientar não aprova ações pendentes.' }[provider] || 'As autorizações adicionais aparecem na conversa.';
-  if(provider==='opencode'&&routineOpenCode)$('#permissions-hint').textContent='Trabalho habitual autorizado: ler, editar, executar comandos e testes, pesquisar e consultar a memória. Acesso externo e ficheiros .env podem pedir confirmação. Planear mantém as restrições de edição. Só modelos gratuitos OpenCode.';
+  $('#provider-hint').textContent = { opencode: uiText('OpenCode original · apenas gratuitos do fornecedor OpenCode'), cursor: uiText('Cursor original · Grok da tua conta'), antigravity: uiText('agy original · Gemini e Claude da tua conta'), claude: uiText('Claude Code original · sessão claude.ai existente'), codex: uiText('Codex original · sessão ChatGPT existente') }[provider] + (conversation ? uiText(' · podes mudar de cliente entre pedidos') : '');
+  $('#provider').dataset.tip = uiText`Cliente: ${$('#provider-hint').textContent}.${conversation ? uiText(' Escolher outro cliente nesta conversa faz uma passagem de contexto no próximo pedido.') : ''}`;
+  $('#permissions-hint').textContent = { opencode: uiText('Autorizações e perguntas na conversa. Planear usa o agente nativo; sem sandbox do sistema operativo comprovada. Sem aprovação automática. Só o fornecedor OpenCode gratuito, sem subagentes nesta versão.'), cursor: uiText('Autorizações, perguntas e planos aparecem na conversa. Planear/Perguntar são modos nativos; isolamento do sistema operativo não comprovado. Sem orientação do turno ativo.'), antigravity: uiText('Políticas nativas do agy. Durante a execução: redirecionar com interrupção confirmada e retoma, ou enviar depois. Não há injeção no mesmo turno nativo.'), claude: uiText('Autorizações na conversa. Durante a execução: orientar na próxima oportunidade, redirecionar agora ou enviar depois. Orientar não aprova ações pendentes.') }[provider] || uiText('As autorizações adicionais aparecem na conversa.');
+  if(provider==='opencode'&&routineOpenCode)$('#permissions-hint').textContent=uiText('Trabalho habitual autorizado: ler, editar, executar comandos e testes, pesquisar e consultar a memória. Acesso externo e ficheiros .env podem pedir confirmação. Planear mantém as restrições de edição. Só modelos gratuitos OpenCode.');
   if ($('#sandbox').dataset.provider !== provider || $('#sandbox').dataset.permissionProfile !== permissionProfile) {
     $('#sandbox').dataset.provider = provider;
     $('#sandbox').dataset.permissionProfile = permissionProfile;
@@ -575,7 +579,7 @@ function renderSettings(conversation) {
   if (settingsOwner !== owner || catalogChanged || (!draftSettings(conversation) && settingsBaseline !== baseline)) {
     const draft = draftSettings(conversation);
     const wanted = draft?.model || pendingSettings?.model || basis?.model || defaults.model || $('#model').value;
-    if(wanted && !providerState().models.some(m=>m.id===wanted)){const missing=element('option','',`${wanted} · indisponível`);missing.value=wanted;$('#model').append(missing);$('#model').value=wanted;}
+    if(wanted && !providerState().models.some(m=>m.id===wanted)){const missing=element('option','',uiText`${wanted} · indisponível`);missing.value=wanted;$('#model').append(missing);$('#model').value=wanted;}
     if (providerState().models.some(model => model.id === wanted)) $('#model').value = wanted;
     populateEfforts(draft?.effort || pendingSettings?.effort || basis?.effort || defaults.effort);
     populateCursorOptions(draft?.context ?? pendingSettings?.context ?? basis?.context ?? defaults.context, draft?.fast ?? pendingSettings?.fast ?? basis?.fast ?? defaults.fast ?? false);
@@ -605,10 +609,10 @@ function renderSettings(conversation) {
   if (conversation) {
     const source = providerName(conversation.provider), target = switching(conversation) ? providerName() : 'outro cliente';
     $('#handoff-hint').textContent = ($('#handoff-mode').value === 'quick'
-      ? `Rápida, sem pedido extra: o ${target} recebe os teus pedidos, as respostas, os planos, os ficheiros e comandos observados e o estado git.`
-      : `Completa: o ${source} faz primeiro um pedido extra para resumir decisões e pendentes. O HYDRAQ verifica os ficheiros antes e depois; se detetar mudanças, bloqueia a passagem. O ${target} recebe o resumo e os factos observados.`)
-      + (!switching(conversation) ? ' Só se aplica quando escolheres outro cliente na caixa de mensagens.' : basis ? ` Retoma a sessão original do ${target} e envia só o que aconteceu desde então.` : ` Cria uma sessão do ${target} ligada a esta conversa.`);
-    $('#handoff-mode').dataset.tip = `Passagem de contexto entre clientes. ${$('#handoff-hint').textContent}`;
+      ? uiText`Rápida, sem pedido extra: o ${target} recebe os teus pedidos, as respostas, os planos, os ficheiros e comandos observados e o estado git.`
+      : uiText`Completa: o ${source} faz primeiro um pedido extra para resumir decisões e pendentes. O HYDRAQ verifica os ficheiros antes e depois; se detetar mudanças, bloqueia a passagem. O ${target} recebe o resumo e os factos observados.`)
+      + (!switching(conversation) ? uiText(' Só se aplica quando escolheres outro cliente na caixa de mensagens.') : basis ? uiText` Retoma a sessão original do ${target} e envia só o que aconteceu desde então.` : uiText` Cria uma sessão do ${target} ligada a esta conversa.`);
+    $('#handoff-mode').dataset.tip = uiText`Passagem de contexto entre clientes. ${$('#handoff-hint').textContent}`;
   }
   renderCacheInfo(conversation);
   renderSwitchNote(conversation);
@@ -619,9 +623,9 @@ function renderSwitchNote(conversation) {
   const model = providerState().models?.find(entry => entry.id === $('#model').value);
   let text = '';
   if (switching(conversation)) {
-    text = `Vais continuar no ${providerName()}. ${$('#handoff-mode').value === 'quick' ? 'Passagem rápida: sem pedido adicional' : `Passagem completa: o ${providerName(conversation.provider)} faz primeiro um pedido extra de resumo`}.`;
+    text = uiText`Vais continuar no ${providerName()}. ${$('#handoff-mode').value === 'quick' ? uiText('Passagem rápida: sem pedido adicional') : uiText`Passagem completa: o ${providerName(conversation.provider)} faz primeiro um pedido extra de resumo`}.`;
   } else if (conversation && model && targetMember(conversation)?.model && model.id !== targetMember(conversation).model) {
-    text = 'Vais mudar de modelo nesta sessão: a cache do modelo anterior pode não ser reutilizada.';
+    text = uiText('Vais mudar de modelo nesta sessão: a cache do modelo anterior pode não ser reutilizada.');
   }
   note.classList.toggle('hidden', !text);
   if (note.dataset.text === text) return;
@@ -630,7 +634,7 @@ function renderSwitchNote(conversation) {
   if (!text) return;
   note.append(element('span', '', text));
   if (switching(conversation)) {
-    const cancel = element('button', 'text-button', `Manter ${providerName(conversation.provider)}`);
+    const cancel = element('button', 'text-button', uiText`Manter ${providerName(conversation.provider)}`);
     cancel.type = 'button';
     cancel.addEventListener('click', () => { $('#provider').value = conversation.provider; $('#provider').dispatchEvent(new Event('change')); });
     note.append(cancel);
@@ -646,8 +650,8 @@ const inlinePattern = /\\([\\`*_{}\[\]()#+\-.!~|>])|(`+)([\s\S]*?[^`])\2(?!`)|\*
 async function openPlanDocument(owner,documentId){
   try{
     const document=await api(`/api/conversations/${encodeURIComponent(owner.id)}/plan-documents/${encodeURIComponent(documentId)}`);
-    const dialog=element('dialog','opinion-dialog plan-file-dialog'),heading=element('div','opinion-dialog-heading'),title=element('h2','',document.name||'Plano do Cursor'),close=element('button','secondary-button','Fechar');close.type='button';close.addEventListener('click',()=>dialog.close());heading.append(title,close);
-    const download=element('button','secondary-button','Descarregar Markdown');download.type='button';download.addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([document.text],{type:'text/markdown;charset=utf-8'})),a=element('a');a.href=url;a.download='cursor-plan-'+document.id+'.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
+    const dialog=element('dialog','opinion-dialog plan-file-dialog'),heading=element('div','opinion-dialog-heading'),title=element('h2','',document.name||uiText('Plano do Cursor')),close=element('button','secondary-button',uiText('Fechar'));close.type='button';close.addEventListener('click',()=>dialog.close());heading.append(title,close);
+    const download=element('button','secondary-button',uiText('Descarregar Markdown'));download.type='button';download.addEventListener('click',()=>{const url=URL.createObjectURL(new Blob([document.text],{type:'text/markdown;charset=utf-8'})),a=element('a');a.href=url;a.download='cursor-plan-'+document.id+'.md';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);});
     const body=markdown(document.text);dialog.append(heading,element('p','plan-file-path',document.path),download,body);dialog.addEventListener('close',()=>dialog.remove(),{once:true});window.document.body.append(dialog);dialog.showModal();
   }catch(error){toast(error.message);}
 }
@@ -697,23 +701,23 @@ const isTable = (lines, i) => lines[i].includes('|') && i + 1 < lines.length && 
 const startsBlock = (lines, i) => fencePattern.test(lines[i]) || headingPattern.test(lines[i]) || rulePattern.test(lines[i]) || quotePattern.test(lines[i]) || itemPattern.test(lines[i]) || isTable(lines, i);
 
 function codeView(code, info) {
-  const language = info || 'Texto';
+  const language = info || uiText('Texto');
   const wrapper = element('div', 'code-block');
   const heading = element('div', 'code-heading');
   const actions = element('span', 'code-actions');
-  const copy = element('button', 'copy-code', 'Copiar');
+  const copy = element('button', 'copy-code', uiText('Copiar'));
   copy.type = 'button';
-  copy.setAttribute('aria-label', `Copiar código · ${language}`);
+  copy.setAttribute('aria-label', uiText`Copiar código · ${language}`);
   copy.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(code); copy.textContent = 'Copiado'; }
-    catch { toast('Não foi possível copiar. Seleciona o código para o copiar.'); }
+    try { await navigator.clipboard.writeText(code); copy.textContent = uiText('Copiado'); }
+    catch { toast(uiText('Não foi possível copiar. Seleciona o código para o copiar.')); }
   });
   const count = code.split('\n').length;
   if (count > longCode) {
     const key = [codeScope, language, ...code.split('\n', longCode)].join('\n');
     const toggle = element('button', 'copy-code code-toggle');
     toggle.type = 'button';
-    const show = open => { wrapper.classList.toggle('code-folded', !open); toggle.textContent = open ? 'Recolher' : `Mostrar as ${count} linhas`; toggle.setAttribute('aria-expanded', String(open)); };
+    const show = open => { wrapper.classList.toggle('code-folded', !open); toggle.textContent = open ? uiText('Recolher') : uiText`Mostrar as ${count} linhas`; toggle.setAttribute('aria-expanded', String(open)); };
     show(expandedCode.has(key));
     toggle.addEventListener('click', () => { const open = wrapper.classList.contains('code-folded'); if (open) expandedCode.add(key); else expandedCode.delete(key); show(open); });
     actions.append(toggle);
@@ -863,7 +867,7 @@ function syncWelcomeFleet() {
     const meta = card.querySelector('[data-fleet-meta]');
     if (meta && pState) {
       const defModel = pState.models?.find(m => m.isDefault) || pState.models?.[0];
-      const statusText = providerIsOff(pState) ? 'Desativado nas Configurações' : connected ? 'Ligado' : pState.connection === 'connecting' ? 'A ligar…' : 'Desligado';
+      const statusText = providerIsOff(pState) ? uiText('Desativado nas Configurações') : connected ? uiText('Ligado') : pState.connection === 'connecting' ? uiText('A ligar…') : uiText('Desligado');
       meta.textContent = defModel ? `${statusText} · ${defModel.name || defModel.id}` : statusText;
     }
   }
@@ -882,7 +886,7 @@ function renderAgentDock() {
     const off = providerIsOff(pState);
     pill.dataset.providerDisabled = String(off);
     pill.disabled = off || (dual ? sending || dualUI.memberBusy : locked);
-    if (off) pill.dataset.tip = `${providerName(id)} · desativado nas Configurações.`;
+    if (off) pill.dataset.tip = uiText`${providerName(id)} · desativado nas Configurações.`;
   }
   // The brand's client lights: lit when that client is connected, in its own colour.
   const lit = [];
@@ -892,7 +896,7 @@ function renderAgentDock() {
     light.dataset.active = String(id === active);
     if (connected) lit.push(providerNames[id]);
   }
-  $('#brand-heads').dataset.tip = lit.length ? `Ligados: ${lit.join(', ')}.` : 'Nenhum cliente ligado.';
+  $('#brand-heads').dataset.tip = lit.length ? uiText`Ligados: ${lit.join(', ')}.` : uiText('Nenhum cliente ligado.');
   syncWelcomeFleet();
 }
 function wireSuggestions() {
@@ -922,14 +926,14 @@ function internalMessage(message, owner) {
   const name = providerName(owner.provider);
   // Hydra rounds stay in the conversation as short notes; the dialogue and the common answer are in the task panel.
   if (message.internal === 'claudex') {
-    if (message.role === 'user') return element('p', 'handoff-note', `Hydra · ${message.kind === 'peer-notice' ? 'aviso ao' : 'ronda do'} ${name} · ${new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}`);
+    if (message.role === 'user') return element('p', 'handoff-note', uiText`Hydra · ${message.kind === 'peer-notice' ? 'aviso ao' : 'ronda do'} ${name} · ${new Date(message.at).toLocaleTimeString(uiLocale(),{hour:'2-digit',minute:'2-digit'})}`);
     const details = element('details', 'handoff-summary');
-    details.append(element('summary', '', `Hydra · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text, message.id));
+    details.append(element('summary', '', uiText`Hydra · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text, message.id));
     return details;
   }
-  if (message.role === 'user') return element('p', 'handoff-note', `HYDRAQ pediu ao ${name} ${message.internal==='memory-proposal'?'uma proposta de memória':'um resumo de passagem'} · ${new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})}`);
+  if (message.role === 'user') return element('p', 'handoff-note', uiText`HYDRAQ pediu ao ${name} ${message.internal==='memory-proposal'?uiText('uma proposta de memória'):uiText('um resumo de passagem')} · ${new Date(message.at).toLocaleTimeString(uiLocale(),{hour:'2-digit',minute:'2-digit'})}`);
   const details = element('details', 'handoff-summary');
-  details.append(element('summary', '', `${message.internal==='memory-proposal'?'Proposta de memória':'Resumo de passagem'} · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text, message.id));
+  details.append(element('summary', '', uiText`${message.internal==='memory-proposal'?uiText('Proposta de memória'):uiText('Resumo de passagem')} · ${name}${message.streaming ? ' · a escrever…' : ''}`), markdown(message.text, message.id));
   return details;
 }
 
@@ -937,26 +941,26 @@ function pendingHandoff(entry) {
   const pending = entry.handoffState;
   const article = element('article', 'message user');
   const header = element('div', 'message-header');
-  header.append(element('span', 'avatar', 'TU'), element('span', '', `Tu · para o ${providerName(entry.provider)}`));
+  header.append(element('span', 'avatar', uiText('TU')), element('span', '', uiText`Tu · para o ${providerName(entry.provider)}`));
   const content = element('div', 'message-content');
   content.append(element('p', '', pending.text));
   imageAttachments.renderMessage(content,pending.attachments);
   const from = providerName(pending.from), to = providerName(entry.provider);
   const status = {
-    summarizing: `A aguardar o resumo do ${from}; depois segue para o ${to}.`,
-    sending: `A enviar ao ${to} com o contexto da passagem…`,
-    failed: `Passagem não concluída: ${pending.error} Podes enviar de novo daqui (segue só a passagem rápida) ou voltar ao ${from}.`,
+    summarizing: uiText`A aguardar o resumo do ${from}; depois segue para o ${to}.`,
+    sending: uiText`A enviar ao ${to} com o contexto da passagem…`,
+    failed: uiText`Passagem não concluída: ${pending.error} Podes enviar de novo daqui (segue só a passagem rápida) ou voltar ao ${from}.`,
   }[pending.status];
   article.append(header, content, element('p', `handoff-status handoff-${pending.status}`, status));
   return article;
 }
 
 function copyButton(text, tip, failure) {
-  const button = element('button', 'copy-message', 'Copiar');
+  const button = element('button', 'copy-message', uiText('Copiar'));
   button.type = 'button';
   button.dataset.tip = tip;
   button.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(text); button.textContent = 'Copiado ✓'; setTimeout(() => { button.textContent = 'Copiar'; }, 1800); }
+    try { await navigator.clipboard.writeText(text); button.textContent = uiText('Copiado ✓'); setTimeout(() => { button.textContent = uiText('Copiar'); }, 1800); }
     catch { toast(failure); }
   });
   return button;
@@ -966,9 +970,9 @@ function copyButton(text, tip, failure) {
 function hydraRequest({ message, record }) {
   const article = element('article', 'message user hydra-request'), header = element('div', 'message-header'), content = element('div', 'message-content');
   article.dataset.hydraTask = record.id;
-  const time = element('time', '', new Date(message.at).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }));
+  const time = element('time', '', new Date(message.at).toLocaleTimeString(uiLocale(), { hour: '2-digit', minute: '2-digit' }));
   time.dateTime = message.at;
-  header.append(element('span', 'avatar', 'TU'), element('span', '', `Tu · ${message.type === 'update' ? 'novo requisito para o' : 'para o'} ${pairName(record.roles || HYDRA_PAIRS[0])}`), time, copyButton(message.text, 'Copiar o pedido', 'Não foi possível copiar o pedido.'));
+  header.append(element('span', 'avatar', uiText('TU')), element('span', '', uiText`Tu · ${message.type === 'update' ? uiText('novo requisito para o') : uiText('para o')} ${pairName(record.roles || HYDRA_PAIRS[0])}`), time, copyButton(message.text, uiText('Copiar o pedido'), uiText('Não foi possível copiar o pedido.')));
   content.append(element('p', '', message.text));
   article.append(header, content);
   return article;
@@ -1014,7 +1018,7 @@ function renderMessages(conversation) {
     }
     if (message.internal) { const note = internalMessage(message, owner); markTurn(note, message, owner); view.append(note); continue; }
     const delegated = companionRequest(owner, message);
-    if (previousOwner && previousOwner !== owner.id && !delegated && !dualUI?.anyRecord(conversation)) view.append(element('div', 'provider-divider', `Continuação no ${providerName(owner.provider)}`));
+    if (previousOwner && previousOwner !== owner.id && !delegated && !dualUI?.anyRecord(conversation)) view.append(element('div', 'provider-divider', uiText`Continuação no ${providerName(owner.provider)}`));
     previousOwner = owner.id;
     const article = element('article', `message ${message.role}${message.kind === 'steer' ? ' steering-message' : ''}`);
     article.dataset.provider = owner.provider;
@@ -1023,28 +1027,28 @@ function renderMessages(conversation) {
     markTurn(article, message, owner);
     const header = element('div', 'message-header');
     const automaticReturn=Boolean(opinionUI.submission(message,owner));
-    const avatar = element('span', 'avatar', message.role === 'user' ? (delegated || automaticReturn?'H':'TU') : '');
+    const avatar = element('span', 'avatar', message.role === 'user' ? (delegated || automaticReturn?'H':uiText('TU')) : '');
     if (message.role !== 'user') avatar.append(icon());
     header.append(avatar);
-    header.append(element('span','',delegated ? (message.role === 'user' ? `${delegated.name} · Pedido da mascote → ${providerName(owner.provider)}` : `${providerName(owner.provider)} · Resposta à mascote ${delegated.name}`) : message.role === 'user' ? (automaticReturn?'HYDRAQ · Avaliação do parecer':message.kind === 'steer' ? 'Tu · Orientação' : message.source === 'terminal' ? 'Tu · '+providerName(owner.provider)+' original' : 'Tu') : providerName(owner.provider)));
+    header.append(element('span','',delegated ? (message.role === 'user' ? uiText`${delegated.name} · Pedido da mascote → ${providerName(owner.provider)}` : uiText`${providerName(owner.provider)} · Resposta à mascote ${delegated.name}`) : message.role === 'user' ? (automaticReturn?uiText('HYDRAQ · Avaliação do parecer'):message.kind === 'steer' ? uiText('Tu · Orientação') : message.source === 'terminal' ? uiText('Tu · ')+providerName(owner.provider)+' original' : uiText('Tu')) : providerName(owner.provider)));
     if (message.model) {
       const modelName = providerState(owner.provider).models?.find(model => model.id === message.model)?.name || message.model;
       header.append(element('span', 'message-model', [modelName, effortLabels[message.effort] || message.effort, message.source === 'terminal' && message.role !== 'user' ? providerName(owner.provider)+' original' : null].filter(Boolean).join(' · ')));
     }
-    const time = element('time','',new Date(message.at).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}));
+    const time = element('time','',new Date(message.at).toLocaleTimeString(uiLocale(),{hour:'2-digit',minute:'2-digit'}));
     time.dateTime = message.at;
     header.append(time);
     if (message.text) {
       const user = message.role === 'user';
-      header.append(copyButton(message.text, user ? (message.kind === 'steer' ? 'Copiar a orientação' : 'Copiar o pedido') : 'Copiar resposta completa', user ? 'Não foi possível copiar o pedido.' : 'Não foi possível copiar a resposta.'));
+      header.append(copyButton(message.text, user ? (message.kind === 'steer' ? uiText('Copiar a orientação') : uiText('Copiar o pedido')) : uiText('Copiar resposta completa'), user ? uiText('Não foi possível copiar o pedido.') : uiText('Não foi possível copiar a resposta.')));
     }
     article.append(header);
     if (delegated && message.role === 'user') {
       const turn = owner.turns?.find(t => t.requestId === delegated.requestId);
-      const labels = {starting:'A enviar',running:'Em execução',waiting:'Aguarda autorização',completed:'Concluído',failed:'Falhou',uncertain:'Resultado incerto',interrupted:'Interrompido'};
-      const note = element('div', 'companion-delegated-note', `${labels[turn?.status] || 'Pedido delegado'} · Só leitura`);
+      const labels = {starting:uiText('A enviar'),running:uiText('Em execução'),waiting:uiText('Aguarda autorização'),completed:uiText('Concluído'),failed:uiText('Falhou'),uncertain:uiText('Resultado incerto'),interrupted:uiText('Interrompido')};
+      const note = element('div', 'companion-delegated-note', uiText`${labels[turn?.status] || uiText('Pedido delegado')} · Só leitura`);
       if (owner.id !== conversation?.id) {
-        const open = element('button', 'text-button', 'Abrir tarefa'); open.type = 'button';
+        const open = element('button', 'text-button', uiText('Abrir tarefa')); open.type = 'button';
         open.addEventListener('click', () => choose(owner.id)); note.append(open);
       }
       article.append(note);
@@ -1056,10 +1060,10 @@ function renderMessages(conversation) {
       article.append(content);
       // A request typed in an original client whose answer HYDRAQ could not read says so where it appears.
       if(message.terminalNote)article.append(element('p','terminal-note',message.terminalNote));
-      if(message.projectContext){const details=element('details','handoff-context');details.append(element('summary','','Contexto do projeto enviado com este pedido'),element('pre','',message.projectContext));article.append(details);}
+      if(message.projectContext){const details=element('details','handoff-context');details.append(element('summary','',uiText('Contexto do projeto enviado com este pedido')),element('pre','',message.projectContext));article.append(details);}
       if (message.handoffContext) {
         const details = element('details', 'handoff-context');
-        details.append(element('summary', '', `Contexto da passagem enviado com este pedido · ${formatTokens(message.handoffContext.length)} caracteres`), element('pre', '', message.handoffContext));
+        details.append(element('summary', '', uiText`Contexto da passagem enviado com este pedido · ${formatTokens(message.handoffContext.length)} caracteres`), element('pre', '', message.handoffContext));
         article.append(details);
       }
     } else {
@@ -1067,10 +1071,10 @@ function renderMessages(conversation) {
       if (message.streaming) article.lastElementChild.append(element('span','streaming-indicator'));
       const turn = owner.turns?.find(turn => turn.requestId === message.requestId || turn.id === message.turnId);
       const finalMessage = !owner.messages.slice(owner.messages.indexOf(message) + 1).some(next => next.role === 'assistant' && (next.requestId === message.requestId || next.turnId === message.turnId));
-      if(turn?.usage&&finalMessage&&owner.provider==='opencode')article.append(element('p','message-usage',`OpenCode · Entrada: ${formatTokens(turn.usage.inputTokens)} · Saída: ${formatTokens(turn.usage.outputTokens)} · Custo: ${Number.isFinite(turn.costUSD)?turn.costUSD+' USD':'não medido'}`));
-      if(turn?.usagePartial&&finalMessage)article.append(element('p','message-usage','Consumo parcial: faltam contadores de um ciclo.'));
-      if (turn?.usage && finalMessage && owner.provider!=='opencode') article.append(element('p', 'message-usage', `Entrada: ${formatTokens(turn.usage.inputTokens)} · Em cache: ${formatTokens(turn.usage.cachedInputTokens)} (${turn.usage.cachePercent}%) · Sem cache: ${formatTokens(turn.usage.uncachedInputTokens)}`));
-      else if (turn?.nativeTurnUsage && finalMessage) article.append(element('p', 'message-usage', `Neste pedido — Entrada: ${formatTokens(turn.nativeTurnUsage.input_tokens)} · Leitura de cache: ${formatTokens(turn.nativeTurnUsage.cache_read_tokens)} · Saída: ${formatTokens(turn.nativeTurnUsage.output_tokens)} · Raciocínio: ${formatTokens(turn.nativeTurnUsage.thinking_tokens)}`));
+      if(turn?.usage&&finalMessage&&owner.provider==='opencode')article.append(element('p','message-usage',uiText`OpenCode · Entrada: ${formatTokens(turn.usage.inputTokens)} · Saída: ${formatTokens(turn.usage.outputTokens)} · Custo: ${Number.isFinite(turn.costUSD)?turn.costUSD+' USD':uiText('não medido')}`));
+      if(turn?.usagePartial&&finalMessage)article.append(element('p','message-usage',uiText('Consumo parcial: faltam contadores de um ciclo.')));
+      if (turn?.usage && finalMessage && owner.provider!=='opencode') article.append(element('p', 'message-usage', uiText`Entrada: ${formatTokens(turn.usage.inputTokens)} · Em cache: ${formatTokens(turn.usage.cachedInputTokens)} (${turn.usage.cachePercent}%) · Sem cache: ${formatTokens(turn.usage.uncachedInputTokens)}`));
+      else if (turn?.nativeTurnUsage && finalMessage) article.append(element('p', 'message-usage', uiText`Neste pedido — Entrada: ${formatTokens(turn.nativeTurnUsage.input_tokens)} · Leitura de cache: ${formatTokens(turn.nativeTurnUsage.cache_read_tokens)} · Saída: ${formatTokens(turn.nativeTurnUsage.output_tokens)} · Raciocínio: ${formatTokens(turn.nativeTurnUsage.thinking_tokens)}`));
       if (turn?.quotaUsage && !owner.messages.slice(owner.messages.indexOf(message) + 1).some(next =>
         next.role === 'assistant' && (turn.requestId && next.requestId === turn.requestId || turn.id && next.turnId === turn.id))) {
         article.append(quotaUsageView(turn.quotaUsage));
@@ -1081,12 +1085,12 @@ function renderMessages(conversation) {
       if (quotas.length) article.append(claudexUI.quotaSection(quotas));
     }
     const planIds=[...(message.planDocumentIds||[]),...(message.planDocumentId?[message.planDocumentId]:[])];
-    if(planIds.length){const files=element('div','native-plan-files');for(const id of new Set(planIds)){const button=element('button','secondary-button','Abrir ficheiro do plano');button.type='button';button.dataset.planDocument=id;button.addEventListener('click',()=>openPlanDocument(owner,id));files.append(button);}article.append(files);}
+    if(planIds.length){const files=element('div','native-plan-files');for(const id of new Set(planIds)){const button=element('button','secondary-button',uiText('Abrir ficheiro do plano'));button.type='button';button.dataset.planDocument=id;button.addEventListener('click',()=>openPlanDocument(owner,id));files.append(button);}article.append(files);}
     const diagnosticTurn=owner.turns?.find(t=>message.requestId&&t.requestId===message.requestId||message.turnId&&t.id===message.turnId);
     if(diagnosticTurn?.diagnostics?.length&&!owner.messages.slice(owner.messages.indexOf(message)+1).some(m=>!m.internal&&(m.requestId&&m.requestId===diagnosticTurn.requestId||m.turnId&&m.turnId===diagnosticTurn.id)))article.append(diagnosticsView(diagnosticTurn.diagnostics));
     if (message.kind === 'steer') {
       const label = element('p', `steer-delivery delivery-${message.delivery || 'uncertain'}`, {
-        preparing:'A guardar orientação…', sending: message.nativeEnqueued ? 'Na fila nativa do OpenCode · aguarda o próximo passo' : 'A aguardar confirmação do cliente…', accepted: `Recebida pelo ${providerName(owner.provider)}`, rejected: 'Orientação não entregue', uncertain: 'Entrega não confirmada · não foi reenviada',
+        preparing:uiText('A guardar orientação…'), sending: message.nativeEnqueued ? uiText('Na fila nativa do OpenCode · aguarda o próximo passo') : uiText('A aguardar confirmação do cliente…'), accepted: uiText`Recebida pelo ${providerName(owner.provider)}`, rejected: uiText('Orientação não entregue'), uncertain: uiText('Entrega não confirmada · não foi reenviada'),
       }[message.delivery || 'uncertain']);
       article.append(label);
       if (message.error) article.append(element('p', 'steer-error', message.error));
@@ -1101,7 +1105,7 @@ function renderMessages(conversation) {
   dualUI?.organize(view,timeline,conversation);
   opinionUI.organizeTranscript(view,timeline);
   for (const entry of group) if (entry.handoffState) {
-    if (previousOwner && previousOwner !== entry.id) view.append(element('div', 'provider-divider', `Continuação no ${providerName(entry.provider)}`));
+    if (previousOwner && previousOwner !== entry.id) view.append(element('div', 'provider-divider', uiText`Continuação no ${providerName(entry.provider)}`));
     view.append(pendingHandoff(entry));
   }
   renderProgress(focusConversation(conversation));
@@ -1144,7 +1148,7 @@ function renderProgress(conversation) {
     if (clock.childNodes.length) heading.append(clock);
   } else {
     const counts = progress.counts;
-    heading.append(element('span', 'progress-counts', [`${counts.completed} ${counts.completed === 1 ? 'ação concluída' : 'ações concluídas'}`, ...(counts.running ? [`${counts.running} em curso`] : []), ...(counts.failed ? [`${counts.failed} com erro`] : []), ...(counts.declined ? [`${counts.declined} ${counts.declined === 1 ? 'recusada' : 'recusadas'}`] : [])].join(' · ')));
+    heading.append(element('span', 'progress-counts', [`${counts.completed} ${counts.completed === 1 ? uiText('ação concluída') : uiText('ações concluídas')}`, ...(counts.running ? [uiText`${counts.running} em curso`] : []), ...(counts.failed ? [uiText`${counts.failed} com erro`] : []), ...(counts.declined ? [`${counts.declined} ${counts.declined === 1 ? 'recusada' : 'recusadas'}`] : [])].join(' · ')));
   }
   view.append(heading);
   // Several actions at once are all shown, each with its own time.
@@ -1172,7 +1176,7 @@ function renderProgress(conversation) {
   if (progress.steps.length || timeline.length) {
     const details = element('details', 'progress-details');
     details.open = expanded;
-    details.append(element('summary', '', progress.steps.length ? `Plano e ações · ${progress.completedSteps} de ${progress.steps.length} passos marcados como concluídos` : `Ações deste pedido · ${timeline.length}`));
+    details.append(element('summary', '', progress.steps.length ? uiText`Plano e ações · ${progress.completedSteps} de ${progress.steps.length} passos marcados como concluídos` : uiText`Ações deste pedido · ${timeline.length}`));
     if (progress.explanation) details.append(element('p', '', progress.explanation));
     if (progress.steps.length) {
       const list = element('ol', 'progress-plan');
@@ -1180,7 +1184,7 @@ function renderProgress(conversation) {
         const item = element('li');
         item.dataset.status = step.status;
         const terminal = !activeStatuses.includes(progress.status);
-        const label = step.status === 'completed' ? 'Concluído' : step.status === 'inProgress' ? (terminal ? 'Não concluído' : 'Em curso') : 'Pendente';
+        const label = step.status === 'completed' ? uiText('Concluído') : step.status === 'inProgress' ? (terminal ? uiText('Não concluído') : uiText('Em curso')) : uiText('Pendente');
         item.append(element('span', '', step.step), element('small', '', label));
         list.append(item);
       }
@@ -1188,7 +1192,7 @@ function renderProgress(conversation) {
     }
     if (timeline.length) {
       const list = element('ul', 'progress-actions');
-      const labels = { completed:'Concluída', inProgress:'Em curso', failed:'Com erro', declined:'Recusada', unfinished:'Sem conclusão confirmada', interrupted:'Interrompida', cancelled:'Cancelada' };
+      const labels = { completed:uiText('Concluída'), inProgress:uiText('Em curso'), failed:uiText('Com erro'), declined:uiText('Recusada'), unfinished:uiText('Sem conclusão confirmada'), interrupted:uiText('Interrompida'), cancelled:uiText('Cancelada') };
       for (const action of [...timeline].reverse()) {
         const item = element('li');
         if (actions) {
@@ -1196,7 +1200,7 @@ function renderProgress(conversation) {
           const state = actions.actionState(action), shown = !live && state === 'inProgress' ? 'unfinished' : state, duration = actions.actionDuration(action);
           item.dataset.status = shown;
           const text = element('span', '', actions.actionPhrase(action, { cwd })), detail = element('small', '', labels[shown] || shown);
-          if (duration) { const time = element('time', 'progress-duration', `${duration.measured ? '≈ ' : ''}${actions.formatDuration(duration.ms)}`); time.dataset.tip = duration.measured ? 'Medido pela HYDRAQ entre os eventos recebidos' : 'Duração indicada pelo cliente'; detail.prepend(time, document.createTextNode(' · ')); }
+          if (duration) { const time = element('time', 'progress-duration', `${duration.measured ? '≈ ' : ''}${actions.formatDuration(duration.ms)}`); time.dataset.tip = duration.measured ? uiText('Medido pela HYDRAQ entre os eventos recebidos') : uiText('Duração indicada pelo cliente'); detail.prepend(time, document.createTextNode(' · ')); }
           else if (live && state === 'inProgress' && action.at) detail.prepend(elapsed(action.at), document.createTextNode(' · '));
           item.append(text, detail);
         } else {
@@ -1205,9 +1209,9 @@ function renderProgress(conversation) {
         }
         list.append(item);
       }
-      details.append(element('h4', '', 'Ações observadas'), list);
+      details.append(element('h4', '', uiText('Ações observadas')), list);
       // Clients keep their latest 200 actions per conversation: a longer request has lost its first ones, and says so.
-      if (actions && conversation.items.length >= 200 && conversation.items[0]?.turnId === turn.id) details.append(element('p', 'progress-detail', 'As primeiras ações deste pedido já não estão guardadas: o cliente guarda as últimas 200 por conversa.'));
+      if (actions && conversation.items.length >= 200 && conversation.items[0]?.turnId === turn.id) details.append(element('p', 'progress-detail', uiText('As primeiras ações deste pedido já não estão guardadas: o cliente guarda as últimas 200 por conversa.')));
     }
     view.append(details);
   }
@@ -1223,11 +1227,11 @@ function elapsed(since) {
 }
 setInterval(() => { if (!actions) return; for (const time of document.querySelectorAll('[data-elapsed-since]')) time.textContent = actions.formatDuration(Math.max(0, Date.now() - Date.parse(time.dataset.elapsedSince))); }, 1000);
 
-function formatTokens(value) { return new Intl.NumberFormat('pt-PT').format(value); }
+function formatTokens(value) { return new Intl.NumberFormat(uiLocale()).format(value); }
 
 function compactTokens(value) {
   if (!Number.isFinite(value)) return '—';
-  return value >= 10000 ? `${new Intl.NumberFormat('pt-PT', { maximumFractionDigits: value >= 100000 ? 0 : 1 }).format(value / 1000)} mil` : formatTokens(value);
+  return value >= 10000 ? uiText`${new Intl.NumberFormat(uiLocale(), { maximumFractionDigits: value >= 100000 ? 0 : 1 }).format(value / 1000)} mil` : formatTokens(value);
 }
 function usageHeading(title, tip) {
   const heading = element('div', 'usage-heading');
@@ -1259,37 +1263,37 @@ function renderTurnUsage(conversation) {
   const view = $('#turn-usage');
   view.classList.toggle('hidden', !conversation);
   const name = providerName(conversation?.provider);
-  view.replaceChildren(usageHeading('Último pedido', conversation?.provider === 'opencode' ? 'Tokens e custo nativos do OpenCode; não equivalem à quota de outras subscrições.' : conversation?.provider === 'claude' ? 'Tokens comunicados pelo Claude Code. Não equivalem diretamente aos limites da subscrição Claude.' : conversation?.provider === 'antigravity' ? 'Contadores nativos do agy, sem conversão para a cache de outros clientes.' : conversation?.provider === 'cursor' ? 'O protocolo ACP do Cursor não comunica contadores de tokens nem de cache.' : 'Tokens comunicados pelo Codex. Não equivalem diretamente à quota ChatGPT.'));
+  view.replaceChildren(usageHeading(uiText('Último pedido'), conversation?.provider === 'opencode' ? uiText('Tokens e custo nativos do OpenCode; não equivalem à quota de outras subscrições.') : conversation?.provider === 'claude' ? uiText('Tokens comunicados pelo Claude Code. Não equivalem diretamente aos limites da subscrição Claude.') : conversation?.provider === 'antigravity' ? uiText('Contadores nativos do agy, sem conversão para a cache de outros clientes.') : conversation?.provider === 'cursor' ? uiText('O protocolo ACP do Cursor não comunica contadores de tokens nem de cache.') : uiText('Tokens comunicados pelo Codex. Não equivalem diretamente à quota ChatGPT.')));
   const duration = turnDuration(turn);
-  if (duration) { const line = element('p', 'usage-duration'); line.append(element('span', '', 'Duração'), element('strong', '', duration)); line.dataset.tip = 'Tempo entre o início e o fim do pedido no cliente.'; view.append(line); }
+  if (duration) { const line = element('p', 'usage-duration'); line.append(element('span', '', uiText('Duração')), element('strong', '', duration)); line.dataset.tip = uiText('Tempo entre o início e o fim do pedido no cliente.'); view.append(line); }
   if (conversation?.provider === 'antigravity') {
     const usage = turn?.nativeUsage || conversation.nativeUsage;
-    if (!usage) { view.append(element('p','usage-empty','A aguardar os contadores do agy…')); return; }
-    if (turn?.nativeTurnUsage) view.append(usageMetrics([['Entrada',turn.nativeTurnUsage.input_tokens],['Cache lida',turn.nativeTurnUsage.cache_read_tokens],['Saída',turn.nativeTurnUsage.output_tokens],['Raciocínio',turn.nativeTurnUsage.thinking_tokens]]));
+    if (!usage) { view.append(element('p','usage-empty',uiText('A aguardar os contadores do agy…'))); return; }
+    if (turn?.nativeTurnUsage) view.append(usageMetrics([[uiText('Entrada'),turn.nativeTurnUsage.input_tokens],[uiText('Cache lida'),turn.nativeTurnUsage.cache_read_tokens],[uiText('Saída'),turn.nativeTurnUsage.output_tokens],[uiText('Raciocínio'),turn.nativeTurnUsage.thinking_tokens]]));
     const session = element('details','usage-session');
-    session.append(element('summary','','Totais da sessão'), usageMetrics([['Entrada',usage.input_tokens],['Cache lida',usage.cache_read_tokens],['Saída',usage.output_tokens],['Raciocínio',usage.thinking_tokens]]));
+    session.append(element('summary','',uiText('Totais da sessão')), usageMetrics([[uiText('Entrada'),usage.input_tokens],[uiText('Cache lida'),usage.cache_read_tokens],[uiText('Saída'),usage.output_tokens],[uiText('Raciocínio'),usage.thinking_tokens]]));
     view.append(session); return;
   }
   if(conversation?.provider==='opencode'){
-    if(turn?.usage)view.append(usageMetrics([['Entrada',turn.usage.inputTokens],['Cache lida',turn.usage.cachedInputTokens],['Cache escrita',turn.usage.cacheWriteInputTokens],['Saída',turn.usage.outputTokens],['Raciocínio',turn.usage.reasoningOutputTokens]]));
-    view.append(element('p','usage-empty',`Custo comunicado: ${Number.isFinite(turn?.costUSD)?new Intl.NumberFormat('pt-PT',{style:'currency',currency:'USD',maximumFractionDigits:6}).format(turn.costUSD):'não medido'}. Só modelos gratuitos OpenCode. Contadores de cache nativos quando disponíveis; subagentes desativados nesta versão.`));return;
+    if(turn?.usage)view.append(usageMetrics([[uiText('Entrada'),turn.usage.inputTokens],[uiText('Cache lida'),turn.usage.cachedInputTokens],[uiText('Cache escrita'),turn.usage.cacheWriteInputTokens],[uiText('Saída'),turn.usage.outputTokens],[uiText('Raciocínio'),turn.usage.reasoningOutputTokens]]));
+    view.append(element('p','usage-empty',uiText`Custo comunicado: ${Number.isFinite(turn?.costUSD)?new Intl.NumberFormat(uiLocale(),{style:'currency',currency:'USD',maximumFractionDigits:6}).format(turn.costUSD):uiText('não medido')}. Só modelos gratuitos OpenCode. Contadores de cache nativos quando disponíveis; subagentes desativados nesta versão.`));return;
   }
-  if (conversation?.provider === 'cursor') { view.append(element('p','usage-empty','Contadores de tokens e cache indisponíveis neste protocolo.')); return; }
+  if (conversation?.provider === 'cursor') { view.append(element('p','usage-empty',uiText('Contadores de tokens e cache indisponíveis neste protocolo.'))); return; }
   if (!turn?.usage) {
-    view.append(element('p', 'usage-empty', turn && activeStatuses.includes(turn.status) ? `A aguardar os contadores do ${name}…` : 'Sem medição separada para este pedido.'));
+    view.append(element('p', 'usage-empty', turn && activeStatuses.includes(turn.status) ? uiText`A aguardar os contadores do ${name}…` : uiText('Sem medição separada para este pedido.')));
     return;
   }
   const usage = turn.usage;
-  const metrics = usageMetrics([['Entrada', usage.inputTokens, 'Tokens de entrada deste pedido, incluindo o histórico da sessão.'], ['Da cache', usage.cachedInputTokens, 'Entrada reutilizada da cache do servidor: mais rápida e mais barata.'], ['Sem cache', usage.uncachedInputTokens, 'Entrada processada de novo neste pedido.'], ['Saída', usage.outputTokens, 'Tokens escritos pelo modelo, incluindo raciocínio quando comunicado.']]);
+  const metrics = usageMetrics([[uiText('Entrada'), usage.inputTokens, uiText('Tokens de entrada deste pedido, incluindo o histórico da sessão.')], [uiText('Da cache'), usage.cachedInputTokens, uiText('Entrada reutilizada da cache do servidor: mais rápida e mais barata.')], [uiText('Sem cache'), usage.uncachedInputTokens, uiText('Entrada processada de novo neste pedido.')], [uiText('Saída'), usage.outputTokens, uiText('Tokens escritos pelo modelo, incluindo raciocínio quando comunicado.')]]);
   if (Number.isFinite(usage.cachePercent) && usage.inputTokens > 0) {
     const headline = element('p', 'cache-headline');
-    headline.append(element('strong', '', `${usage.cachePercent}%`), element('span', '', ' da entrada reutilizada'));
+    headline.append(element('strong', '', `${usage.cachePercent}%`), element('span', '', uiText(' da entrada reutilizada')));
     view.append(headline);
   }
   if (Number.isFinite(usage.cachePercent) && usage.inputTokens > 0) {
     const bar = element('div', 'cache-bar');
     bar.setAttribute('role', 'img');
-    bar.setAttribute('aria-label', `${usage.cachePercent}% da entrada reutilizada; ${100 - usage.cachePercent}% sem cache`);
+    bar.setAttribute('aria-label', uiText`${usage.cachePercent}% da entrada reutilizada; ${100 - usage.cachePercent}% sem cache`);
     const fill = element('span');
     // SVG width attributes work with the existing policy that blocks inline styles.
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -1304,23 +1308,23 @@ function renderTurnUsage(conversation) {
 }
 
 function itemDescription(item) {
-  if (item.type === 'commandExecution') return item.command || 'Executar comando';
-  if (item.type === 'fileChange') return (item.changes || []).map(change => change.path.split('/').at(-1)).join(', ') || 'Alterar ficheiros';
-  if (item.type === 'subagent') return `Subagente · ${item.detail || (item.subagents || []).join(', ') || 'delegação'}`;
-  if (item.type === 'mcpToolCall') return `${item.server || ''} / ${item.tool || 'Ferramenta'}`;
-  if (item.type === 'webSearch') return item.query || 'Pesquisar na web';
-  if (item.type === 'reasoning') return 'Analisar o pedido';
-  if (item.type === 'plan') return 'Organizar o trabalho';
-  return item.type || `Atividade do ${providerName()}`;
+  if (item.type === 'commandExecution') return item.command || uiText('Executar comando');
+  if (item.type === 'fileChange') return (item.changes || []).map(change => change.path.split('/').at(-1)).join(', ') || uiText('Alterar ficheiros');
+  if (item.type === 'subagent') return uiText`Subagente · ${item.detail || (item.subagents || []).join(', ') || uiText('delegação')}`;
+  if (item.type === 'mcpToolCall') return `${item.server || ''} / ${item.tool || uiText('Ferramenta')}`;
+  if (item.type === 'webSearch') return item.query || uiText('Pesquisar na web');
+  if (item.type === 'reasoning') return uiText('Analisar o pedido');
+  if (item.type === 'plan') return uiText('Organizar o trabalho');
+  return item.type || uiText`Atividade do ${providerName()}`;
 }
 
 const activityFilters = [
-  ['all', 'Tudo', 'Todas as ações observadas.', () => true],
-  ['commands', 'Comandos', 'Comandos executados no terminal.', item => item.type === 'commandExecution'],
-  ['files', 'Ficheiros', 'Alterações de ficheiros.', item => item.type === 'fileChange'],
-  ['web', 'Web', 'Pesquisas e páginas consultadas.', item => item.type === 'webSearch'],
-  ['tools', 'Ferramentas', 'Ferramentas MCP e subagentes.', item => ['mcpToolCall', 'subagent'].includes(item.type)],
-  ['errors', 'Erros', 'Ações com erro ou recusadas.', item => item.permissionDenied || ['failed', 'declined'].includes(item.status)],
+  ['all', uiText('Tudo'), uiText('Todas as ações observadas.'), () => true],
+  ['commands', uiText('Comandos'), uiText('Comandos executados no terminal.'), item => item.type === 'commandExecution'],
+  ['files', uiText('Ficheiros'), uiText('Alterações de ficheiros.'), item => item.type === 'fileChange'],
+  ['web', 'Web', uiText('Pesquisas e páginas consultadas.'), item => item.type === 'webSearch'],
+  ['tools', uiText('Ferramentas'), uiText('Ferramentas MCP e subagentes.'), item => ['mcpToolCall', 'subagent'].includes(item.type)],
+  ['errors', uiText('Erros'), uiText('Ações com erro ou recusadas.'), item => item.permissionDenied || ['failed', 'declined'].includes(item.status)],
 ];
 let activityFilter = 'all';
 function renderActivityFilter(items) {
@@ -1344,8 +1348,8 @@ function turnHeading(item, owners) {
   const owner = owners.find(entry => entry.provider === item.provider && entry.turns?.some(turn => turn.id === item.turnId));
   const turn = owner?.turns.find(entry => entry.id === item.turnId);
   const request = owner?.messages.find(message => message.role === 'user' && !message.internal && (message.requestId === turn?.requestId || message.turnId === item.turnId));
-  const time = turn?.startedAt ? new Date(turn.startedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : '';
-  const text = request?.text?.replace(/\s+/g, ' ').trim() || (turn?.internal ? 'Pedido interno do HYDRAQ' : 'Pedido');
+  const time = turn?.startedAt ? new Date(turn.startedAt).toLocaleTimeString(uiLocale(), { hour: '2-digit', minute: '2-digit' }) : '';
+  const text = request?.text?.replace(/\s+/g, ' ').trim() || (turn?.internal ? uiText('Pedido interno do HYDRAQ') : uiText('Pedido'));
   const heading = element('div', 'activity-turn');
   heading.append(element('span', '', `${providerName(item.provider)}${time ? ` · ${time}` : ''}`), element('strong', '', text.length > 90 ? `${text.slice(0, 90)}…` : text));
   heading.dataset.tip = text.slice(0, 600);
@@ -1366,7 +1370,7 @@ function renderActivity(conversation) {
     view.replaceChildren();
     if (!items.length) {
       const empty = element('div','empty-activity');
-      empty.append(icon(),element('p','',all.length ? 'Nenhuma ação neste filtro.' : 'O trabalho aparece aqui.'),element('small','',all.length ? 'Escolhe “Tudo” para ver todas as ações.' : 'Comandos, ferramentas e alterações, à medida que acontecem.'));
+      empty.append(icon(),element('p','',all.length ? uiText('Nenhuma ação neste filtro.') : uiText('O trabalho aparece aqui.')),element('small','',all.length ? uiText('Escolhe “Tudo” para ver todas as ações.') : uiText('Comandos, ferramentas e alterações, à medida que acontecem.')));
       view.append(empty);
     }
     let previousTurn;
@@ -1379,8 +1383,8 @@ function renderActivity(conversation) {
       details.open = open.has(item.id);
       const owner = owners.find(entry => entry.items.some(own => own.id === item.id)), duration = actions?.actionDuration(item);
       details.append(element('summary','',`${providerName(item.provider)}${item.parentToolUseId ? ' · Subagente' : ''} · ${actions ? actions.actionPhrase(item, { cwd: owner?.cwd }) : itemDescription(item)}`));
-      const statusText = item.permissionDenied ? (item.provider === 'antigravity' ? 'Recusada pelo agy' : 'Recusada') : (statusLabels[item.status] || item.status || 'Em execução');
-      details.append(element('small','',`${statusText}${item.exitCode !== undefined && item.exitCode !== null ? ` · saída ${item.exitCode}` : ''}${duration ? ` · ${duration.measured ? '≈ ' : ''}${actions.formatDuration(duration.ms)}` : ''}`));
+      const statusText = item.permissionDenied ? (item.provider === 'antigravity' ? uiText('Recusada pelo agy') : uiText('Recusada')) : (statusLabels[item.status] || item.status || uiText('Em execução'));
+      details.append(element('small','',`${statusText}${item.exitCode !== undefined && item.exitCode !== null ? uiText` · saída ${item.exitCode}` : ''}${duration ? ` · ${duration.measured ? '≈ ' : ''}${actions.formatDuration(duration.ms)}` : ''}`));
       let output = item.aggregatedOutput || item.text || '';
       if (!output && item.changes) output = item.changes.map(change => `${change.path}\n${change.diff || ''}`).join('\n\n');
       if (!output && item.summary) output = Array.isArray(item.summary) ? item.summary.join('\n') : String(item.summary);
@@ -1401,7 +1405,7 @@ function renderActivity(conversation) {
     diffContent($('#diff'), diff);
   }
   const total = { antigravity: conversation?.nativeUsage?.total_tokens, claude: conversation?.sessionUsage?.totalTokens }[conversation?.provider] ?? conversation?.tokenUsage?.total?.totalTokens;
-  $('#usage').textContent = total ? `${new Intl.NumberFormat('pt-PT').format(total)} tokens · sessão` : (conversation ? statusLabels[conversation.status] || conversation.status : 'Pronto para começar');
+  $('#usage').textContent = total ? uiText`${new Intl.NumberFormat(uiLocale()).format(total)} tokens · sessão` : (conversation ? statusLabels[conversation.status] || conversation.status : uiText('Pronto para começar'));
 }
 
 function approvalButton(label, callback, secondary = false) {
@@ -1428,22 +1432,22 @@ function renderApprovals(conversation) {
     const respond = result => api('/api/respond',{id:request.id,...result});
     if (request.method === 'session/request_permission') {
       const client=providerName(request.id.split(':')[0]);
-      card.append(element('h3','',`${client} precisa da tua autorização`), element('pre','',request.params.toolCall?.title || `Ferramenta do ${client}`));
+      card.append(element('h3','',uiText`${client} precisa da tua autorização`), element('pre','',request.params.toolCall?.title || uiText`Ferramenta do ${client}`));
       const tool = request.params.toolCall || {};
       const item = approvalItem(request), input = tool.rawInput || item?.parameters;
       const locations = tool.locations || item?.locations;
       if (input) card.append(element('pre','',typeof input === 'string' ? input : JSON.stringify(input,null,2)));
-      if (locations?.length) card.append(element('p','',`Caminhos: ${locations.map(location=>location.path).join(', ')}`));
-      for (const block of tool.content || []) if (block.type === 'diff') card.append(element('pre','',`${block.path}\nAntes:\n${block.oldText || ''}\nDepois:\n${block.newText || ''}`));
+      if (locations?.length) card.append(element('p','',uiText`Caminhos: ${locations.map(location=>location.path).join(', ')}`));
+      for (const block of tool.content || []) if (block.type === 'diff') card.append(element('pre','',uiText`${block.path}\nAntes:\n${block.oldText || ''}\nDepois:\n${block.newText || ''}`));
       if (!(tool.content || []).some(block=>block.type==='diff') && item?.changes?.length) card.append(element('pre','',item.changes.map(change=>`${change.path}\n${change.diff || ''}`).join('\n\n')));
-      const labels={allow_once:'Permitir desta vez',allow_always:'Permitir sempre',reject_once:'Recusar',reject_always:'Recusar sempre'};
+      const labels={allow_once:uiText('Permitir desta vez'),allow_always:uiText('Permitir sempre'),reject_once:uiText('Recusar'),reject_always:uiText('Recusar sempre')};
       if (client === 'Cursor' && (request.params.options || []).some(option => option.kind === 'allow_always')) {
-        card.append(element('p','', 'Permitir sempre pode guardar a autorização na configuração do Cursor para pedidos futuros.'));
+        card.append(element('p','', uiText('Permitir sempre pode guardar a autorização na configuração do Cursor para pedidos futuros.')));
       }
       for (const option of request.params.options || []) card.append(approvalButton(labels[option.kind] || option.name,()=>respond({optionId:option.optionId}),option.kind?.startsWith('reject')));
-      card.append(approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
+      card.append(approvalButton(uiText('Parar tarefa'),()=>respond({decision:'cancel'}),true));
     } else if (request.method === 'cursor/ask_question') {
-      card.append(element('h3','',request.params.title || 'O Cursor tem uma pergunta'));
+      card.append(element('h3','',request.params.title || uiText('O Cursor tem uma pergunta')));
       const fields=[];
       for (const question of request.params.questions) {
         const group=element('fieldset','cursor-question'); group.append(element('legend','',question.prompt));
@@ -1455,36 +1459,36 @@ function renderApprovals(conversation) {
         }
         fields.push({id:question.id,choices});card.append(group);
       }
-      card.append(approvalButton('Responder',()=>respond({answers:fields.map(field=>({questionId:field.id,selectedOptionIds:field.choices.filter(input=>input.checked).map(input=>input.value)}))})),approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
+      card.append(approvalButton(uiText('Responder'),()=>respond({answers:fields.map(field=>({questionId:field.id,selectedOptionIds:field.choices.filter(input=>input.checked).map(input=>input.value)}))})),approvalButton(uiText('Parar tarefa'),()=>respond({decision:'cancel'}),true));
     } else if (request.method === 'cursor/create_plan') {
-      card.append(element('h3','',request.params.name || 'Rever o plano do Cursor'));
+      card.append(element('h3','',request.params.name || uiText('Rever o plano do Cursor')));
       if (request.params.overview) card.append(element('p','',request.params.overview));
       const plan=element('div','cursor-plan');plan.append(markdown(request.params.plan));card.append(plan);
-      const owner=state.conversations.find(c=>c.id===request.conversationId),document=owner?.turns.find(t=>t.id===request.params.turnId)?.planDocuments?.find(d=>d.id===request.params.planDocumentId||request.params.toolCallId&&d.toolCallId===request.params.toolCallId);if(document){const file=element('button','secondary-button','Abrir ficheiro do plano');file.type='button';file.addEventListener('click',()=>openPlanDocument(owner,document.id));card.append(file);}
-      card.append(element('p','','Aceitar o plano mantém as autorizações das ferramentas.'));
-      card.append(approvalButton('Aceitar plano',()=>respond({decision:'accept'})),approvalButton('Rejeitar plano',()=>respond({decision:'decline'}),true),approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
+      const owner=state.conversations.find(c=>c.id===request.conversationId),document=owner?.turns.find(t=>t.id===request.params.turnId)?.planDocuments?.find(d=>d.id===request.params.planDocumentId||request.params.toolCallId&&d.toolCallId===request.params.toolCallId);if(document){const file=element('button','secondary-button',uiText('Abrir ficheiro do plano'));file.type='button';file.addEventListener('click',()=>openPlanDocument(owner,document.id));card.append(file);}
+      card.append(element('p','',uiText('Aceitar o plano mantém as autorizações das ferramentas.')));
+      card.append(approvalButton(uiText('Aceitar plano'),()=>respond({decision:'accept'})),approvalButton(uiText('Rejeitar plano'),()=>respond({decision:'decline'}),true),approvalButton(uiText('Parar tarefa'),()=>respond({decision:'cancel'}),true));
     } else if (request.method.endsWith('/requestApproval')) {
-      card.append(element('h3','','O Codex precisa da tua autorização'));
+      card.append(element('h3','',uiText('O Codex precisa da tua autorização')));
       if (request.params.reason) card.append(element('p','',request.params.reason));
       if (request.params.command) card.append(element('pre','',request.params.command));
-      if (request.params.cwd) card.append(element('p','',`Pasta: ${request.params.cwd}`));
-      if (request.params.grantRoot) card.append(element('p','',`Acesso adicional: ${request.params.grantRoot}`));
+      if (request.params.cwd) card.append(element('p','',uiText`Pasta: ${request.params.cwd}`));
+      if (request.params.grantRoot) card.append(element('p','',uiText`Acesso adicional: ${request.params.grantRoot}`));
       if (request.params.itemId) {
         const item = approvalItem(request);
         if (item?.changes) card.append(element('pre','',item.changes.map(change => `${change.path}\n${change.diff || ''}`).join('\n\n')));
       }
-      card.append(approvalButton('Permitir desta vez',()=>respond({decision:'accept'})),approvalButton('Recusar',()=>respond({decision:'decline'}),true),approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
+      card.append(approvalButton(uiText('Permitir desta vez'),()=>respond({decision:'accept'})),approvalButton(uiText('Recusar'),()=>respond({decision:'decline'}),true),approvalButton(uiText('Parar tarefa'),()=>respond({decision:'cancel'}),true));
     } else if (request.method === 'claude/canUseTool') {
       const input = request.params.input || {};
-      card.append(element('h3','',`O Claude Code pede autorização: ${request.params.displayName || request.params.toolName}`));
-      if (request.params.toolName === 'ExitPlanMode') card.append(element('p','','Aprovar o plano tira o Claude de Planear até ao fim deste pedido: pode começar a implementar, pedindo autorização para cada alteração. No pedido seguinte volta ao modo escolhido na caixa de mensagens.'));
+      card.append(element('h3','',uiText`O Claude Code pede autorização: ${request.params.displayName || request.params.toolName}`));
+      if (request.params.toolName === 'ExitPlanMode') card.append(element('p','',uiText('Aprovar o plano tira o Claude de Planear até ao fim deste pedido: pode começar a implementar, pedindo autorização para cada alteração. No pedido seguinte volta ao modo escolhido na caixa de mensagens.')));
       if (request.params.description) card.append(element('p','',request.params.description));
       const preview = input.command || input.plan || (input.file_path ? `${input.file_path}\n${input.content ?? input.new_string ?? ''}` : JSON.stringify(input,null,2));
       card.append(element('pre','',String(preview).slice(0,8000)));
-      if (request.params.blockedPath) card.append(element('p','',`Caminho: ${request.params.blockedPath}`));
-      card.append(approvalButton('Permitir desta vez',()=>respond({decision:'accept'})),approvalButton('Recusar',()=>respond({decision:'decline'}),true),approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
+      if (request.params.blockedPath) card.append(element('p','',uiText`Caminho: ${request.params.blockedPath}`));
+      card.append(approvalButton(uiText('Permitir desta vez'),()=>respond({decision:'accept'})),approvalButton(uiText('Recusar'),()=>respond({decision:'decline'}),true),approvalButton(uiText('Parar tarefa'),()=>respond({decision:'cancel'}),true));
     } else if (request.method === 'claude/askUserQuestion') {
-      card.append(element('h3','','O Claude Code tem perguntas'));
+      card.append(element('h3','',uiText('O Claude Code tem perguntas')));
       const fields=[];
       for (const [index,question] of request.params.questions.entries()) {
         const group=element('fieldset','cursor-question'); group.append(element('legend','',question.header ? `${question.header} · ${question.question}` : question.question));
@@ -1494,20 +1498,20 @@ function renderApprovals(conversation) {
           input.type=question.multiSelect?'checkbox':'radio';input.name=`claude-${request.id}-${index}`;input.value=option.label;
           label.append(input,document.createTextNode(option.description ? `${option.label} — ${option.description}` : option.label));group.append(label);choices.push(input);
         }
-        const other=element('input');other.type='text';other.placeholder='Ou escreve a tua resposta';other.setAttribute('aria-label',`Outra resposta: ${question.question}`);
+        const other=element('input');other.type='text';other.placeholder=uiText('Ou escreve a tua resposta');other.setAttribute('aria-label',uiText`Outra resposta: ${question.question}`);
         group.append(other);fields.push({question,choices,other});card.append(group);
       }
       const answers=()=>Object.fromEntries(fields.map(({question,choices,other})=>[question.question,other.value.trim()?[...choices.filter(input=>input.checked&&question.multiSelect).map(input=>input.value),other.value.trim()]:choices.filter(input=>input.checked).map(input=>input.value)]));
-      card.append(approvalButton('Responder',()=>respond({decision:'accept',answers:answers()})),approvalButton('Não responder',()=>respond({decision:'decline'}),true),approvalButton('Parar tarefa',()=>respond({decision:'cancel'}),true));
+      card.append(approvalButton(uiText('Responder'),()=>respond({decision:'accept',answers:answers()})),approvalButton(uiText('Não responder'),()=>respond({decision:'decline'}),true),approvalButton(uiText('Parar tarefa'),()=>respond({decision:'cancel'}),true));
     } else if (request.method === 'tool/requestUserInput') {
-      card.append(element('h3','','O Codex tem uma pergunta'));
+      card.append(element('h3','',uiText('O Codex tem uma pergunta')));
       const fields = new Map();
       for (const question of request.params.questions) {
         const label = element('label','',question.question);
         let choice;
         if (question.options?.length) {
           choice = element('select');
-          choice.append(element('option','','Escolher uma opção…'));
+          choice.append(element('option','',uiText('Escolher uma opção…')));
           choice.firstElementChild.value = '';
           for (const option of question.options) {
             const entry = element('option','',option.label);
@@ -1519,27 +1523,27 @@ function renderApprovals(conversation) {
         }
         const input = element('input');
         input.type = question.isSecret ? 'password' : 'text';
-        input.placeholder = choice ? 'Ou escreve a tua resposta' : 'A tua resposta';
+        input.placeholder = choice ? uiText('Ou escreve a tua resposta') : uiText('A tua resposta');
         label.append(input);
         card.append(label);
         fields.set(question.id,{choice,input});
       }
-      card.append(approvalButton('Responder',()=>respond({answers:Object.fromEntries([...fields].map(([id,{choice,input}])=>[id,input.value || choice?.value || '']))})));
+      card.append(approvalButton(uiText('Responder'),()=>respond({answers:Object.fromEntries([...fields].map(([id,{choice,input}])=>[id,input.value || choice?.value || '']))})));
     } else {
-      card.append(element('h3','',`Pedido de uma ferramenta ligada ao ${providerName(request.id.split(':')[0])}`));
-      card.append(element('p','',request.params.message || 'Revê o pedido antes de responder.'));
+      card.append(element('h3','',uiText`Pedido de uma ferramenta ligada ao ${providerName(request.id.split(':')[0])}`));
+      card.append(element('p','',request.params.message || uiText('Revê o pedido antes de responder.')));
       if (request.params.url) {
         try {
           const url = new URL(request.params.url);
           if (['http:','https:'].includes(url.protocol)) {
-            const link = element('a','','Abrir página solicitada');
+            const link = element('a','',uiText('Abrir página solicitada'));
             link.href = url.href; link.target = '_blank'; link.rel = 'noopener noreferrer'; card.append(link);
           }
         } catch { /* Invalid external URLs remain plain text in the request. */ }
       }
       const form = elicitationForm(request.params.requestedSchema);
       card.append(form.container);
-      card.append(approvalButton('Confirmar',()=>respond({action:'accept',content:form.read()})),approvalButton('Recusar',()=>respond({action:'decline'}),true));
+      card.append(approvalButton(uiText('Confirmar'),()=>respond({action:'accept',content:form.read()})),approvalButton(uiText('Recusar'),()=>respond({action:'decline'}),true));
     }
     $('#approvals').append(card);
   }
@@ -1553,14 +1557,14 @@ function renderFollowupQueue(conversation) {
   if(panel.dataset.signature===signature)return;
   panel.dataset.signature=signature;panel.replaceChildren();
   for(const {owner,record} of records){
-    const row=element('div','followup-record'),label={saving:'A guardar',queued:'Em fila',stopping:'A confirmar a paragem',dispatching:'A enviar',blocked:'Envio suspenso',uncertain:'Entrega incerta'}[record.status]||record.status;
+    const row=element('div','followup-record'),label={saving:uiText('A guardar'),queued:uiText('Em fila'),stopping:uiText('A confirmar a paragem'),dispatching:uiText('A enviar'),blocked:uiText('Envio suspenso'),uncertain:uiText('Entrega incerta')}[record.status]||record.status;
     row.append(element('strong','',`${providerName(owner.provider)} · ${label}`));
     const detail=element('details','');detail.append(element('summary','',record.text.slice(0,100)),element('p','',record.text));row.append(detail);
     if(record.error)row.append(element('p','followup-error',record.error));
     if(record.status!=='dispatching'){
-      const cancel=element('button','secondary-button',record.status==='uncertain'?'Dispensar aviso':'Cancelar mensagem');cancel.type='button';cancel.addEventListener('click',async()=>{try{await api(`/api/conversations/${owner.id}/steer`,{cancelId:record.id});accept(await api('/api/state'));render();}catch(e){toast(e.message);}});row.append(cancel);
+      const cancel=element('button','secondary-button',record.status==='uncertain'?uiText('Dispensar aviso'):uiText('Cancelar mensagem'));cancel.type='button';cancel.addEventListener('click',async()=>{try{await api(`/api/conversations/${owner.id}/steer`,{cancelId:record.id});accept(await api('/api/state'));render();}catch(e){toast(e.message);}});row.append(cancel);
       if(record.status==='blocked'){
-        const edit=element('button','secondary-button','Editar e enviar como novo pedido');edit.type='button';edit.addEventListener('click',async()=>{if($('#prompt').value.trim()){toast('Guarda ou limpa primeiro o texto da caixa de mensagens.');return;}try{await api(`/api/conversations/${owner.id}/steer`,{cancelId:record.id});choose(owner.id,selectedProject,false,true);$('#prompt').value=record.text;composerIntent={kind:'send'};saveComposerDraft();renderSend();$('#prompt').focus();}catch(e){toast(e.message);}});row.append(edit);
+        const edit=element('button','secondary-button',uiText('Editar e enviar como novo pedido'));edit.type='button';edit.addEventListener('click',async()=>{if($('#prompt').value.trim()){toast(uiText('Guarda ou limpa primeiro o texto da caixa de mensagens.'));return;}try{await api(`/api/conversations/${owner.id}/steer`,{cancelId:record.id});choose(owner.id,selectedProject,false,true);$('#prompt').value=record.text;composerIntent={kind:'send'};saveComposerDraft();renderSend();$('#prompt').focus();}catch(e){toast(e.message);}});row.append(edit);
       }
     }
     panel.append(row);
@@ -1600,7 +1604,7 @@ function renderSend() {
   const delivery=composerIntent?.deliveryMode||deliveryPreferences[conversation?.provider]||deliveryOptions[0];
   if(deliveryOptions.includes(delivery))deliverySelect.value=delivery;
   deliverySelect.disabled=Boolean(sending||expired);
-  deliverySelect.dataset.tip=followupDescriptions[delivery]?.[1]||'Escolhe quando entregar esta mensagem.';
+  deliverySelect.dataset.tip=followupDescriptions[delivery]?.[1]||uiText('Escolhe quando entregar esta mensagem.');
   deliverySelect.classList.toggle('hidden',expired);
   renderFollowupQueue(conversation);
   const hasImages=imageAttachments.list().length>0;
@@ -1611,41 +1615,41 @@ function renderSend() {
   $('#send').disabled = Boolean(nativeUI.session() || claudeUI.session() || openCodeUI.session() || agyUI.session()) || !state || Boolean(state?.projectCatalog?.error || project()?.archived || current()?.organization?.archived || project()?.available===false) || !providerState().models?.some(m=>m.id===$('#model').value) || providerState().connection !== 'connected' || expired || (busy && (!steering || hasImages)) || sending || pending || (!$('#prompt').value.trim() && !hasImages) || (hasImages && (openCodeNoImage || providerState().capabilities?.images===false)) || members(conversation).some(needsUncertaintyReview) || (!moving && conversation?.status === 'uncertain') || (moving && targetMember(conversation)?.status === 'uncertain') || Boolean(dual && dualUI.unavailable(conversation)) || dualIncomplete || dualChanging;
   const passing = state?.handoff && members(conversation).some(entry => entry.id === state.handoff.conversationId);
   $('#stop').classList.toggle('hidden', !passing && !activeStatuses.includes(focus?.status));
-  $('#send').textContent = sending ? 'A enviar…' : dualChanging ? 'A atualizar participantes…' : dualIncomplete ? 'Escolhe mais um cliente ↗' : dual && busy ? 'Aguarda o fim da ronda' : dual ? dualSendLabel(dual, { writing: !dualRead(sandboxValue()) }) : pendingDual ? `Enviar a ${1+(pendingDual.participants||[pendingDual]).length} participantes ↗` : expired ? 'Turno terminado' : steering ? (followupDescriptions[delivery]?.[0]||'Orientar')+' ↗' : moving ? `Continuar no ${providerName()} ↗` : 'Enviar ↗';
+  $('#send').textContent = sending ? uiText('A enviar…') : dualChanging ? uiText('A atualizar participantes…') : dualIncomplete ? uiText('Escolhe mais um cliente ↗') : dual && busy ? uiText('Aguarda o fim da ronda') : dual ? dualSendLabel(dual, { writing: !dualRead(sandboxValue()) }) : pendingDual ? uiText`Enviar a ${1+(pendingDual.participants||[pendingDual]).length} participantes ↗` : expired ? uiText('Turno terminado') : steering ? (followupDescriptions[delivery]?.[0]||uiText('Orientar'))+' ↗' : moving ? uiText`Continuar no ${providerName()} ↗` : uiText('Enviar ↗');
   $('#steer-mode').classList.toggle('hidden', !steering && !expired);
-  $('#steer-title').textContent = expired ? 'O turno desta orientação já terminou.' : '↳ Mensagem durante a execução';
-  $('#steer-description').textContent = expired ? 'O texto foi guardado. Escolhe usá-lo como novo pedido ou limpa-o.' : followupDescriptions[delivery]?.[1]||'A orientação mantém o pedido atual.';
+  $('#steer-title').textContent = expired ? uiText('O turno desta orientação já terminou.') : uiText('↳ Mensagem durante a execução');
+  $('#steer-description').textContent = expired ? uiText('O texto foi guardado. Escolhe usá-lo como novo pedido ou limpa-o.') : followupDescriptions[delivery]?.[1]||uiText('A orientação mantém o pedido atual.');
   $('#use-as-request').classList.toggle('hidden', !expired);
   $('#use-as-request').disabled = sending;
   $('#composer').classList.toggle('steering', steering || expired);
-  $('#prompt').placeholder = steering ? 'Acrescenta uma orientação para a tarefa em curso…' : 'Descreve o que queres fazer…';
-  $('#composer-hint').textContent = openCodeUI.session() ? 'Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ, aqui ao lado.' : nativeUI.session() ? 'Esta conversa está no terminal. Usa Continuar na HYDRAQ, aqui ao lado.' : claudeUI.session() ? 'Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ, aqui ao lado.' : agyUI.session() ? 'Esta conversa está no Antigravity original. Sai do agy (/exit) e usa Continuar na HYDRAQ, aqui ao lado.' : !steering&&workBlock() ? workReason(workBlock())+' · Este projeto/pasta ou cliente está reservado.' : passing ? 'Passagem entre clientes em curso. Aguarda ou usa Parar.' : !followupOptions(focus).length && busy ? `O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? `Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? 'A orientação não foi enviada.' : steering ? (conversation.status === 'waiting' ? 'Orientar não aprova as ações pendentes.' : 'Enter para '+(followupDescriptions[delivery]?.[0]||'orientar').toLowerCase()) : 'Enter para enviar · Shift + Enter para nova linha';
+  $('#prompt').placeholder = steering ? uiText('Acrescenta uma orientação para a tarefa em curso…') : uiText('Descreve o que queres fazer…');
+  $('#composer-hint').textContent = openCodeUI.session() ? uiText('Esta conversa está no OpenCode original. Fecha o terminal e usa Continuar na HYDRAQ, aqui ao lado.') : nativeUI.session() ? uiText('Esta conversa está no terminal. Usa Continuar na HYDRAQ, aqui ao lado.') : claudeUI.session() ? uiText('Esta conversa está no Claude original. Sai do Claude no terminal e usa Continuar na HYDRAQ, aqui ao lado.') : agyUI.session() ? uiText('Esta conversa está no Antigravity original. Sai do agy (/exit) e usa Continuar na HYDRAQ, aqui ao lado.') : !steering&&workBlock() ? workReason(workBlock())+uiText(' · Este projeto/pasta ou cliente está reservado.') : passing ? uiText('Passagem entre clientes em curso. Aguarda ou usa Parar.') : !followupOptions(focus).length && busy ? uiText`O ${providerName(focus.provider)} não suporta orientar durante o turno. Aguarda ou usa Parar.` : moving ? uiText`Enter para continuar no ${providerName()} · a passagem segue com este pedido` : expired ? uiText('A orientação não foi enviada.') : steering ? (conversation.status === 'waiting' ? uiText('Orientar não aprova as ações pendentes.') : uiText('Enter para ')+(followupDescriptions[delivery]?.[0]||uiText('orientar')).toLowerCase()) : uiText('Enter para enviar · Shift + Enter para nova linha');
   if ((dual || pendingDual) && !nativeUI.session() && !claudeUI.session() && !openCodeUI.session() && !agyUI.session()) {
     const name = key => providerName(dual.members[key].provider);
-    $('#composer-hint').textContent = dualChanging ? 'A aguardar a confirmação da composição do Multi.' : dualIncomplete ? 'Seleciona pelo menos dois clientes na barra acima para enviar no Multi.'
-      : dual && busy ? (dualUI.running(conversation) ? 'Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.' : workReason(workBlock()) + ' · Este projeto/pasta ou cliente está reservado.')
-      : !dual || multiTargets(dual).length > 1 ? 'Enter para enviar aos participantes selecionados · respostas independentes nesta ronda'
-      : `Enter para enviar só ao ${name(multiTargets(dual)[0])} · os restantes recebem esta troca quando voltares a falar com eles`;
+    $('#composer-hint').textContent = dualChanging ? uiText('A aguardar a confirmação da composição do Multi.') : dualIncomplete ? uiText('Seleciona pelo menos dois clientes na barra acima para enviar no Multi.')
+      : dual && busy ? (dualUI.running(conversation) ? uiText('Ronda em curso · o rascunho fica guardado até terminar. Podes parar cada modelo.') : workReason(workBlock()) + uiText(' · Este projeto/pasta ou cliente está reservado.'))
+      : !dual || multiTargets(dual).length > 1 ? uiText('Enter para enviar aos participantes selecionados · respostas independentes nesta ronda')
+      : uiText`Enter para enviar só ao ${name(multiTargets(dual)[0])} · os restantes recebem esta troca quando voltares a falar com eles`;
     // Said before sending: a synthesis meant for the next round that is still being written does not go with it.
-    if (dual && !busy && dualUI.pendingSynthesis(conversation)) $('#composer-hint').textContent += ' · A síntese ainda está a ser escrita: se enviares agora, esta ronda segue sem ela.';
+    if (dual && !busy && dualUI.pendingSynthesis(conversation)) $('#composer-hint').textContent += uiText(' · A síntese ainda está a ser escrita: se enviares agora, esta ronda segue sem ela.');
   }
-  $('#stop').textContent = '■ Parar';
+  $('#stop').textContent = uiText('■ Parar');
   if (hydraOn()) renderHydraSend();
   const checkpoint = $('#git-checkpoint-trigger'), checkpointType = checkpointMode();
   const savedPoint = checkpointType === 'hydra' && draftCheckpoint(project(), composerKey());
   checkpoint.hidden = !checkpointType;
   checkpoint.disabled = sending || busy || Boolean(claudexUI?.sending) || steering || expired;
-  checkpoint.textContent = savedPoint ? 'Ponto de segurança · ' + savedPoint.commit.slice(0, 8) : 'Criar ponto de segurança';
+  checkpoint.textContent = savedPoint ? uiText('Ponto de segurança · ') + savedPoint.commit.slice(0, 8) : uiText('Criar ponto de segurança');
   dictationUI?.sync();
   if(dictationUI?.active)$('#send').disabled=true;
 }
 // In Hydra the composer sends to the task: start, update the request of both, or resume.
 function renderHydraSend() {
   const view = claudexUI.view || {}, text = $('#prompt').value.trim();
-  $('#send').textContent = sending || claudexUI.sending ? 'A enviar…' : `${claudexUI.send.textContent} ↗`;
+  $('#send').textContent = sending || claudexUI.sending ? uiText('A enviar…') : `${claudexUI.send.textContent} ↗`;
   $('#send').disabled = sending || claudexUI.send.disabled || (!text && !view.canResume) || imageAttachments.list().length > 0;
   $('#stop').classList.toggle('hidden', !view.running);
-  $('#stop').textContent = `■ ${view.stopLabel || 'Pausar todos'}`;
+  $('#stop').textContent = `■ ${view.stopLabel || uiText('Pausar todos')}`;
   $('#stop').disabled = Boolean(view.stopDisabled);
   $('#steer-mode').classList.add('hidden');
   $('#composer').classList.remove('steering');
@@ -1670,10 +1674,10 @@ function renderUncertainty(conversation) {
   panel.replaceChildren();
   for (const entry of uncertain) {
     panel.append(element('p','',needsUncertaintyReview(entry)
-      ? `${providerName(entry.provider)} terminou sem confirmar o resultado. Inspeciona os ficheiros e as ações antes de continuares; o pedido pode já ter causado alterações.`
-      : `Autorizaste continuar com o resultado incerto do ${providerName(entry.provider)}. Escolhe outro cliente e a passagem rápida; a sessão incerta continua bloqueada e o aviso segue no contexto.`));
+      ? uiText`${providerName(entry.provider)} terminou sem confirmar o resultado. Inspeciona os ficheiros e as ações antes de continuares; o pedido pode já ter causado alterações.`
+      : uiText`Autorizaste continuar com o resultado incerto do ${providerName(entry.provider)}. Escolhe outro cliente e a passagem rápida; a sessão incerta continua bloqueada e o aviso segue no contexto.`));
     if (needsUncertaintyReview(entry)) {
-      const button = element('button','use-as-request','Verifiquei o estado · permitir continuar noutro cliente');
+      const button = element('button','use-as-request',uiText('Verifiquei o estado · permitir continuar noutro cliente'));
       button.disabled = anyBusy() || sending;
       button.addEventListener('click',async()=> {
         button.disabled = true;
@@ -1695,13 +1699,13 @@ function renderHandoffRecovery(conversation) {
   if (view.dataset.signature === signature) return;
   view.dataset.signature = signature; view.replaceChildren();
   if (!owner) return;
-  view.append(element('strong','','Rever contexto demasiado grande'),element('p','',`O contexto para o ${providerName(owner.provider)} não cabe no limite. O histórico original fica guardado. Escreve um resumo das instruções, restrições, resultados e pendentes que queres transmitir em sua substituição. Nada será enviado ao guardar; o resumo seguirá com o próximo pedido.`));
-  const label=element('label','','Resumo revisto por ti');
-  const input=element('textarea');input.rows=5;input.placeholder='Objetivo, restrições, trabalho feito, resultados por confirmar e próximos passos…';input.value=recoveryDrafts.get(owner.id)||'';input.addEventListener('input',()=>recoveryDrafts.set(owner.id,input.value));label.append(input);view.append(label);
-  view.append(approvalButton('Usar este resumo na próxima passagem',async()=>{
+  view.append(element('strong','',uiText('Rever contexto demasiado grande')),element('p','',uiText`O contexto para o ${providerName(owner.provider)} não cabe no limite. O histórico original fica guardado. Escreve um resumo das instruções, restrições, resultados e pendentes que queres transmitir em sua substituição. Nada será enviado ao guardar; o resumo seguirá com o próximo pedido.`));
+  const label=element('label','',uiText('Resumo revisto por ti'));
+  const input=element('textarea');input.rows=5;input.placeholder=uiText('Objetivo, restrições, trabalho feito, resultados por confirmar e próximos passos…');input.value=recoveryDrafts.get(owner.id)||'';input.addEventListener('input',()=>recoveryDrafts.set(owner.id,input.value));label.append(input);view.append(label);
+  view.append(approvalButton(uiText('Usar este resumo na próxima passagem'),async()=>{
     await api(`/api/conversations/${owner.id}/handoff-recovery`,{expectedRecoveryId:owner.handoffRecovery.id,summary:input.value});
     recoveryDrafts.delete(owner.id);
-    accept(await api('/api/state'));render();toast('Resumo guardado. Revê e envia o próximo pedido; o original continua no histórico.');
+    accept(await api('/api/state'));render();toast(uiText('Resumo guardado. Revê e envia o próximo pedido; o original continua no histórico.'));
   }));
 }
 
@@ -1721,7 +1725,7 @@ function renderHydra(conversation) {
   else if (!sending) { if (claudexUI.selected) claudexUI.choose(null, { show: false }); claudexUI.setPair(pair); }
   claudexUI.inline(hydraHost);
   $('#hydra-chip').textContent = `Hydra · ${pairName(pair)}`;
-  $('#hydra-chip').dataset.tip = task ? 'Tarefa Hydra desta conversa. Os participantes, os modelos e as proteções estão no painel Modo.' : 'Escolher a dupla, os modelos e as proteções no painel Modo.';
+  $('#hydra-chip').dataset.tip = task ? uiText('Tarefa Hydra desta conversa. Os participantes, os modelos e as proteções estão no painel Modo.') : uiText('Escolher a dupla, os modelos e as proteções no painel Modo.');
 }
 
 function render() {
@@ -1753,24 +1757,24 @@ function render() {
   $('#connection-state').dataset.connected = String(connection === 'connected');
   $('#provider-label').textContent = name;
   renderClientGlyph(providerId());
-  $('#prompt-label').textContent = `Pedido para o ${name}`;
-  $('#approvals').setAttribute('aria-label',`Pedidos do ${name}`);
-  $('#connection-state').textContent = off ? `○ ${name} desativado` : {connected:`● ${name} ligado`,connecting:`◌ A ligar ao ${name}…`,disconnected:`○ ${name} desligado`}[connection];
+  $('#prompt-label').textContent = uiText`Pedido para o ${name}`;
+  $('#approvals').setAttribute('aria-label',uiText`Pedidos do ${name}`);
+  $('#connection-state').textContent = off ? uiText`○ ${name} desativado` : {connected:uiText`● ${name} ligado`,connecting:uiText`◌ A ligar ao ${name}…`,disconnected:uiText`○ ${name} desligado`}[connection];
   $('#connection-dot').classList.toggle('connected',connection === 'connected');
-  $('#account-label').textContent = account ? ({ opencode: 'OpenCode · apenas modelos gratuitos', cursor: 'Conta do Cursor · autenticação privada', antigravity: 'Sessão do agy · quota do plano', claude: `Claude · ${account.planType}` }[providerId()] || `ChatGPT · ${account.planType}`) : (connection === 'connecting' ? 'A verificar sessão…' : 'Sessão por verificar');
+  $('#account-label').textContent = account ? ({ opencode: uiText('OpenCode · apenas modelos gratuitos'), cursor: uiText('Conta do Cursor · autenticação privada'), antigravity: uiText('Sessão do agy · quota do plano'), claude: `Claude · ${account.planType}` }[providerId()] || `ChatGPT · ${account.planType}`) : (connection === 'connecting' ? uiText('A verificar sessão…') : uiText('Sessão por verificar'));
   $('#client-status').dataset.connection=connection;
-  $('#client-status').dataset.tip=`${name} · ${connection==='connected'?'ligado':connection==='connecting'?'a ligar':'desligado'} · ${$('#account-label').textContent}. Ver ligação e detalhes.`;
-  $('#reconnect').textContent = off ? 'Gerir clientes' : 'Voltar a ligar';
+  $('#client-status').dataset.tip=uiText`${name} · ${connection==='connected'?uiText('ligado'):connection==='connecting'?uiText('a ligar'):uiText('desligado')} · ${$('#account-label').textContent}. Ver ligação e detalhes.`;
+  $('#reconnect').textContent = off ? uiText('Gerir clientes') : uiText('Voltar a ligar');
   $('#reconnect').classList.toggle('hidden',connection !== 'disconnected');
   const visibleTitle=conversation?conversationGroups(state).find(g=>g.id===conversation.group)?.title||conversation.title:'';
   renderTopbar(conversation, visibleTitle);
   const focus = focusConversation(conversation);
-  const notice = (project()?.archived?'Projeto arquivado. Restaura-o nas definições para continuar.':current()?.organization?.archived?'Conversa arquivada. Restaura-a no menu da conversa para continuar.':project()?.available===false?project().folderError:null) || providerState().connectionError || focus?.error || conversation?.error;
+  const notice = (project()?.archived?uiText('Projeto arquivado. Restaura-o nas definições para continuar.'):current()?.organization?.archived?uiText('Conversa arquivada. Restaura-a no menu da conversa para continuar.'):project()?.available===false?project().folderError:null) || providerState().connectionError || focus?.error || conversation?.error;
   $('#notice').textContent = notice || '';
   if (off && state.providerSettings) {
     const available = Object.values(state.providers).some(info => !providerIsOff(info));
-    const text = available ? `${name} está desativado. Podes ativá-lo ou escolher outro cliente.` : 'Todos os clientes estão desativados. Ativa um para começar.';
-    const manage = element('button', 'text-button', 'Gerir clientes');
+    const text = available ? uiText`${name} está desativado. Podes ativá-lo ou escolher outro cliente.` : uiText('Todos os clientes estão desativados. Ativa um para começar.');
+    const manage = element('button', 'text-button', uiText('Gerir clientes'));
     manage.type = 'button';
     manage.addEventListener('click', () => revealSettings($('#provider-settings')));
     $('#notice').replaceChildren(document.createTextNode([notice, text].filter(Boolean).join(' ') + ' '), manage);
@@ -1791,12 +1795,12 @@ function render() {
   renderHandoffRecovery(conversation);
   const active=state.conversations.find(c=>activeStatuses.includes(c.status)) || state.conversations.find(c=>c.id===state.handoff?.conversationId) || state.conversations.find(c=>state.approvals.some(a=>a.conversationId===c.id));
   const banner=$('#global-task');banner.classList.toggle('hidden',!active||(!projectOverview&&active.group===conversation?.group));
-  if(active){banner.textContent=`${providerName(active.provider)} · ${active.title} · ${state.approvals.length?'Decisão pendente':'Tarefa em curso'} — Abrir`;banner.onclick=()=>choose(active.id);}
+  if(active){banner.textContent=uiText`${providerName(active.provider)} · ${active.title} · ${state.approvals.length?uiText('Decisão pendente'):uiText('Tarefa em curso')} — Abrir`;banner.onclick=()=>choose(active.id);}
   const review=state.opinions?.automatic?.cycles.find(r=>['waiting-main','preparing','reviewing','delivering','assessing'].includes(r.status));
-  if(review&&(!conversation||conversation.group!==review.groupId)){banner.classList.remove('hidden');banner.textContent=`Revisão automática · ${review.title} · ${review.status==='reviewing'?'Revisor em curso ou decisão pendente':'Ciclo em curso'} — Abrir`;banner.onclick=()=>choose(review.conversationId);}
+  if(review&&(!conversation||conversation.group!==review.groupId)){banner.classList.remove('hidden');banner.textContent=uiText`Revisão automática · ${review.title} · ${review.status==='reviewing'?uiText('Revisor em curso ou decisão pendente'):uiText('Ciclo em curso')} — Abrir`;banner.onclick=()=>choose(review.conversationId);}
   renderProjectSuggestion();
   const collaboration=state.collaboration?.sessions.find(s=>s.id===state.collaboration.activeId);
-  if(collaboration&&collaborationUI.view!=='collaboration'){banner.classList.remove('hidden');banner.textContent=`Colaboração · ${collaboration.title} · ${collaboration.pendingDecisions?'Aguarda a tua decisão':'Em curso'} — Abrir`;banner.onclick=()=>{collaborationUI.choose(collaboration.id);collaborationUI.show('collaboration');};}
+  if(collaboration&&collaborationUI.view!=='collaboration'){banner.classList.remove('hidden');banner.textContent=uiText`Colaboração · ${collaboration.title} · ${collaboration.pendingDecisions?uiText('Aguarda a tua decisão'):uiText('Em curso')} — Abrir`;banner.onclick=()=>{collaborationUI.choose(collaboration.id);collaborationUI.show('collaboration');};}
   collaborationUI.render();
   claudexUI?.render();
   syncModePanel();
@@ -1804,27 +1808,27 @@ function render() {
   companionUI?.sync();
 }
 function renderTopbar(conversation, visibleTitle) {
-  const title = conversation ? visibleTitle : projectOverview ? (project()?.name || 'Sem projeto') : 'Nova conversa';
+  const title = conversation ? visibleTitle : projectOverview ? (project()?.name || uiText('Sem projeto')) : uiText('Nova conversa');
   $('#project-name').textContent = title;
-  $('#project-name').dataset.tip = conversation ? `Conversa: ${visibleTitle}` : projectOverview ? 'Visão geral do projeto' : 'Conversa nova: o título surge do primeiro pedido.';
+  $('#project-name').dataset.tip = conversation ? uiText`Conversa: ${visibleTitle}` : projectOverview ? uiText('Visão geral do projeto') : uiText('Conversa nova: o título surge do primeiro pedido.');
   const folder = conversationFolder(conversation) || project()?.root || '';
   const editable = !conversation && !project() && !projectOverview;
   $('#cwd').classList.toggle('hidden', !editable);
   $('#choose-cwd').classList.toggle('hidden', !editable);
   $('#folder-chip').classList.toggle('hidden', editable || !folder);
   $('#folder-label').textContent = project() ? `${project().name} · ${shortPath(folder)}` : shortPath(folder);
-  $('#folder-chip').dataset.tip = `${project() ? `Projeto ${project().name}. ` : 'Conversa sem projeto. '}Pasta: ${folder}. ${conversation ? 'A pasta fica fixa nesta conversa.' : 'A pasta do projeto é fixa.'}`;
+  $('#folder-chip').dataset.tip = uiText`${project() ? uiText`Projeto ${project().name}. ` : uiText('Conversa sem projeto. ')}Pasta: ${folder}. ${conversation ? uiText('A pasta fica fixa nesta conversa.') : uiText('A pasta do projeto é fixa.')}`;
   const status = conversation ? focusConversation(conversation)?.status || conversation.status : null;
   $('#session-badge').classList.toggle('hidden', !conversation);
   $('#session-badge').dataset.status = status || '';
   $('#session-badge').textContent = status ? statusLabels[status] || status : '';
-  $('#session-badge').dataset.tip = conversation ? `Estado da conversa · ${providerName(focusConversation(conversation)?.provider)}` : '';
+  $('#session-badge').dataset.tip = conversation ? uiText`Estado da conversa · ${providerName(focusConversation(conversation)?.provider)}` : '';
 }
 function renderProjectSuggestion(){
   const view=$('#project-suggestion');view.replaceChildren();const folder=$('#cwd').value.replace(/\/$/,'');
   const suggestion=!current()&&!project()?state.projectCatalog?.projects.filter(p=>!p.archived&&(folder===p.root||folder.startsWith(p.root==='/'?'/':p.root+'/'))).sort((a,b)=>b.root.length-a.root.length)[0]:null;
   view.classList.toggle('hidden',!suggestion);if(!suggestion)return;
-  const button=element('button','',`Usar projeto ${suggestion.name}`);button.type='button';button.addEventListener('click',()=>choose(null,suggestion.id));view.append(button,element('small','','O novo pedido usará a pasta raiz deste projeto. Podes manter esta conversa solta.'));
+  const button=element('button','',uiText`Usar projeto ${suggestion.name}`);button.type='button';button.addEventListener('click',()=>choose(null,suggestion.id));view.append(button,element('small','',uiText('O novo pedido usará a pasta raiz deste projeto. Podes manter esta conversa solta.')));
 }
 
 $('#provider').addEventListener('change',()=> {
@@ -1901,16 +1905,16 @@ $('#sidebar-scrim').addEventListener('click',()=>layout.closeDrawers());
 $('#inspector-scrim').addEventListener('click',()=>layout.closeDrawers());
 for (const resizer of document.querySelectorAll('.panel-resizer')) layout.bindResizer(resizer);
 document.addEventListener('keydown',event=>{if(event.key==='Escape')layout.closeDrawers();});
-$('#reset-layout').addEventListener('click',()=>{layout.reset();toast('Disposição dos painéis reposta.');});
+$('#reset-layout').addEventListener('click',()=>{layout.reset();toast(uiText('Disposição dos painéis reposta.'));});
 $('#prose-width').addEventListener('click',()=>layout.setProse(layout.state.prose==='full'?'comfortable':'full'));
 $('#text-size').addEventListener('input', event => layout.setTextSize(Number(event.target.value)));
-$('#reset-text').addEventListener('click', () => { layout.resetText(); toast('Tamanho do texto reposto: 15 px.'); });
+$('#reset-text').addEventListener('click', () => { layout.resetText(); toast(uiText('Tamanho do texto reposto: 15 px.')); });
 const appearanceName = entry => entry.name;
-const appearanceMenu = new AppearanceMenu({ layout, trigger: $('#theme-toggle'), inline: $('#appearance-choices'), onChange: entry => toast(`Aparência: ${appearanceName(entry)}.`) });
-const chooseAppearance = entry => { layout.setTheme(entry.theme); appearanceMenu.render(); toast(`Aparência: ${appearanceName(entry)}.`); };
+const appearanceMenu = new AppearanceMenu({ layout, trigger: $('#theme-toggle'), inline: $('#appearance-choices'), onChange: entry => toast(uiText`Aparência: ${appearanceName(entry)}.`) });
+const chooseAppearance = entry => { layout.setTheme(entry.theme); appearanceMenu.render(); toast(uiText`Aparência: ${appearanceName(entry)}.`); };
 new ClientColors({ layout, container: $('#client-colors') });
-$('#reset-colors').addEventListener('click', () => { layout.resetColors(); toast('Cores dos clientes repostas.'); });
-const chooseColumn = value => { layout.setColumn(value); toast(`Largura da conversa: ${COLUMNS.find(entry => entry.value === value).name}.`); };
+$('#reset-colors').addEventListener('click', () => { layout.resetColors(); toast(uiText('Cores dos clientes repostas.')); });
+const chooseColumn = value => { layout.setColumn(value); toast(uiText`Largura da conversa: ${COLUMNS.find(entry => entry.value === value).name}.`); };
 $('#column-choices').replaceChildren(...COLUMNS.map(entry => {
   const button = element('button', 'column-option');
   button.type = 'button';
@@ -1967,28 +1971,28 @@ function mirrorToggle(label, source) {
   nextRequest.push({ row, sync() {
     const on = checkbox ? source.checked : source.getAttribute('aria-pressed') === 'true';
     toggle.setAttribute('aria-pressed', String(on));
-    toggle.textContent = source.id==='review-toggle' ? (on?source.textContent.replace('Revisor · ',''):'Desligado') : on ? 'Ativo' : 'Desligado';
+    toggle.textContent = source.id==='review-toggle' ? (on?source.textContent.replace(uiText('Revisor · '),''):uiText('Desligado')) : on ? uiText('Ativo') : uiText('Desligado');
     toggle.disabled = source.disabled;
     toggle.dataset.tip = (checkbox ? source.closest('[data-tip]') : source)?.dataset.tip || '';
     row.hidden = Boolean(source.closest('.hidden'));
   } });
 }
-mirrorSelect('Cliente', $('#provider'));
-mirrorSelect('Modelo', $('#model'));
-mirrorSelect('Raciocínio', $('#effort'));
-mirrorSelect('Contexto', $('#context'));
+mirrorSelect(uiText('Cliente'), $('#provider'));
+mirrorSelect(uiText('Modelo'), $('#model'));
+mirrorSelect(uiText('Raciocínio'), $('#effort'));
+mirrorSelect(uiText('Contexto'), $('#context'));
 mirrorToggle('Fast', $('#fast'));
-mirrorToggle('Planear', $('#plan-toggle'));
-mirrorToggle('Revisor', $('#review-toggle'));
+mirrorToggle(uiText('Planear'), $('#plan-toggle'));
+mirrorToggle(uiText('Revisor'), $('#review-toggle'));
 mirrorToggle('Multi', $('#dual-toggle'));
-mirrorSelect('Permissões', $('#sandbox'));
+mirrorSelect(uiText('Permissões'), $('#sandbox'));
 $('#next-request-grid').replaceChildren(...nextRequest.map(entry => entry.row));
 function syncNextRequest() {
   for (const entry of nextRequest) entry.sync();
   // The sidebar badge names the model and reasoning of the next request, not just the client.
   const chosen = select => select.selectedOptions[0]?.textContent || '';
   const cursorExtras = providerId() === 'cursor' ? [!$('#context-field').classList.contains('hidden') && chosen($('#context')), !$('#fast-field').classList.contains('hidden') && $('#fast').checked && 'Fast'] : [];
-  $('#model-label').textContent = [chosen($('#model')), chosen($('#effort')), ...cursorExtras,opinionUI.automaticSummary()].filter(Boolean).join(' · ') || 'Modelo por escolher';
+  $('#model-label').textContent = [chosen($('#model')), chosen($('#effort')), ...cursorExtras,opinionUI.automaticSummary()].filter(Boolean).join(' · ') || uiText('Modelo por escolher');
   $('#model-label').dataset.tip = opinionUI.automaticSummary() ? $('#review-toggle').dataset.tip : '';
 }
 $('#composer').addEventListener('change', () => { syncNextRequest(); syncModePanel(); });
@@ -2033,17 +2037,17 @@ function chipGroup(label, source, { collapse = false, clients = false, text = op
       if (clients) {
         const connection = state?.providers?.[chip.dataset.value]?.connection || 'disconnected';
         chip.dataset.connection = connection;
-        chip.dataset.tip = `${providerNames[chip.dataset.value] || chip.dataset.value} · ${connection === 'connected' ? 'ligado' : connection === 'connecting' ? 'a ligar' : 'desligado'}${activeClients ? (activeClients.includes(chip.dataset.value) ? ' · participa no Multi (clica para desligar)' : ' · fora do Multi (clica para ligar)') : ''}`;
+        chip.dataset.tip = uiText`${providerNames[chip.dataset.value] || chip.dataset.value} · ${connection === 'connected' ? uiText('ligado') : connection === 'connecting' ? uiText('a ligar') : uiText('desligado')}${activeClients ? (activeClients.includes(chip.dataset.value) ? uiText(' · participa no Multi (clica para desligar)') : uiText(' · fora do Multi (clica para ligar)')) : ''}`;
       }
     }
     group.hidden = Boolean(source.closest('.hidden')) || !options.length;
     if (head) {
       const chosen = source.selectedOptions[0];
-      head.textContent = chosen ? text(chosen) : 'Escolher';
+      head.textContent = chosen ? text(chosen) : uiText('Escolher');
       head.disabled = disabled;
       head.setAttribute('aria-expanded', String(open));
-      head.setAttribute('aria-label', `${label}: ${head.textContent}. Mostrar as opções`);
-      head.dataset.tip = source.dataset.tip || `${label}: mostrar as opções`;
+      head.setAttribute('aria-label', uiText`${label}: ${head.textContent}. Mostrar as opções`);
+      head.dataset.tip = source.dataset.tip || uiText`${label}: mostrar as opções`;
       list.hidden = !open;
     }
   }
@@ -2076,26 +2080,26 @@ function setupView(className, entries) {
 }
 // In a Dual, how its rounds are synthesized; the dialog holds the choices.
 const dualSynthesisField = (() => {
-  const field = element('div', 'mode-field mode-synthesis'), value = element('span', 'mode-synthesis-value'), button = element('button', 'mode-chip', 'Configurar…');
+  const field = element('div', 'mode-field mode-synthesis'), value = element('span', 'mode-synthesis-value'), button = element('button', 'mode-chip', uiText('Configurar…'));
   button.type = 'button';
   button.addEventListener('click', () => { const record = dualUI?.record(current()); if (record) dualUI.synthesisDialog(record); });
-  field.append(element('span', 'mode-field-label', 'Síntese do Multi'), value, button);
+  field.append(element('span', 'mode-field-label', uiText('Síntese do Multi')), value, button);
   return { element: field, sync() {
     const record = dualUI?.record(current()), settings = record?.synthesis;
     field.hidden = !record;
     if (!record) return;
-    value.textContent = (settings?.auto ? `Automática · ${providerName(settings.provider)} · ${dualUI.modelLabel(settings.provider, settings)}` : 'Manual · botão em cada ronda') + (settings?.context ? ' · entra na ronda seguinte' : '');
+    value.textContent = (settings?.auto ? uiText`Automática · ${providerName(settings.provider)} · ${dualUI.modelLabel(settings.provider, settings)}` : uiText('Manual · botão em cada ronda')) + (settings?.context ? uiText(' · entra na ronda seguinte') : '');
     button.disabled = sending;
   } };
 })();
 const normalSetup = setupView('mode-normal', [
-  chipGroup('Cliente', $('#provider'), { clients: true, text: option => shortClients[option.value] || option.textContent,
+  chipGroup(uiText('Cliente'), $('#provider'), { clients: true, text: option => shortClients[option.value] || option.textContent,
     blocked: () => sending || ($('#provider').disabled && !dualUI?.record(current()) && !dualUI?.pendingFor()),
     pick: id => { if (dualUI?.dockClick(id)) return; if ($('#provider').disabled) return; $('#provider').value = id; $('#provider').dispatchEvent(new Event('change', { bubbles: true })); } }),
-  chipGroup('Modelo', $('#model'), { collapse: true }),
-  chipGroup('Raciocínio', $('#effort')),
-  chipGroup('Contexto', $('#context')),
-  toggleField('Velocidade', 'Fast', $('#fast')),
+  chipGroup(uiText('Modelo'), $('#model'), { collapse: true }),
+  chipGroup(uiText('Raciocínio'), $('#effort')),
+  chipGroup(uiText('Contexto'), $('#context')),
+  toggleField(uiText('Velocidade'), 'Fast', $('#fast')),
   dualSynthesisField,
 ]);
 const hydraSetups = new Map();
@@ -2104,30 +2108,30 @@ function hydraSetup(pair) {
   if (hydraSetups.has(key)) return hydraSetups.get(key);
   const controls = claudexUI.controls, entries = [];
   for (const role of pair) {
-    const model = chipGroup('Modelo', controls[`${role}Model`], { collapse: true });
-    const effort = chipGroup('Raciocínio', controls[`${role}Effort`], { text: option => effortLabels[option.value] || option.textContent });
+    const model = chipGroup(uiText('Modelo'), controls[`${role}Model`], { collapse: true });
+    const effort = chipGroup(uiText('Raciocínio'), controls[`${role}Effort`], { text: option => effortLabels[option.value] || option.textContent });
     const card = element('section', 'mode-participant');
     card.dataset.client = role;
-    card.setAttribute('aria-label', `Participante ${providerNames[role]}`);
+    card.setAttribute('aria-label', uiText`Participante ${providerNames[role]}`);
     const head = element('div', 'mode-participant-head');
     head.append(element('span', 'mode-dot'), element('strong', '', providerNames[role]));
     card.append(head, model.element, effort.element);
     entries.push({ element: card, sync() { model.sync(); effort.sync(); } });
   }
-  entries.push(chipGroup('Principal · coordena o plano e a conclusão', controls.author, { text: option => providerNames[option.value] || option.textContent }));
-  entries.push(chipGroup('Decisão', controls.consensus));
-  entries.push(chipGroup('Tipo de pedido', controls.requestMode));
-  const workspace=chipGroup('Local de trabalho',controls.workspace),workspaceHint=element('p','cx-hint mode-workspace-hint');
+  entries.push(chipGroup(uiText('Principal · coordena o plano e a conclusão'), controls.author, { text: option => providerNames[option.value] || option.textContent }));
+  entries.push(chipGroup(uiText('Decisão'), controls.consensus));
+  entries.push(chipGroup(uiText('Tipo de pedido'), controls.requestMode));
+  const workspace=chipGroup(uiText('Local de trabalho'),controls.workspace),workspaceHint=element('p','cx-hint mode-workspace-hint');
   workspaceHint.id='mode-workspace-hint-'+key.replaceAll('+','-');workspace.element.setAttribute('aria-describedby',workspaceHint.id);
   entries.push(workspace,{element:workspaceHint,sync(){workspaceHint.textContent=claudexUI.workspaceHint.textContent;}});
-  for(const [name,label] of [['writers','Implementadores autorizados · só na cópia privada'],['implementationPreferences','Preferências de distribuição'],['externalEnabled','Ferramentas externas (MCP)'],['externalServers','Servidores externos'],['externalScope','Quem usa ferramentas externas'],['externalRisk','Autorização de ações externas']]){
+  for(const [name,label] of [['writers',uiText('Implementadores autorizados · só na cópia privada')],['implementationPreferences',uiText('Preferências de distribuição')],['externalEnabled',uiText('Ferramentas externas (MCP)')],['externalServers',uiText('Servidores externos')],['externalScope',uiText('Quem usa ferramentas externas')],['externalRisk',uiText('Autorização de ações externas')]]){
     const source=controls[name],wrap=element('label','mode-field'),input=document.createElement(source.tagName.toLowerCase());input.setAttribute('aria-label',label);if(source.multiple){input.multiple=true;input.size=source.size;}if(source.maxLength>0)input.maxLength=source.maxLength;input.placeholder=source.placeholder||'';
     wrap.append(element('span','mode-field-label',label),input);input.addEventListener('change',()=>{if(source.multiple){for(const o of source.options)o.selected=[...input.selectedOptions].some(s=>s.value===o.value);}else source.value=input.value;source.dispatchEvent(new Event('change',{bubbles:true}));});
     entries.push({element:wrap,sync(){wrap.hidden=source.parentElement.hidden;input.disabled=source.disabled;if(source.tagName==='SELECT'){const sig=source.innerHTML;if(input.dataset.options!==sig){input.innerHTML=sig;input.dataset.options=sig;}for(const o of input.options)o.selected=[...source.selectedOptions].some(s=>s.value===o.value);}else if(document.activeElement!==input)input.value=source.value;}});
   }
   entries.push({element:element('p','cx-hint'),sync(){this.element.hidden=claudexUI.externalHint.hidden;this.element.textContent=claudexUI.externalHint.textContent;}});
-  const guards = element('div', 'mode-field mode-guards'), turns = numberField('Proteção · turnos por participante', controls.guardTurns, 'turnos'), minutes = numberField('Proteção · minutos ativos', controls.guardMinutes, 'min');
-  guards.append(element('span', 'mode-field-label', 'Proteções · 0 desativa'), turns.element, minutes.element);
+  const guards = element('div', 'mode-field mode-guards'), turns = numberField(uiText('Proteção · turnos por participante'), controls.guardTurns, 'turnos'), minutes = numberField(uiText('Proteção · minutos ativos'), controls.guardMinutes, 'min');
+  guards.append(element('span', 'mode-field-label', uiText('Proteções · 0 desativa')), turns.element, minutes.element);
   guards.dataset.tip = claudexUI.guardHint.textContent;
   entries.push({ element: guards, sync() { turns.sync(); minutes.sync(); } });
   const setup = setupView('mode-hydra', entries);
@@ -2136,10 +2140,10 @@ function hydraSetup(pair) {
 }
 // Each tile starts with its subtitle, so its name never equals a topbar tab (the Hydra tab).
 const modeTiles = Object.fromEntries([
-  ['normal', 'Normal', 'Um cliente', 1, 'Um cliente responde. Podes trocar de cliente a meio da conversa, com passagem de contexto.'],
-  ['dual', 'Multi', 'Até 4 modelos', 4, 'Dois a quatro clientes, todos, um ou um grupo. Respostas independentes por ronda; só o principal implementa.'],
-  ['review', 'Revisor', 'Automático', 2, 'Outros modelos reveem automaticamente a resposta ou o código do principal.'],
-  ['hydra', 'Hydra', 'Em diálogo', 3, 'Dois ou três modelos planeiam juntos. Se pedires alterações, os implementadores autorizados executam por etapas; todos reveem e testam, na mesma tarefa.'],
+  ['normal', uiText('Normal'), uiText('Um cliente'), 1, uiText('Um cliente responde. Podes trocar de cliente a meio da conversa, com passagem de contexto.')],
+  ['dual', 'Multi', uiText('Até 4 modelos'), 4, uiText('Dois a quatro clientes, todos, um ou um grupo. Respostas independentes por ronda; só o principal implementa.')],
+  ['review', uiText('Revisor'), uiText('Automático'), 2, uiText('Outros modelos reveem automaticamente a resposta ou o código do principal.')],
+  ['hydra', 'Hydra', uiText('Em diálogo'), 3, uiText('Dois ou três modelos planeiam juntos. Se pedires alterações, os implementadores autorizados executam por etapas; todos reveem e testam, na mesma tarefa.')],
 ].map(([mode, label, subtitle, heads, tip]) => {
   const tile = element('button', 'mode-tile');
   tile.type = 'button'; tile.dataset.mode = mode; tile.dataset.tip = tip;
@@ -2199,7 +2203,7 @@ function chooseMode(mode) {
     if (pair) return;
     // From a Dual, Hydra keeps its pair and the models and reasoning in use, in the same conversation.
     const record = dualUI?.record(conversation), fromDual = dualHydraPair(record);
-    if (record && dualUI.running(conversation)) { toast('Aguarda o fim da ronda do Multi para passar ao Hydra.'); return; }
+    if (record && dualUI.running(conversation)) { toast(uiText('Aguarda o fim da ronda do Multi para passar ao Hydra.')); return; }
     hydraDrafts.set(composerKey(), fromDual || lastHydraPair());
     claudexUI?.preset(fromDual ? Object.fromEntries(multiKeys(record).filter(key=>fromDual.includes(record.members[key].provider)).map(key => [record.members[key].provider, dualMemberSettings(record, key)])) : null);
     render();
@@ -2216,7 +2220,7 @@ function chooseMode(mode) {
   if (mode === 'normal') { if (!task && dual) $('#dual-toggle').click(); else if (!task && review) $('#review-toggle').click(); return; }
   const source = $(mode === 'dual' ? '#dual-toggle' : '#review-toggle');
   // A pair still working in this folder keeps its clients reserved: say so instead of doing nothing.
-  if (source.disabled) { toast(mode === 'dual' ? `O Multi fica disponível quando terminar o trabalho em curso${workBlock() ? ': ' + workReason(workBlock()) : ''}.` : source.dataset.tip || 'O Revisor não está disponível agora.'); return; }
+  if (source.disabled) { toast(mode === 'dual' ? uiText`O Multi fica disponível quando terminar o trabalho em curso${workBlock() ? ': ' + workReason(workBlock()) : ''}.` : source.dataset.tip || uiText('O Revisor não está disponível agora.')); return; }
   source.click();
 }
 // The conversation comes back once both participants have stopped; then the chosen mode applies as usual.
@@ -2224,7 +2228,7 @@ async function leaveHydra(task, mode) {
   const id = selected;
   if (!task.released) {
     try { await api(`/api/claudex/${task.id}/stop`, {}); } catch (error) { toast(error.message); return; }
-    toast(`${pairName(task.roles || HYDRA_PAIRS[0])} parado. A conversa volta ao modo anterior quando todos terminarem.`);
+    toast(uiText`${pairName(task.roles || HYDRA_PAIRS[0])} parado. A conversa volta ao modo anterior quando todos terminarem.`);
   }
   for (const deadline = Date.now() + 20000; Date.now() < deadline && state.conversations.find(c => c.id === id)?.claudexTask === task.id;) await new Promise(resolve => setTimeout(resolve, 250));
   if (selected !== id || current()?.claudexTask) { render(); return; }
@@ -2239,10 +2243,10 @@ function syncModePanel() {
   const review = !pair && Boolean(opinionUI.automaticSetting());
   const active = { normal: !pair && !dualPair && !review, dual: Boolean(dualPair), review, hydra: Boolean(pair) };
   const subtitles = {
-    normal: active.normal ? providerName() : 'Um cliente',
-    dual: dualPair ? dualPair.map(id => shortClients[id] || id).join(' + ') : 'Até 4 modelos',
-    review: review ? [$('#review-toggle').textContent.replace(/^Revisor · /, ''), opinionUI.automaticSummary().replace(/^Revisores: /, '')].filter(Boolean).join(' · ') : 'Automático',
-    hydra: pair ? pairName(pair) : 'Em diálogo',
+    normal: active.normal ? providerName() : uiText('Um cliente'),
+    dual: dualPair ? dualPair.map(id => shortClients[id] || id).join(' + ') : uiText('Até 4 modelos'),
+    review: review ? [$('#review-toggle').textContent.replace(/^Revisor · /, ''), opinionUI.automaticSummary().replace(/^Revisores: /, '')].filter(Boolean).join(' · ') : uiText('Automático'),
+    hydra: pair ? pairName(pair) : uiText('Em diálogo'),
   };
   for (const [mode, tile] of Object.entries(modeTiles)) {
     tile.setAttribute('aria-pressed', String(active[mode]));
@@ -2257,7 +2261,7 @@ function syncModePanel() {
   quick.hidden = !record || !claudexUI || !state.claudex;
   quick.disabled = sending || !fromDual || dualUI.running(conversation);
   quick.textContent = fromDual ? `⇢ ${pairName(fromDual)}` : '⇢ Hydra';
-  quick.dataset.tip = !fromDual ? 'O Hydra junta o Codex, o Claude e o Gemini. Este Multi não contém uma dupla compatível.' : dualUI.running(conversation) ? 'Aguarda o fim da ronda para passar ao Hydra.' : `Passar ao Hydra ${pairName(fromDual)} com os mesmos modelos, nesta conversa. Escreves tu o pedido seguinte.`;
+  quick.dataset.tip = !fromDual ? uiText('O Hydra junta o Codex, o Claude e o Gemini. Este Multi não contém uma dupla compatível.') : dualUI.running(conversation) ? uiText('Aguarda o fim da ronda para passar ao Hydra.') : uiText`Passar ao Hydra ${pairName(fromDual)} com os mesmos modelos, nesta conversa. Escreves tu o pedido seguinte.`;
   $('#mode-panel-status').textContent = task && claudexUI ? claudexUI.badge.textContent : '';
   $('#hydra-pairs').hidden = !pair;
   for (const button of pairButtons) {
@@ -2265,7 +2269,7 @@ function syncModePanel() {
     button.setAttribute('aria-pressed', String(on));
     const disabledClients = button.dataset.pair.split('+').filter(id => providerIsOff(state?.providers?.[id]));
     button.disabled = sending || Boolean(task && !on) || disabledClients.length > 0;
-    button.dataset.tip = disabledClients.length ? 'Ativa em Configurações → Clientes: ' + disabledClients.map(providerName).join(', ') + '.' : task ? (task.inPlace ? 'A dupla fica fixa até a tarefa terminar. Para outra dupla, volta a Normal ou Multi e escolhe Hydra outra vez.' : 'A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.') : `${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
+    button.dataset.tip = disabledClients.length ? uiText('Ativa em Configurações → Clientes: ') + disabledClients.map(providerName).join(', ') + '.' : task ? (task.inPlace ? uiText('A dupla fica fixa até a tarefa terminar. Para outra dupla, volta a Normal ou Multi e escolhe Hydra outra vez.') : uiText('A dupla fica fixa depois de iniciar. Para outra dupla, escolhe Hydra numa conversa nova.')) : uiText`${button.querySelector('strong').textContent}: ${button.querySelector('small').textContent} em diálogo, com uma resposta comum.`;
   }
   const setup = pair && claudexUI ? hydraSetup(pair) : normalSetup;
   if ($('#mode-setup').firstElementChild !== setup.element) $('#mode-setup').replaceChildren(setup.element);
@@ -2276,27 +2280,27 @@ function syncModePanel() {
   const terminal = nativeUI.session() ? 'codex' : claudeUI.session() ? 'claude' : openCodeUI.session() ? 'opencode' : agyUI.session() ? 'antigravity' : null;
   const targets = record ? multiTargets(record) : [];
   const clients = pair || (record ? targets.map(key => record.members[key].provider) : dualPair) || [providerId()];
-  const rows = terminal ? [[terminal, 'Terminal original', 'O cliente aplica as suas permissões no terminal.']] : clients.map((id, index) => {
+  const rows = terminal ? [[terminal, uiText('Terminal original'), uiText('O cliente aplica as suas permissões no terminal.')]] : clients.map((id, index) => {
     const mode = clients.length > 1 ? mapSandbox(sandboxValue(), id) : sandboxValue();
     const policy=permissionControls?.value();
     if(policy&&!pair) {
       const requested=policy.profile==='project'&&clients.length>1?{...policy,profile:'read-only'}:policy;
       const effective=effectivePolicy(id,requested,permissionControls?.roundMode()==='mixed');
-      return [id,policyLabel(effective.policy),effective.supported?'Perfil do próximo pedido. O servidor verifica os limites antes de enviar.':permissionControls?.roundMode()==='mixed'?'Este participante entra com as permissões nativas nesta ronda mista.':'Este cliente não aplica o perfil. A ronda estrita será recusada antes do envio.'];
+      return [id,policyLabel(effective.policy),effective.supported?uiText('Perfil do próximo pedido. O servidor verifica os limites antes de enviar.'):permissionControls?.roundMode()==='mixed'?uiText('Este participante entra com as permissões nativas nesta ronda mista.'):uiText('Este cliente não aplica o perfil. A ronda estrita será recusada antes do envio.')];
     }
-    if (pair) return [id, policy?policyLabel(policy):'Proteções Hydra', 'O coordenador limita as ferramentas e reserva a escrita ao implementador autorizado. Os MCP externos dependem da autorização da tarefa.'];
+    if (pair) return [id, policy?policyLabel(policy):uiText('Proteções Hydra'), uiText('O coordenador limita as ferramentas e reserva a escrita ao implementador autorizado. Os MCP externos dependem da autorização da tarefa.')];
     if (id === 'codex') {
       const readOnly = mode === 'read-only';
       const protectedRead = readOnly && providerState(id).capabilities?.protectedReadOnly;
-      return [id, readOnly ? 'Sandbox de leitura' : 'Sandbox de projeto', protectedRead
-        ? 'As escaladas são recusadas e os MCP externos herdados ficam desativados.'
-        : 'O Codex aplica o sandbox nativo. As ferramentas e a rede têm regras próprias.'];
+      return [id, readOnly ? uiText('Sandbox de leitura') : uiText('Sandbox de projeto'), protectedRead
+        ? uiText('As escaladas são recusadas e os MCP externos herdados ficam desativados.')
+        : uiText('O Codex aplica o sandbox nativo. As ferramentas e a rede têm regras próprias.')];
     }
     if (id === 'claude' && mode === 'plan' && (clients.length > 1 || (record && targets[index] !== record.principal)) && providerState(id).capabilities?.protectedConsultation) {
-      return [id, 'Consulta limitada', 'A ronda limita as ferramentas do Claude. Os hooks e os MCP externos ficam desativados.'];
+      return [id, uiText('Consulta limitada'), uiText('A ronda limita as ferramentas do Claude. Os hooks e os MCP externos ficam desativados.')];
     }
-    if (id === 'antigravity' && mode === 'plan') return [id, 'Proteção de planeamento', 'O HYDRAQ aplica um hook às ferramentas em modo Planear.'];
-    return [id, 'Nativo', 'O cliente aplica as suas permissões e confirmações.'];
+    if (id === 'antigravity' && mode === 'plan') return [id, uiText('Proteção de planeamento'), uiText('O HYDRAQ aplica um hook às ferramentas em modo Planear.')];
+    return [id, uiText('Nativo'), uiText('O cliente aplica as suas permissões e confirmações.')];
   });
   const signature = JSON.stringify(rows);
   if (access.dataset.signature !== signature) {
@@ -2354,42 +2358,42 @@ function buildPaletteCommands(query = '') {
     const hay = `${group} ${title} ${subtitle} ${badge}`.toLocaleLowerCase('pt');
     if (!q || hay.includes(q)) entries.push({ group, title, subtitle, badge, action });
   };
-  if (state?.providerSettings) add('Clientes locais', 'Gerir clientes', 'Ativar ou desativar clientes no HYDRAQ', 'Configurações', () => revealSettings($('#provider-settings')));
+  if (state?.providerSettings) add(uiText('Clientes locais'), uiText('Gerir clientes'), uiText('Ativar ou desativar clientes no HYDRAQ'), uiText('Configurações'), () => revealSettings($('#provider-settings')));
   for (const [id, label] of Object.entries(providerNames)) {
     if (providerIsOff(state?.providers?.[id])) continue;
     const connected = state?.providers?.[id]?.connection === 'connected';
-    add('Clientes Locais', `Usar ${label}`, connected ? 'Ligado · mudar para este motor' : 'Desligado · selecionar motor', id === providerId() ? 'Ativo' : label, () => {
+    add(uiText('Clientes Locais'), uiText`Usar ${label}`, connected ? uiText('Ligado · mudar para este motor') : uiText('Desligado · selecionar motor'), id === providerId() ? uiText('Ativo') : label, () => {
       collaborationUI.show('conversations');
       if (!$('#provider').disabled) { $('#provider').value = id; $('#provider').dispatchEvent(new Event('change')); }
       $('#prompt').focus();
     });
   }
-  add('Ações Rápidas', 'Nova conversa', 'Começar um pedido limpo no projeto atual', 'N', () => choose(null));
-  add('Ações Rápidas', 'Novo projeto', 'Criar um projeto com pasta fixa e memória própria', 'Projeto', () => $('#new-project').click());
+  add(uiText('Ações Rápidas'), uiText('Nova conversa'), uiText('Começar um pedido limpo no projeto atual'), 'N', () => choose(null));
+  add(uiText('Ações Rápidas'), uiText('Novo projeto'), uiText('Criar um projeto com pasta fixa e memória própria'), uiText('Projeto'), () => $('#new-project').click());
   if (planSupport[providerId()]) {
-    add('Ações Rápidas', planMode ? 'Desativar modo Planear' : 'Ativar modo Planear', `Modo de planeamento nativo do ${providerName()}`, 'Plan', () => $('#plan-toggle').click());
+    add(uiText('Ações Rápidas'), planMode ? uiText('Desativar modo Planear') : uiText('Ativar modo Planear'), uiText`Modo de planeamento nativo do ${providerName()}`, 'Plan', () => $('#plan-toggle').click());
   }
-  add('Ações Rápidas', collaborationUI.view === 'collaboration' ? 'Ir para Conversas individuais' : 'Ir para Colaboração em equipa', 'Alternar entre chat individual e equipa Sol + Grok + Claude', 'Vista', () => {
+  add(uiText('Ações Rápidas'), collaborationUI.view === 'collaboration' ? uiText('Ir para Conversas individuais') : uiText('Ir para Colaboração em equipa'), uiText('Alternar entre chat individual e equipa Sol + Grok + Claude'), uiText('Vista'), () => {
     collaborationUI.show(collaborationUI.view === 'collaboration' ? 'conversations' : 'collaboration');
   });
   const currentAppearance = layout.appearance();
-  for (const entry of APPEARANCES) add('Aparência', `Aparência ${appearanceName(entry)}`, entry.description, entry === currentAppearance ? 'Ativa' : 'Tema', () => chooseAppearance(entry));
-  for (const entry of COLUMNS) add('Aparência', `Largura da conversa: ${entry.name}`, entry.description, entry.value === layout.state.column ? 'Ativa' : 'Largura', () => chooseColumn(entry.value));
-  add('Ações Rápidas', 'Alternar painel de projetos', 'Mostrar ou esconder a barra lateral esquerda', 'Painel', () => layout.toggle('sidebar'));
-  add('Ações Rápidas', 'Alternar painel de atividade e telemetria', 'Mostrar ou esconder o painel lateral direito', 'Painel', () => layout.toggle('inspector'));
+  for (const entry of APPEARANCES) add(uiText('Aparência'), uiText`Aparência ${appearanceName(entry)}`, entry.description, entry === currentAppearance ? uiText('Ativa') : uiText('Tema'), () => chooseAppearance(entry));
+  for (const entry of COLUMNS) add(uiText('Aparência'), uiText`Largura da conversa: ${entry.name}`, entry.description, entry.value === layout.state.column ? uiText('Ativa') : uiText('Largura'), () => chooseColumn(entry.value));
+  add(uiText('Ações Rápidas'), uiText('Alternar painel de projetos'), uiText('Mostrar ou esconder a barra lateral esquerda'), uiText('Painel'), () => layout.toggle('sidebar'));
+  add(uiText('Ações Rápidas'), uiText('Alternar painel de atividade e telemetria'), uiText('Mostrar ou esconder o painel lateral direito'), uiText('Painel'), () => layout.toggle('inspector'));
   if (companionUI && companionProject()) {
-    add('Ações Rápidas', 'Abrir mascote do projeto (Live)', `Assistente de voz e memória de ${companionProject().name}`, 'Voz', () => companionUI.togglePanel(true));
+    add(uiText('Ações Rápidas'), uiText('Abrir mascote do projeto (Live)'), uiText`Assistente de voz e memória de ${companionProject().name}`, uiText('Voz'), () => companionUI.togglePanel(true));
   }
 
   for (const proj of state?.projectCatalog?.projects || []) {
     if (proj.archived) continue;
-    add('Projetos', proj.name, proj.root, 'Abrir projeto', () => choose(null, proj.id, true));
+    add(uiText('Projetos'), proj.name, proj.root, uiText('Abrir projeto'), () => choose(null, proj.id, true));
   }
   if (state?.conversations) {
     for (const grp of conversationGroups(state).slice(0, 24)) {
       if (grp.organization?.archived) continue;
       const providers = [...new Set(grp.members.map(m => providerNames[m.provider] || m.provider))].join(' → ');
-      add('Conversas', grp.title, conversationFolder(grp.latest), providers, () => choose(grp.latest.id));
+      add(uiText('Conversas'), grp.title, conversationFolder(grp.latest), providers, () => choose(grp.latest.id));
     }
   }
   return entries;
@@ -2401,7 +2405,7 @@ function renderPalette() {
   paletteIndex = Math.min(paletteIndex, Math.max(0, paletteItems.length - 1));
   paletteList.replaceChildren();
   if (!paletteItems.length) {
-    paletteList.append(element('p', 'command-empty', 'Nenhum comando, projeto ou conversa encontrado.'));
+    paletteList.append(element('p', 'command-empty', uiText('Nenhum comando, projeto ou conversa encontrado.')));
     return;
   }
   let currentGroup = '';
@@ -2462,11 +2466,11 @@ document.addEventListener('keydown', event => {
 });
 layout.onChange(state=>{
   $('#text-size').value = String(state.textSize);
-  $('#text-size').setAttribute('aria-valuetext', `${state.textSize} píxeis`);
+  $('#text-size').setAttribute('aria-valuetext', uiText`${state.textSize} píxeis`);
   $('#text-size-value').value = `${state.textSize} px`;
   for (const button of document.querySelectorAll('#column-choices .column-option')) { const on = button.dataset.column === state.column; button.setAttribute('aria-checked', String(on)); button.tabIndex = on ? 0 : -1; }
   $('#prose-width').setAttribute('aria-pressed',String(state.prose==='full'));
-  $('#prose-width').textContent=state.prose==='full'?'Largura confortável do texto':'Largura total do texto';
+  $('#prose-width').textContent=state.prose==='full'?uiText('Largura confortável do texto'):uiText('Largura total do texto');
 });
 layout.apply();
 $('#new-chat').addEventListener('click',()=>choose(null));
@@ -2482,7 +2486,7 @@ document.addEventListener('keydown',event=> {
 // One request to the chosen recipients of a dual conversation; a new conversation starts dual first.
 async function submitDual({ text, draftImages, imageDraftKey, importedContext, conversationAtSubmit, record, pending }) {
   if (dualUI.memberBusy || dualUI.incomplete(conversationAtSubmit)) return;
-  if (importedContext) { toast('A importação de contexto ainda não segue nas perguntas Multi. Envia-a com o Multi desligado.'); return; }
+  if (importedContext) { toast(uiText('A importação de contexto ainda não segue nas perguntas Multi. Envia-a com o Multi desligado.')); return; }
   const target = record ? (record.target==='both'?'all':record.target) : 'all', roster = record?.members || dualUI.pendingMembers(), keys = multiTargets({members:roster,target},target);
   // Read now, while the composer still shows these choices.
   const settings = Object.fromEntries(keys.map(key => {
@@ -2509,7 +2513,7 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
     }
     if (!record) {
       try { record = (await api(`/api/conversations/${conversation.id}/dual`, pending)).dual; }
-      catch (error) { throw new Error(`O Multi não foi ativado: ${error.message} Nada foi enviado.`); }
+      catch (error) { throw new Error(uiText`O Multi não foi ativado: ${error.message} Nada foi enviado.`); }
       dualUI.consumePending(imageDraftKey);
       dualUI.consumePending(draftKey(conversation, selectedProject));
     }
@@ -2524,7 +2528,7 @@ async function submitDual({ text, draftImages, imageDraftKey, importedContext, c
     const failed = Object.keys(result.errors || {});
     if (failed.length) {
       const sent = keys.filter(key => !failed.includes(key)).map(key => providerName(record.members[key].provider));
-      toast(`Enviado ao ${sent.join(' e ')}. Falhou no ${failed.map(key => `${providerName(record.members[key].provider)}: ${String(result.errors[key]).replace(/[.!?]?$/, '.')}`).join(' ')} Usa «Reenviar» no painel quando a outra resposta terminar.`);
+      toast(uiText`Enviado ao ${sent.join(' e ')}. Falhou no ${failed.map(key => `${providerName(record.members[key].provider)}: ${String(result.errors[key]).replace(/[.!?]?$/, '.')}`).join(' ')} Usa «Reenviar» no painel quando a outra resposta terminar.`);
     }
     const key = draftKey(conversation, selectedProject);
     opinionUI.consumeAutomatic(imageDraftKey);
@@ -2564,7 +2568,7 @@ async function submitHydra() {
 }
 $('#composer').addEventListener('submit',async event=> {
   event.preventDefault();
-  if(dictationUI?.active){toast('Termina ou cancela o ditado antes de enviar.');return;}
+  if(dictationUI?.active){toast(uiText('Termina ou cancela o ditado antes de enviar.'));return;}
   if (hydraOn()) { await submitHydra(); return; }
   composerIntent = captureDraftIntent(composerIntent, $('#prompt').value, steerTarget(), chosenDelivery());
   renderSend();
@@ -2586,9 +2590,9 @@ $('#composer').addEventListener('submit',async event=> {
   try {
     let conversation = current();
     if (steeringTarget) {
-      if(importedContext)throw new Error('A importação só pode seguir num pedido novo, depois de terminar o turno.');
+      if(importedContext)throw new Error(uiText('A importação só pode seguir num pedido novo, depois de terminar o turno.'));
       const result = await api(`/api/conversations/${conversationAtSubmit.id}/steer`, { text, requestId: crypto.randomUUID(), expectedTurnId: steeringTarget, mode:composerIntent.deliveryMode||chosenDelivery() });
-      if (!result.accepted) throw new Error('Não foi possível guardar a mensagem. Nada foi reenviado.');
+      if (!result.accepted) throw new Error(uiText('Não foi possível guardar a mensagem. Nada foi reenviado.'));
       if (selected === conversationAtSubmit.id && $('#prompt').value === text) { $('#prompt').value = ''; composerIntent = null; }
       return;
     }
@@ -2647,9 +2651,9 @@ function listen() {
   });
   events.onerror = () => {
     events.close();
-    $('#connection-state').textContent = '○ Ligação local interrompida';
+    $('#connection-state').textContent = uiText('○ Ligação local interrompida');
     $('#send').disabled = true;
-    $('#notice').textContent = 'A ligação ao HYDRAQ foi interrompida. A página volta a ligar automaticamente; os pedidos não são reenviados.';
+    $('#notice').textContent = uiText('A ligação ao HYDRAQ foi interrompida. A página volta a ligar automaticamente; os pedidos não são reenviados.');
     $('#notice').classList.remove('hidden');
     clearTimeout(recoveryTimer);
     recoveryTimer = setTimeout(()=>boot(true),recoveryDelay);
@@ -2660,7 +2664,7 @@ function listen() {
 async function boot(recovering = false) {
   try {
     const response = await fetch('/api/bootstrap', { headers: { 'X-HYDRAQ-Bootstrap': '1' } });
-    if (!response.ok) throw new Error('Não foi possível abrir a sessão local.');
+    if (!response.ok) throw new Error(uiText('Não foi possível abrir a sessão local.'));
     const initial = await response.json();
     token = initial.token;
     state = initial.state;
@@ -2670,7 +2674,7 @@ async function boot(recovering = false) {
     listen();
   } catch (error) {
     if (!recovering) toast(error.message);
-    $('#connection-state').textContent = '○ Servidor indisponível';
+    $('#connection-state').textContent = uiText('○ Servidor indisponível');
     clearTimeout(recoveryTimer);
     recoveryTimer = setTimeout(()=>boot(true),recoveryDelay);
     recoveryDelay = Math.min(recoveryDelay*2,8000);
@@ -2678,16 +2682,17 @@ async function boot(recovering = false) {
 }
 boot();
 
-window.addEventListener('hydraq-draft-storage-error',()=>toast('Não foi possível guardar o rascunho neste navegador. Mantém esta página aberta.'));
+window.addEventListener('hydraq-draft-storage-error',()=>toast(uiText('Não foi possível guardar o rascunho neste navegador. Mantém esta página aberta.')));
 window.addEventListener('pagehide',saveComposerDraft);
+window.addEventListener('hydraq-language-change',saveComposerDraft);
 let loadedPageVersion=null;
 async function showRuntimeVersion(){
  try { const response=await fetch('/health');if(!response.ok)return;const info=await response.json();
  loadedPageVersion??=info.pageVersion;
  let badge=document.querySelector('#runtime-version');if(!badge){badge=element('span','status-chip');badge.id='runtime-version';document.querySelector('.topbar-context').append(badge);}
  const reload=loadedPageVersion!==info.pageVersion;
- badge.textContent=!info.startedAt?'Servidor anterior · Reiniciar servidor':`v${info.version}${info.restartRequired?' · Reiniciar servidor':reload?' · Recarregar página':''}`;
- badge.title=`Servidor iniciado em ${info.startedAt||'data desconhecida'}${info.sourceVersion?' · Ficheiros: v'+info.sourceVersion:''}`;
+ badge.textContent=!info.startedAt?uiText('Servidor anterior · Reiniciar servidor'):`v${info.version}${info.restartRequired?uiText(' · Reiniciar servidor'):reload?uiText(' · Recarregar página'):''}`;
+ badge.title=uiText`Servidor iniciado em ${info.startedAt||uiText('data desconhecida')}${info.sourceVersion?uiText(' · Ficheiros: v')+info.sourceVersion:''}`;
  }catch{}
 }
 showRuntimeVersion();setInterval(showRuntimeVersion,60000);

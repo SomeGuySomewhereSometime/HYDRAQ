@@ -1,9 +1,10 @@
+import { t as uiText } from './i18n.js';
 export const followupDescriptions = {
-  steer: ['Orientar', 'Acrescenta uma orientação ao pedido em curso, sem o cancelar. No OpenCode entra na próxima fronteira entre passos; não interrompe uma resposta ou ferramenta já em execução.'],
-  next: ['Orientar na próxima oportunidade', 'O Claude recebe a orientação quando terminarem as ferramentas em curso; pode seguir no próximo ciclo se o atual terminar primeiro.'],
-  now: ['Redirecionar agora', 'O Claude reage imediatamente: pode interromper a resposta ou passar ferramentas para segundo plano. Não aprova ações pendentes.'],
-  redirect: ['Redirecionar agora', 'Interrompe o Antigravity e continua na mesma sessão apenas após confirmar a paragem. Não desfaz ações já executadas.'],
-  queue: ['Enviar depois', 'Guarda a mensagem no HYDRAQ e envia-a após a conclusão do pedido, com as escolhas atuais da sessão. Uma falha ou reinício exige revisão.'],
+  steer: [uiText('Orientar'), uiText('Acrescenta uma orientação ao pedido em curso, sem o cancelar. No OpenCode entra na próxima fronteira entre passos; não interrompe uma resposta ou ferramenta já em execução.')],
+  next: [uiText('Orientar na próxima oportunidade'), uiText('O Claude recebe a orientação quando terminarem as ferramentas em curso; pode seguir no próximo ciclo se o atual terminar primeiro.')],
+  now: [uiText('Redirecionar agora'), uiText('O Claude reage imediatamente: pode interromper a resposta ou passar ferramentas para segundo plano. Não aprova ações pendentes.')],
+  redirect: [uiText('Redirecionar agora'), uiText('Interrompe o Antigravity e continua na mesma sessão apenas após confirmar a paragem. Não desfaz ações já executadas.')],
+  queue: [uiText('Enviar depois'), uiText('Guarda a mensagem no HYDRAQ e envia-a após a conclusão do pedido, com as escolhas atuais da sessão. Uma falha ou reinício exige revisão.')],
 };
 export function followupOptions(conversation) {
   return conversation?.capabilities?.followupModes || (conversation?.capabilities?.steer !== false && conversation?.provider !== 'antigravity' ? ['steer'] : []);

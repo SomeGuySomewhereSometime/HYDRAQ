@@ -1,3 +1,5 @@
+import { t as uiText } from './i18n.js';
+import { locale as uiLocale } from './i18n.js';
 // What a client is doing, in words: one description shared by the server (progress, Hydra) and the page (progress
 // card, Activity, Dual, Hydra). It only reads what each client recorded; the original fields stay as they are,
 // because permissions, facts and context handoffs use them too.
@@ -5,14 +7,14 @@
 const FINISHED_TURN = new Set(['completed', 'failed', 'interrupted', 'uncertain']);
 const LIVE_TURN = new Set(['starting', 'running', 'waiting']);
 const DONE = new Set(['completed']);
-const HYDRA_TOOLS = { initial_position: 'dar a posição inicial', read_dialogue: 'ler o diálogo', send_to_peer: 'escrever ao parceiro', resolve_question: 'responder a uma pergunta', ready_to_conclude: 'dizer que está pronto a concluir', propose_final: 'propor a resposta comum', review_final: 'rever a resposta comum', declare_impasse: 'declarar um impasse' };
-const CONTEXT_TOOLS = { get_project_memory: 'Ler a memória do projeto', list_project_conversations: 'Listar as conversas do projeto', search_project_conversations: 'Pesquisar nas conversas do projeto', read_conversation_excerpt: 'Ler um excerto de outra conversa' };
+const HYDRA_TOOLS = { initial_position: uiText('dar a posição inicial'), read_dialogue: uiText('ler o diálogo'), send_to_peer: uiText('escrever ao parceiro'), resolve_question: uiText('responder a uma pergunta'), ready_to_conclude: uiText('dizer que está pronto a concluir'), propose_final: uiText('propor a resposta comum'), review_final: uiText('rever a resposta comum'), declare_impasse: uiText('declarar um impasse') };
+const CONTEXT_TOOLS = { get_project_memory: uiText('Ler a memória do projeto'), list_project_conversations: uiText('Listar as conversas do projeto'), search_project_conversations: uiText('Pesquisar nas conversas do projeto'), read_conversation_excerpt: uiText('Ler um excerto de outra conversa') };
 // Each kind in the two forms the page needs: in progress («A ler») and as a line of the request («Ler»).
 const KINDS = {
-  read: ['A ler', 'Ler'], search: ['A procurar', 'Procurar'], list: ['A listar', 'Listar'], edit: ['A alterar', 'Alterar'],
-  command: ['A correr', 'Correr'], web: ['A pesquisar na web', 'Pesquisar na web'], fetch: ['A abrir', 'Abrir'],
-  subagent: ['A delegar num subagente', 'Delegar num subagente'], hydra: ['Hydra · a', 'Hydra ·'], context: ['A consultar o projeto', 'Consultar o projeto'],
-  question: ['A perguntar-te', 'Perguntar-te'], plan: ['A organizar o trabalho', 'Organizar o trabalho'], reasoning: ['A pensar', 'Raciocínio'], tool: ['A usar', 'Usar'],
+  read: [uiText('A ler'), uiText('Ler')], search: [uiText('A procurar'), uiText('Procurar')], list: [uiText('A listar'), uiText('Listar')], edit: [uiText('A alterar'), uiText('Alterar')],
+  command: [uiText('A correr'), uiText('Correr')], web: [uiText('A pesquisar na web'), uiText('Pesquisar na web')], fetch: [uiText('A abrir'), uiText('Abrir')],
+  subagent: [uiText('A delegar num subagente'), uiText('Delegar num subagente')], hydra: [uiText('Hydra · a'), 'Hydra ·'], context: [uiText('A consultar o projeto'), uiText('Consultar o projeto')],
+  question: [uiText('A perguntar-te'), uiText('Perguntar-te')], plan: [uiText('A organizar o trabalho'), uiText('Organizar o trabalho')], reasoning: [uiText('A pensar'), uiText('Raciocínio')], tool: [uiText('A usar'), uiText('Usar')],
 };
 
 export const actionState = item => {
@@ -50,7 +52,7 @@ export function describeAction(item) {
   const kind = item.nativeKind, location = text(item.locations?.[0]?.path) || first(params, 'path', 'filePath', 'file_path');
   if (kind === 'read') return result('read', location || tool, { path: location || null });
   if (kind === 'edit' || kind === 'delete' || kind === 'move') return result('edit', location || tool, { path: location || null });
-  if (kind === 'search') { const query = first(params, 'pattern', 'query'); return result('search', query ? `${/glob/i.test(tool) ? 'ficheiros ' : ''}«${query}»` : tool, { query: query || null, path: location || null }); }
+  if (kind === 'search') { const query = first(params, 'pattern', 'query'); return result('search', query ? `${/glob/i.test(tool) ? uiText('ficheiros ') : ''}«${query}»` : tool, { query: query || null, path: location || null }); }
   if (kind === 'execute') return result('command', first(params, 'command') || item.command || tool, { command: first(params, 'command') || item.command || tool });
   if (kind === 'fetch') return result('fetch', first(params, 'url') || tool);
   if (kind === 'think') return result('reasoning');
@@ -62,7 +64,7 @@ export function describeAction(item) {
       const action = actions[0];
       if (action.type === 'read' && action.path) return result('read', action.path, { path: action.path, command: item.command });
       if (action.type === 'listFiles') return result('list', action.path || '.', { path: action.path || null, command: item.command });
-      if (action.type === 'search') return result('search', [action.query && `«${action.query}»`, action.path && `em ${action.path}`].filter(Boolean).join(' '), { query: action.query || null, path: action.path || null, command: item.command });
+      if (action.type === 'search') return result('search', [action.query && `«${action.query}»`, action.path && uiText`em ${action.path}`].filter(Boolean).join(' '), { query: action.query || null, path: action.path || null, command: item.command });
     }
     return result('command', unwrap(item.command) || tool, { command: unwrap(item.command) || tool });
   }
@@ -74,17 +76,17 @@ export function describeAction(item) {
   // Claude Code, Antigravity and OpenCode tools by name.
   const path = first(params, 'file_path', 'filePath', 'Path', 'AbsolutePath', 'TargetFile', 'path', 'notebook_path');
   if (/^(Read|read|read_file|view_file|view_code_item)$/.test(tool)) return result('read', [path, lines(params.offset ?? params.StartLine, params.limit ? Number(params.offset || 1) + Number(params.limit) - 1 : params.EndLine)].filter(Boolean).join(' · '), { path: path || null });
-  if (/^(Grep|grep|grep_search|codebase_search|search_files)$/.test(tool)) { const query = first(params, 'pattern', 'Query', 'query'), where = first(params, 'path', 'SearchPath', 'SearchDirectory'); return result('search', [query && `«${query}»`, where && `em ${where}`].filter(Boolean).join(' '), { query: query || null, path: where || null }); }
-  if (/^(Glob|glob|find_by_name)$/.test(tool)) { const pattern = first(params, 'pattern', 'Pattern'), where = first(params, 'path', 'SearchDirectory'); return result('search', [pattern && `ficheiros «${pattern}»`, where && `em ${where}`].filter(Boolean).join(' '), { query: pattern || null, path: where || null }); }
+  if (/^(Grep|grep|grep_search|codebase_search|search_files)$/.test(tool)) { const query = first(params, 'pattern', 'Query', 'query'), where = first(params, 'path', 'SearchPath', 'SearchDirectory'); return result('search', [query && `«${query}»`, where && uiText`em ${where}`].filter(Boolean).join(' '), { query: query || null, path: where || null }); }
+  if (/^(Glob|glob|find_by_name)$/.test(tool)) { const pattern = first(params, 'pattern', 'Pattern'), where = first(params, 'path', 'SearchDirectory'); return result('search', [pattern && `ficheiros «${pattern}»`, where && uiText`em ${where}`].filter(Boolean).join(' '), { query: pattern || null, path: where || null }); }
   if (/^(LS|ls|list|list_dir)$/.test(tool)) { const where = first(params, 'path', 'DirectoryPath'); return result('list', where || '.', { path: where || null }); }
   if (/^(WebSearch|websearch|search_web)$/.test(tool)) { const query = first(params, 'query', 'Query'); return result('web', query && `«${query}»`, { query: query || null }); }
   if (tool === 'task') return result('subagent', first(params, 'description', 'subagent_type'));
   if (/^(WebFetch|webfetch|read_url_content)$/.test(tool)) return result('fetch', first(params, 'url', 'Url'));
   if (item.type === 'mcpToolCall' || item.type === 'nativeTool') {
     const title = first(params, 'title'), label = [server && !/^(Claude Code|Antigravity|OpenCode|Cursor)$/.test(server) ? server : '', tool.replace(/^mcp__/, '').replace(/__/g, ' / ')].filter(Boolean).join(' / ');
-    return result('tool', title || item.summary && text(String(item.summary)) && `${label} · ${String(item.summary)}` || label || 'ferramenta');
+    return result('tool', title || item.summary && text(String(item.summary)) && `${label} · ${String(item.summary)}` || label || uiText('ferramenta'));
   }
-  return result('tool', item.type || 'ação');
+  return result('tool', item.type || uiText('ação'));
 }
 
 /** The phrase for an action: «A ler public/app.js» while it runs, «Ler public/app.js» in a list. */
@@ -93,7 +95,7 @@ export function actionPhrase(item, { live = false, cwd = '' } = {}) {
   const shown = shortPaths(detail, cwd);
   if (kind === 'hydra') return `${live ? doing : line} ${shown}`;
   if (kind === 'reasoning') return [live ? doing : line, shown.length > 160 ? shown.slice(0, 159) + '…' : shown].filter(Boolean).join(' · ');
-  if (kind === 'context' || kind === 'plan' || kind === 'question') return live ? (kind === 'context' ? `A ${shown.charAt(0).toLowerCase()}${shown.slice(1)}` : doing) : (shown || line);
+  if (kind === 'context' || kind === 'plan' || kind === 'question') return live ? (kind === 'context' ? uiText`A ${shown.charAt(0).toLowerCase()}${shown.slice(1)}` : doing) : (shown || line);
   return [live ? doing : line, shown].filter(Boolean).join(' ');
 }
 /** Paths inside the conversation's folder are shown relative to it. */
@@ -115,8 +117,8 @@ export function actionDuration(item) {
 }
 export function formatDuration(ms) {
   if (!Number.isFinite(ms) || ms < 0) return '';
-  if (ms < 100) return '< 0,1 s';
-  if (ms < 10_000) return `${(ms / 1000).toFixed(1).replace('.', ',')} s`;
+  if (ms < 100) return uiText('< 0,1 s');
+  if (ms < 10_000) return `${(ms / 1000).toFixed(1).replace('.', uiLocale() === 'pt-PT' ? ',' : '.')} s`;
   const seconds = Math.round(ms / 1000);
   if (seconds < 60) return `${seconds} s`;
   const minutes = Math.floor(seconds / 60);
@@ -130,7 +132,7 @@ export function reasoningText(item) {
 }
 // Clients whose reasoning text HYDRAQ keeps, and what it is: Claude and agy send summaries, Cursor its thoughts.
 // agy and Cursor show their reasoning open while the request runs (as asked for both).
-const THOUGHTS = { claude: { label: 'Resumo do raciocínio · Claude' }, antigravity: { label: 'Resumo do raciocínio · Antigravity', openWhileLive: true }, cursor: { label: 'Raciocínio · Cursor', openWhileLive: true } };
+const THOUGHTS = { claude: { label: uiText('Resumo do raciocínio · Claude') }, antigravity: { label: uiText('Resumo do raciocínio · Antigravity'), openWhileLive: true }, cursor: { label: uiText('Raciocínio · Cursor'), openWhileLive: true } };
 /** The heading for a client's reasoning, or '' for one whose text is not shown. */
 export const thoughtLabel = provider => THOUGHTS[provider]?.label || '';
 export const thoughtOpensLive = provider => Boolean(THOUGHTS[provider]?.openWhileLive);
@@ -186,17 +188,17 @@ export function requestSummary(conversation, turn) {
 export function summaryLine(summary) {
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   return [
-    summary.filesRead && `leu ${plural(summary.filesRead, 'ficheiro', 'ficheiros')}`,
-    summary.filesChanged && `alterou ${plural(summary.filesChanged, 'ficheiro', 'ficheiros')}`,
-    summary.commands && `${plural(summary.commands, 'comando', 'comandos')}${summary.commandsFailed ? ` (${summary.commandsFailed} ${summary.commandsFailed === 1 ? 'falhou' : 'falharam'})` : ''}`,
-    summary.searches && plural(summary.searches, 'pesquisa no projeto', 'pesquisas no projeto'),
-    summary.web && plural(summary.web, 'pesquisa na web', 'pesquisas na web'),
-    summary.tools && plural(summary.tools, 'ferramenta', 'ferramentas'),
-    summary.hydra && plural(summary.hydra, 'passo do Hydra', 'passos do Hydra'),
-    summary.subagents && plural(summary.subagents, 'subagente', 'subagentes'),
-    summary.editsRefused && plural(summary.editsRefused, 'alteração recusada', 'alterações recusadas'),
-    summary.refused - summary.editsRefused > 0 && plural(summary.refused - summary.editsRefused, 'ação recusada', 'ações recusadas'),
-    summary.failed && plural(summary.failed, 'ação com erro', 'ações com erro'),
+    summary.filesRead && uiText`leu ${plural(summary.filesRead, uiText('ficheiro'), uiText('ficheiros'))}`,
+    summary.filesChanged && uiText`alterou ${plural(summary.filesChanged, uiText('ficheiro'), uiText('ficheiros'))}`,
+    summary.commands && `${plural(summary.commands, uiText('comando'), uiText('comandos'))}${summary.commandsFailed ? ` (${summary.commandsFailed} ${summary.commandsFailed === 1 ? uiText('falhou') : uiText('falharam')})` : ''}`,
+    summary.searches && plural(summary.searches, uiText('pesquisa no projeto'), uiText('pesquisas no projeto')),
+    summary.web && plural(summary.web, uiText('pesquisa na web'), uiText('pesquisas na web')),
+    summary.tools && plural(summary.tools, uiText('ferramenta'), uiText('ferramentas')),
+    summary.hydra && plural(summary.hydra, uiText('passo do Hydra'), uiText('passos do Hydra')),
+    summary.subagents && plural(summary.subagents, uiText('subagente'), uiText('subagentes')),
+    summary.editsRefused && plural(summary.editsRefused, uiText('alteração recusada'), uiText('alterações recusadas')),
+    summary.refused - summary.editsRefused > 0 && plural(summary.refused - summary.editsRefused, uiText('ação recusada'), uiText('ações recusadas')),
+    summary.failed && plural(summary.failed, uiText('ação com erro'), uiText('ações com erro')),
     summary.durationMs !== null && formatDuration(summary.durationMs),
   ].filter(Boolean).join(' · ').replace(/^./, letter => letter.toUpperCase());
 }
@@ -207,12 +209,12 @@ export function summaryLine(summary) {
  */
 export function currentWork(conversation, turn) {
   if (!turn) return null;
-  if (turn.status === 'starting') return { state: 'starting', title: 'A iniciar o pedido' };
-  if (turn.status === 'waiting') return { state: 'waiting', title: 'A aguardar a tua decisão', detail: 'Há uma autorização ou pergunta pendente.' };
+  if (turn.status === 'starting') return { state: 'starting', title: uiText('A iniciar o pedido') };
+  if (turn.status === 'waiting') return { state: 'waiting', title: uiText('A aguardar a tua decisão'), detail: uiText('Há uma autorização ou pergunta pendente.') };
   if (!LIVE_TURN.has(turn.status)) return null;
   const active = activeActions(conversation, turn);
-  if (active.length) return { state: 'actions', title: active.length > 1 ? `${active.length} ações em curso` : actionPhrase(active[0], { live: true, cwd: conversation.cwd }), actions: active, since: active.length === 1 ? active[0].at : null };
-  if ((conversation.messages || []).some(message => message.role === 'assistant' && message.turnId === turn.id && message.streaming)) return { state: 'writing', title: 'A escrever a resposta' };
-  if (turnActions(conversation, turn).some(item => item.type === 'reasoning' && actionState(item) === 'inProgress')) return { state: 'reasoning', title: 'A pensar' };
-  return { state: 'working', title: 'A trabalhar · sem atividade detalhada' };
+  if (active.length) return { state: 'actions', title: active.length > 1 ? uiText`${active.length} ações em curso` : actionPhrase(active[0], { live: true, cwd: conversation.cwd }), actions: active, since: active.length === 1 ? active[0].at : null };
+  if ((conversation.messages || []).some(message => message.role === 'assistant' && message.turnId === turn.id && message.streaming)) return { state: 'writing', title: uiText('A escrever a resposta') };
+  if (turnActions(conversation, turn).some(item => item.type === 'reasoning' && actionState(item) === 'inProgress')) return { state: 'reasoning', title: uiText('A pensar') };
+  return { state: 'working', title: uiText('A trabalhar · sem atividade detalhada') };
 }

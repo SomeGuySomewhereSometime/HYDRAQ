@@ -1,3 +1,5 @@
+import { locale as uiLocale } from './i18n.js';
+import { t as uiText } from './i18n.js';
 // Keep the old launcher usable if an older running server has not yet exposed the new asset.
 const { createMascotCharacter } = await import('./mascot-character.js').catch(() => ({}));
 
@@ -9,35 +11,35 @@ const el = (tag, cls, text) => {
 };
 
 const STATUS_LABELS = {
-  offline: 'Desligada',
-  tracking: 'A acompanhar trabalho',
-  connecting: 'A ligar…',
-  listening: 'A ouvir',
-  responding: 'A responder',
-  muted: 'Microfone silenciado',
-  reconnecting: 'A reconectar…',
-  error: 'Com erro',
+  offline: uiText('Desligada'),
+  tracking: uiText('A acompanhar trabalho'),
+  connecting: uiText('A ligar…'),
+  listening: uiText('A ouvir'),
+  responding: uiText('A responder'),
+  muted: uiText('Microfone silenciado'),
+  reconnecting: uiText('A reconectar…'),
+  error: uiText('Com erro'),
 };
 
 const KIND_LABELS = {
-  'user-statement': 'Declaração do utilizador',
-  proposal: 'Proposta',
-  decision: 'Decisão',
-  'client-result': 'Resultado de cliente',
-  preference: 'Preferência',
-  pending: 'Assunto pendente',
+  'user-statement': uiText('Declaração do utilizador'),
+  proposal: uiText('Proposta'),
+  decision: uiText('Decisão'),
+  'client-result': uiText('Resultado de cliente'),
+  preference: uiText('Preferência'),
+  pending: uiText('Assunto pendente'),
 };
 
 const DELEGATION_STATUS_LABELS = {
-  'creating-conversation': 'A preparar pedido…',
-  waiting: 'Aguarda autorização',
-  interrupted: 'Interrompido',
-  limited: 'Limite atingido',
-  sending: 'A enviar pedido…',
-  running: 'Pedido enviado · em execução',
-  completed: 'Concluído',
-  failed: 'Falhou',
-  uncertain: 'Resultado incerto',
+  'creating-conversation': uiText('A preparar pedido…'),
+  waiting: uiText('Aguarda autorização'),
+  interrupted: uiText('Interrompido'),
+  limited: uiText('Limite atingido'),
+  sending: uiText('A enviar pedido…'),
+  running: uiText('Pedido enviado · em execução'),
+  completed: uiText('Concluído'),
+  failed: uiText('Falhou'),
+  uncertain: uiText('Resultado incerto'),
 };
 
 function formatDurationMs(ms) {
@@ -149,8 +151,8 @@ export class CompanionUI {
     this.launcher.setAttribute('aria-controls', 'companion-panel');
 
     this.orb = el('span', 'companion-orb');
-    this.launcherLabel = el('span', 'companion-launcher-label', 'Mascote');
-    this.launcherState = el('small', 'companion-launcher-state', 'Desligada');
+    this.launcherLabel = el('span', 'companion-launcher-label', uiText('Mascote'));
+    this.launcherState = el('small', 'companion-launcher-state', uiText('Desligada'));
     this.badge = el('span', 'companion-badge hidden', '0');
     this.character = null;
     this.launcher.append(this.orb, this.launcherLabel, this.launcherState, this.badge);
@@ -161,7 +163,7 @@ export class CompanionUI {
 
     this.panel = el('section', 'companion-panel hidden');
     this.panel.id = 'companion-panel';
-    this.panel.setAttribute('aria-label', 'Mascote do projeto · Assistente de voz Live');
+    this.panel.setAttribute('aria-label', uiText('Mascote do projeto · Assistente de voz Live'));
 
     this.root.append(this.panel, this.launcher);
     document.body.append(this.root);
@@ -183,17 +185,17 @@ export class CompanionUI {
     }
     this.root.classList.toggle('has-mascot', Boolean(this.character));
     this.launcher.classList.toggle('has-mascot', Boolean(this.character));
-    this.launcher.title = this.character ? 'Clica para abrir a mascote · arrasta para a mover' : 'Abrir o assistente';
+    this.launcher.title = this.character ? uiText('Clica para abrir a mascote · arrasta para a mover') : uiText('Abrir o assistente');
     this.renderLauncher();
   }
 
   #animationButton() {
-    const button = this.#btn(this.mascotAnimation ? 'Desligar animação' : 'Ligar animação', () => {
+    const button = this.#btn(this.mascotAnimation ? uiText('Desligar animação') : uiText('Ligar animação'), () => {
       this.#setMascotAnimation(!this.mascotAnimation);
       this.renderPanel();
     }, 'pill-toggle');
     button.setAttribute('aria-pressed', String(this.mascotAnimation));
-    button.title = 'Liga ou desliga a personagem animada neste navegador; a voz é controlada separadamente.';
+    button.title = uiText('Liga ou desliga a personagem animada neste navegador; a voz é controlada separadamente.');
     return button;
   }
 
@@ -377,11 +379,11 @@ export class CompanionUI {
     const project = this.getProject();
     if (!project) {
       this.root.dataset.status = 'offline';
-      this.launcherLabel.textContent = 'Mascote';
-      this.launcherState.textContent = 'Escolhe um projeto';
+      this.launcherLabel.textContent = uiText('Mascote');
+      this.launcherState.textContent = uiText('Escolhe um projeto');
       this.badge.classList.add('hidden');
       this.character?.setStatus('offline');
-      this.launcher.setAttribute('aria-label', `${this.open ? 'Fechar' : 'Abrir'} mascote Hydra · escolhe um projeto`);
+      this.launcher.setAttribute('aria-label', uiText`${this.open ? uiText('Fechar') : uiText('Abrir')} mascote Hydra · escolhe um projeto`);
       return;
     }
     const status = this.effectiveStatus();
@@ -390,7 +392,7 @@ export class CompanionUI {
     this.launcherLabel.textContent = `${name} · ${project.name}`;
     this.launcherState.textContent = STATUS_LABELS[status] || status;
     this.character?.setStatus(status);
-    this.launcher.setAttribute('aria-label', `${this.open ? 'Fechar' : 'Abrir'} mascote ${name} · ${STATUS_LABELS[status] || status}`);
+    this.launcher.setAttribute('aria-label', uiText`${this.open ? uiText('Fechar') : uiText('Abrir')} mascote ${name} · ${STATUS_LABELS[status] || status}`);
     const pendingCount = this.data?.pendingNotifications?.length || 0;
     this.badge.textContent = String(pendingCount);
     this.badge.classList.toggle('hidden', pendingCount === 0);
@@ -417,10 +419,10 @@ export class CompanionUI {
     if (!project) {
       const empty = el('div', 'companion-empty');
       empty.append(
-        el('strong', '', 'Associa ou escolhe um projeto'),
-        el('p', '', 'Cada projeto do HYDRAQ tem a sua própria mascote com identidade, memória e histórico isolados.'),
+        el('strong', '', uiText('Associa ou escolhe um projeto')),
+        el('p', '', uiText('Cada projeto do HYDRAQ tem a sua própria mascote com identidade, memória e histórico isolados.')),
         this.#animationButton(),
-        this.#btn('Fechar', () => this.togglePanel(false), 'pill-toggle')
+        this.#btn(uiText('Fechar'), () => this.togglePanel(false), 'pill-toggle')
       );
       this.panel.append(empty);
       return;
@@ -448,15 +450,15 @@ export class CompanionUI {
     );
     const nav = el('div', 'companion-nav');
     nav.append(
-      this.#btn('Conversa', () => { this.subview = 'chat'; this.renderPanel(); }, `pill-toggle${this.subview === 'chat' ? ' active' : ''}`),
-      this.#btn('Memória', () => { this.subview = 'memory'; this.renderPanel(); }, `pill-toggle${this.subview === 'memory' ? ' active' : ''}`),
-      this.#btn('Identidade', () => { this.subview = 'identity'; this.renderPanel(); }, `pill-toggle${this.subview === 'identity' ? ' active' : ''}`),
+      this.#btn(uiText('Conversa'), () => { this.subview = 'chat'; this.renderPanel(); }, `pill-toggle${this.subview === 'chat' ? ' active' : ''}`),
+      this.#btn(uiText('Memória'), () => { this.subview = 'memory'; this.renderPanel(); }, `pill-toggle${this.subview === 'memory' ? ' active' : ''}`),
+      this.#btn(uiText('Identidade'), () => { this.subview = 'identity'; this.renderPanel(); }, `pill-toggle${this.subview === 'identity' ? ' active' : ''}`),
       this.#btn('✕', () => this.togglePanel(false), 'icon-button companion-close')
     );
     const close = nav.lastChild;
-    close.setAttribute('aria-label', 'Fechar painel da mascote');
+    close.setAttribute('aria-label', uiText('Fechar painel da mascote'));
     titleWrap.append(close);
-    const expand = this.#btn(this.expanded ? 'Reduzir' : 'Ampliar', () => { this.expanded = !this.expanded; this.renderPanel(); }, 'pill-toggle');
+    const expand = this.#btn(this.expanded ? uiText('Reduzir') : uiText('Ampliar'), () => { this.expanded = !this.expanded; this.renderPanel(); }, 'pill-toggle');
     expand.setAttribute('aria-pressed', String(this.expanded));
     nav.append(expand);
     nav.append(this.#animationButton());
@@ -499,12 +501,12 @@ export class CompanionUI {
   #renderChatView(project, profile, settings, status) {
     const isConnected = Boolean(this.ws && ['connecting', 'listening', 'responding', 'muted', 'reconnecting'].includes(status));
     const voiceBar = el('div', 'companion-voice-bar');
-    const connect = this.#btn(isConnected ? 'Desligar voz' : 'Ligar voz Live', () => isConnected ? this.disconnectLive() : this.connectLive(), 'pill-toggle companion-connect-btn');
+    const connect = this.#btn(isConnected ? uiText('Desligar voz') : uiText('Ligar voz Live'), () => isConnected ? this.disconnectLive() : this.connectLive(), 'pill-toggle companion-connect-btn');
     connect.id = 'companion-connect';
     voiceBar.append(connect);
     if (isConnected) {
       if (settings.voiceMode === 'push-to-talk') {
-        const talk = this.#btn(this.pttActive ? 'A falar… larga para enviar' : 'Manter premido para falar', () => {}, 'pill-toggle companion-ptt');
+        const talk = this.#btn(this.pttActive ? uiText('A falar… larga para enviar') : uiText('Manter premido para falar'), () => {}, 'pill-toggle companion-ptt');
         talk.id = 'companion-ptt';
         talk.setAttribute('aria-pressed', String(this.pttActive));
         talk.addEventListener('pointerdown', e => {
@@ -516,19 +518,19 @@ export class CompanionUI {
         });
         voiceBar.append(talk);
       } else {
-        const mute = this.#btn(this.muted ? 'Ativar microfone' : 'Silenciar', () => this.toggleMute(), 'pill-toggle');
+        const mute = this.#btn(this.muted ? uiText('Ativar microfone') : uiText('Silenciar'), () => this.toggleMute(), 'pill-toggle');
         mute.id = 'companion-mute'; voiceBar.append(mute);
       }
-      const interrupt = this.#btn('Interromper', () => this.interruptSpeech(), 'pill-toggle');
+      const interrupt = this.#btn(uiText('Interromper'), () => this.interruptSpeech(), 'pill-toggle');
       interrupt.id = 'companion-interrupt'; voiceBar.append(interrupt);
     }
-    const hint = el('span', 'companion-voice-hint', isConnected ? STATUS_LABELS[status] || status : 'Histórico disponível sem ligar a voz');
+    const hint = el('span', 'companion-voice-hint', isConnected ? STATUS_LABELS[status] || status : uiText('Histórico disponível sem ligar a voz'));
     voiceBar.append(hint);
     this.panel.append(voiceBar);
 
     const options = el('details', 'companion-options');
     options.open = this.optionsOpen;
-    options.append(el('summary', '', 'Opções de voz e memória'));
+    options.append(el('summary', '', uiText('Opções de voz e memória')));
     options.addEventListener('toggle', () => { if (options.isConnected) this.optionsOpen = options.open; });
     const controls = el('div', 'companion-options-body');
     const select = (id, label, values, current, change) => {
@@ -539,71 +541,71 @@ export class CompanionUI {
       control.addEventListener('change', () => change(control.value));
       wrap.append(control); controls.append(wrap);
     };
-    select('companion-model-select', 'Modelo de voz', [['gemini-3.8-live', '3.8 Live · Rápido'], ['gemini-3.8-live-extended-thinking', '3.8 Extended Thinking']], settings.model, async model => {
+    select('companion-model-select', uiText('Modelo de voz'), [['gemini-3.8-live', uiText('3.8 Live · Rápido')], ['gemini-3.8-live-extended-thinking', '3.8 Extended Thinking']], settings.model, async model => {
       if (await this.#updateSettings({ model }) && isConnected) { this.disconnectLive(); await this.connectLive(); }
     });
-    select('companion-voice-mode', 'Microfone', [['hands-free', 'Mãos-livres'], ['push-to-talk', 'Carregar para falar']], settings.voiceMode, voiceMode => this.#updateSettings({ voiceMode }));
-    for (const [key, label] of [['pauseMicWhileSpeaking', 'Pausar mic ao falar'], ['saveHistory', 'Guardar histórico'], ['useMemory', 'Usar memória'], ['updateMemory', 'Atualizar memória'], ['temporarySession', 'Sessão temporária']]) {
+    select('companion-voice-mode', uiText('Microfone'), [['hands-free', uiText('Mãos-livres')], ['push-to-talk', uiText('Carregar para falar')]], settings.voiceMode, voiceMode => this.#updateSettings({ voiceMode }));
+    for (const [key, label] of [['pauseMicWhileSpeaking', uiText('Pausar mic ao falar')], ['saveHistory', uiText('Guardar histórico')], ['useMemory', uiText('Usar memória')], ['updateMemory', uiText('Atualizar memória')], ['temporarySession', uiText('Sessão temporária')]]) {
       const wrap = el('label', 'companion-toggle-chip'); const input = el('input'); input.type = 'checkbox'; input.checked = Boolean(settings[key]); input.dataset.setting = key;
       input.addEventListener('change', () => this.#updateSettings({ [key]: input.checked })); wrap.append(input, el('span', '', label)); controls.append(wrap);
     }
     options.append(controls); this.panel.append(options);
 
     const convBar = el('div', 'companion-conv-bar');
-    const convSelect = el('select', 'pill-select companion-conv-select'); convSelect.setAttribute('aria-label', 'Conversa da mascote');
-    for (const c of this.data?.conversations || []) { const opt = el('option', '', `${c.title} · ${c.messageCount || 0} mensagens`); opt.value = c.id; convSelect.append(opt); }
+    const convSelect = el('select', 'pill-select companion-conv-select'); convSelect.setAttribute('aria-label', uiText('Conversa da mascote'));
+    for (const c of this.data?.conversations || []) { const opt = el('option', '', uiText`${c.title} · ${c.messageCount || 0} mensagens`); opt.value = c.id; convSelect.append(opt); }
     convSelect.value = this.data?.activeConversation?.id || '';
     convSelect.addEventListener('change', async () => {
       await this.api(`/api/projects/${this.projectId}/companion/conversations`, { action: 'select', conversationId: convSelect.value });
       this.liveInputDraft = ''; this.liveOutputDraft = ''; await this.refresh(convSelect.value);
     });
-    convBar.append(convSelect, this.#btn('＋ Nova', async () => {
+    convBar.append(convSelect, this.#btn(uiText('＋ Nova'), async () => {
       const created = await this.api(`/api/projects/${this.projectId}/companion/conversations`, { action: 'create' });
       this.liveInputDraft = ''; this.liveOutputDraft = ''; await this.refresh(created.id);
     }, 'pill-toggle'));
     this.panel.append(convBar);
 
     const msgList = el('div', 'companion-messages'); msgList.id = 'companion-messages';
-    msgList.setAttribute('role', 'region'); msgList.setAttribute('aria-label', 'Mensagens e tarefas da mascote'); msgList.tabIndex = 0;
-    if (this.data?.nextBlockCursor) msgList.append(this.#btn('Carregar mensagens anteriores', () => this.loadOlderMessages(), 'text-button companion-load-older'));
+    msgList.setAttribute('role', 'region'); msgList.setAttribute('aria-label', uiText('Mensagens e tarefas da mascote')); msgList.tabIndex = 0;
+    if (this.data?.nextBlockCursor) msgList.append(this.#btn(uiText('Carregar mensagens anteriores'), () => this.loadOlderMessages(), 'text-button companion-load-older'));
     const entries = [
       ...(this.data?.messages || []).map(message => ({ at: message.at, message })),
       ...(this.data?.actions || []).filter(action => !action.companionConversationId || action.companionConversationId === this.data?.activeConversation?.id).map(action => ({ at: action.createdAt, action })),
     ].sort((a, b) => String(a.at).localeCompare(String(b.at)));
-    if (!entries.length && !this.liveInputDraft && !this.liveOutputDraft) msgList.append(el('p', 'companion-empty-chat', `Fala ou escreve para ${profile.name}. Os pedidos delegados e as respostas aparecem também na conversa normal.`));
+    if (!entries.length && !this.liveInputDraft && !this.liveOutputDraft) msgList.append(el('p', 'companion-empty-chat', uiText`Fala ou escreve para ${profile.name}. Os pedidos delegados e as respostas aparecem também na conversa normal.`));
     let previousDay = '';
     for (const entry of entries) {
       const date = new Date(entry.at);
-      const day = Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString('pt-PT', { day: 'numeric', month: 'long' });
+      const day = Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(uiLocale(), { day: 'numeric', month: 'long' });
       if (day && day !== previousDay) { msgList.append(el('div', 'companion-day', day)); previousDay = day; }
       if (entry.action) { msgList.append(this.#delegationCard(entry.action, profile)); continue; }
       const m = entry.message;
       const item = el('article', `companion-msg role-${m.role}${m.interrupted ? ' interrupted' : ''}`); item.dataset.messageId = m.id;
       const meta = el('header', 'companion-msg-meta');
-      const time = Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
-      meta.append(el('strong', '', m.role === 'user' ? 'Tu' : profile.name), el('small', '', `${time}${m.interrupted ? ' · interrompida' : ''}`));
+      const time = Number.isNaN(date.getTime()) ? '' : date.toLocaleTimeString(uiLocale(), { hour: '2-digit', minute: '2-digit' });
+      meta.append(el('strong', '', m.role === 'user' ? uiText('Tu') : profile.name), el('small', '', `${time}${m.interrupted ? uiText(' · interrompida') : ''}`));
       item.append(meta);
       if (this.markdown && m.role === 'assistant') { const body = this.markdown(m.text || '', `companion-${m.id}`); body.classList.add('companion-msg-text'); item.append(body); }
       else item.append(el('p', 'companion-msg-text', m.text));
       if (!settings.temporarySession && m.text) {
-        const details = el('details', 'companion-message-options'); details.append(el('summary', '', 'Mais opções'), this.#btn('Guardar decisão no projeto', () => this.#publishDecision(m), 'text-button')); item.append(details);
+        const details = el('details', 'companion-message-options'); details.append(el('summary', '', uiText('Mais opções')), this.#btn(uiText('Guardar decisão no projeto'), () => this.#publishDecision(m), 'text-button')); item.append(details);
       }
       msgList.append(item);
     }
-    for (const [text, role, label] of [[this.liveInputDraft, 'user', 'Tu · em direto'], [this.liveOutputDraft, 'assistant', `${profile.name} · a falar…`]]) {
+    for (const [text, role, label] of [[this.liveInputDraft, 'user', uiText('Tu · em direto')], [this.liveOutputDraft, 'assistant', uiText`${profile.name} · a falar…`]]) {
       if (text) { const item = el('article', `companion-msg role-${role} draft`); item.setAttribute('aria-live', 'polite'); item.append(el('strong', '', label), el('p', 'companion-msg-text', text)); msgList.append(item); }
     }
     this.panel.append(msgList);
-    const latest = this.#btn('↓ Ir para as mais recentes', () => { msgList.scrollTop = msgList.scrollHeight; latest.hidden = true; }, 'companion-latest text-button');
+    const latest = this.#btn(uiText('↓ Ir para as mais recentes'), () => { msgList.scrollTop = msgList.scrollHeight; latest.hidden = true; }, 'companion-latest text-button');
     latest.hidden = true;
     msgList.addEventListener('scroll', () => { latest.hidden = msgList.scrollHeight - msgList.scrollTop - msgList.clientHeight < 40; });
     this.panel.append(latest);
 
     const form = el('form', 'companion-composer');
     const input = el('textarea', 'companion-text-input'); input.id = 'companion-text-input'; input.rows = 2; input.maxLength = 4000;
-    input.setAttribute('aria-label', isConnected ? 'Mensagem para a mascote' : 'Pedido a delegar ao Codex');
-    input.placeholder = isConnected ? `Mensagem para ${profile.name}…` : 'Pedido só de leitura para o Codex…';
-    const submit = el('button', 'pill-toggle', isConnected ? 'Enviar' : 'Delegar ao Codex'); submit.type = 'submit';
+    input.setAttribute('aria-label', isConnected ? uiText('Mensagem para a mascote') : uiText('Pedido a delegar ao Codex'));
+    input.placeholder = isConnected ? uiText`Mensagem para ${profile.name}…` : uiText('Pedido só de leitura para o Codex…');
+    const submit = el('button', 'pill-toggle', isConnected ? uiText('Enviar') : uiText('Delegar ao Codex')); submit.type = 'submit';
     form.append(input, submit);
     input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); form.requestSubmit(); } });
     form.addEventListener('submit', async e => {
@@ -621,11 +623,11 @@ export class CompanionUI {
           await this.refresh();
         }
         this.#showStandaloneDelegation(projectId, result);
-        this.toast(result.accepted ? 'Pedido da mascote enviado ao Codex.' : result.error || result.note);
+        this.toast(result.accepted ? uiText('Pedido da mascote enviado ao Codex.') : result.error || result.note);
       } catch (error) { this.toast(error.message); } finally { submit.disabled = false; }
     });
     this.panel.append(form);
-    this.panel.append(el('p', 'companion-privacy-note', 'Só as delegações e as respostas dos modelos entram na conversa normal.'));
+    this.panel.append(el('p', 'companion-privacy-note', uiText('Só as delegações e as respostas dos modelos entram na conversa normal.')));
   }
 
   #showStandaloneDelegation(projectId, result) {
@@ -639,12 +641,12 @@ export class CompanionUI {
     const duration = Number.isFinite(action.durationMs) ? formatDurationMs(action.durationMs) : '';
     card.append(el('strong', 'companion-delegation-head', `${profile.name} → ${action.provider} · ${label}${duration ? ` · ${duration}` : ''}`), el('p', 'companion-delegation-prompt', action.prompt));
     if (action.claimedConclusion) {
-      const details = el('details', 'companion-result'); details.append(el('summary', '', 'Resposta do modelo'));
+      const details = el('details', 'companion-result'); details.append(el('summary', '', uiText('Resposta do modelo')));
       if (this.markdown) details.append(this.markdown(action.claimedConclusion, `companion-action-${action.id}`)); else details.append(el('p', '', action.claimedConclusion));
       card.append(details);
     }
     if (action.error) card.append(el('p', 'companion-delegation-error', action.error));
-    if (action.targetConversationId && this.chooseConversation) card.append(this.#btn('Abrir pedido e resposta na conversa', () => this.chooseConversation(action.targetConversationId), 'text-button'));
+    if (action.targetConversationId && this.chooseConversation) card.append(this.#btn(uiText('Abrir pedido e resposta na conversa'), () => this.chooseConversation(action.targetConversationId), 'text-button'));
     return card;
   }
 
@@ -653,21 +655,21 @@ export class CompanionUI {
     const memory = this.data?.memory || { summary: { text: '' }, items: [] };
 
     wrap.append(
-      el('p', 'companion-subview-note', 'Desligar a memória nos controlos apenas impede o seu uso ou atualização; não apaga recordações. Apagar aqui enquanto uma sessão Live está ativa recria a sessão sem o item removido.')
+      el('p', 'companion-subview-note', uiText('Desligar a memória nos controlos apenas impede o seu uso ou atualização; não apaga recordações. Apagar aqui enquanto uma sessão Live está ativa recria a sessão sem o item removido.'))
     );
 
     // Summary editor
-    const sumLabel = el('label', 'companion-field-label', `Resumo acumulado (cobre até mensagem ${memory.summary?.coveredUntilMessageId || 'n/a'})`);
+    const sumLabel = el('label', 'companion-field-label', uiText`Resumo acumulado (cobre até mensagem ${memory.summary?.coveredUntilMessageId || 'n/a'})`);
     const sumInput = el('textarea', 'companion-textarea');
     sumInput.rows = 3;
     sumInput.maxLength = 2500;
     sumInput.value = memory.summary?.text || '';
-    const saveSumBtn = this.#btn('Guardar resumo', async () => {
+    const saveSumBtn = this.#btn(uiText('Guardar resumo'), async () => {
       await this.api(`/api/projects/${this.projectId}/companion/memory`, {
         action: 'update-summary',
         text: sumInput.value,
       });
-      this.toast('Resumo da mascote atualizado.');
+      this.toast(uiText('Resumo da mascote atualizado.'));
       await this.refresh();
     }, 'pill-toggle');
     wrap.append(sumLabel, sumInput, saveSumBtn);
@@ -681,9 +683,9 @@ export class CompanionUI {
       kindSelect.append(o);
     }
     const textInput = el('input', 'companion-text-input');
-    textInput.placeholder = 'Nova recordação factual…';
+    textInput.placeholder = uiText('Nova recordação factual…');
     textInput.maxLength = 600;
-    const addBtn = el('button', 'pill-toggle', '＋ Recordação');
+    const addBtn = el('button', 'pill-toggle', uiText('＋ Recordação'));
     addBtn.type = 'submit';
     addForm.append(kindSelect, textInput, addBtn);
     addForm.addEventListener('submit', async e => {
@@ -710,8 +712,8 @@ export class CompanionUI {
       );
       const rowActions = el('div', 'companion-memory-actions');
       rowActions.append(
-        this.#btn('Corrigir', async () => {
-          const edited = prompt('Corrigir recordação:', item.text);
+        this.#btn(uiText('Corrigir'), async () => {
+          const edited = prompt(uiText('Corrigir recordação:'), item.text);
           if (edited && edited.trim() && edited.trim() !== item.text) {
             await this.api(`/api/projects/${this.projectId}/companion/memory`, {
               action: 'update',
@@ -721,7 +723,7 @@ export class CompanionUI {
             await this.refresh();
           }
         }, 'text-button'),
-        this.#btn('Apagar', async () => {
+        this.#btn(uiText('Apagar'), async () => {
           await this.api(`/api/projects/${this.projectId}/companion/memory`, {
             action: 'delete-item',
             itemId: item.id,
@@ -732,24 +734,24 @@ export class CompanionUI {
       row.append(rowActions);
       list.append(row);
     }
-    if (!memory.items?.length) list.append(el('p', '', 'Ainda não há recordações guardadas neste projeto.'));
+    if (!memory.items?.length) list.append(el('p', '', uiText('Ainda não há recordações guardadas neste projeto.')));
     wrap.append(list);
 
     // Danger zone: delete active conversation or clear all companion memory
     const clearBar = el('div', 'companion-clear-bar');
     if (this.data?.activeConversation?.id) {
-      clearBar.append(this.#btn('Apagar esta conversa', async () => {
+      clearBar.append(this.#btn(uiText('Apagar esta conversa'), async () => {
         await this.api(`/api/projects/${this.projectId}/companion/conversations`, {
           action: 'delete',
           conversationId: this.data.activeConversation.id,
         });
-        this.toast('Conversa da mascote apagada.');
+        this.toast(uiText('Conversa da mascote apagada.'));
         await this.refresh();
       }, 'text-button'));
     }
-    clearBar.append(this.#btn('Apagar toda a memória da mascote', async () => {
+    clearBar.append(this.#btn(uiText('Apagar toda a memória da mascote'), async () => {
       await this.api(`/api/projects/${this.projectId}/companion/memory`, { action: 'clear-all' });
-      this.toast('Memória da mascote deste projeto apagada.');
+      this.toast(uiText('Memória da mascote deste projeto apagada.'));
       await this.refresh();
     }, 'text-button'));
     wrap.append(clearBar);
@@ -777,8 +779,8 @@ export class CompanionUI {
 
     const modelSelect = el('select', 'pill-select');
     for (const [m, label] of [
-      ['gemini-3.8-live', 'gemini-3.8-live (Recomendado · Rápido)'],
-      ['gemini-3.8-live-extended-thinking', 'gemini-3.8-live-extended-thinking (Raciocínio alargado)'],
+      ['gemini-3.8-live', uiText('gemini-3.8-live (Recomendado · Rápido)')],
+      ['gemini-3.8-live-extended-thinking', uiText('gemini-3.8-live-extended-thinking (Raciocínio alargado)')],
     ]) {
       const o = el('option', '', label);
       o.value = m;
@@ -787,7 +789,7 @@ export class CompanionUI {
     modelSelect.value = settings.model || 'gemini-3.8-live';
 
     const thinkingSelect = el('select', 'pill-select');
-    for (const [lvl, label] of [['low', 'Leve (low)'], ['medium', 'Médio (medium)'], ['high', 'Alto (high)']]) {
+    for (const [lvl, label] of [['low', uiText('Leve (low)')], ['medium', uiText('Médio (medium)')], ['high', uiText('Alto (high)')]]) {
       const o = el('option', '', label);
       o.value = lvl;
       thinkingSelect.append(o);
@@ -799,13 +801,13 @@ export class CompanionUI {
       l.append(control);
       form.append(l);
     };
-    addField('Nome da mascote neste projeto', nameInput);
-    addField('Voz (Gemini Live)', voiceSelect);
-    addField('Estilo de comunicação', styleInput);
-    addField('Modelo Gemini Live', modelSelect);
-    addField('Nível de raciocínio (apenas Extended Thinking)', thinkingSelect);
+    addField(uiText('Nome da mascote neste projeto'), nameInput);
+    addField(uiText('Voz (Gemini Live)'), voiceSelect);
+    addField(uiText('Estilo de comunicação'), styleInput);
+    addField(uiText('Modelo Gemini Live'), modelSelect);
+    addField(uiText('Nível de raciocínio (apenas Extended Thinking)'), thinkingSelect);
 
-    const saveBtn = el('button', 'pill-toggle', 'Guardar identidade');
+    const saveBtn = el('button', 'pill-toggle', uiText('Guardar identidade'));
     saveBtn.type = 'submit';
     form.append(saveBtn);
     form.addEventListener('submit', async e => {
@@ -819,7 +821,7 @@ export class CompanionUI {
         model: modelSelect.value,
         thinkingLevel: thinkingSelect.value,
       });
-      this.toast('Identidade da mascote guardada.');
+      this.toast(uiText('Identidade da mascote guardada.'));
       this.subview = 'chat';
       await this.refresh();
     });
@@ -848,7 +850,7 @@ export class CompanionUI {
         messageId: message.id,
         decisionText: message.text.slice(0, 600),
       });
-      this.toast('Decisão publicada na memória oficial do projeto com referência à conversa da mascote.');
+      this.toast(uiText('Decisão publicada na memória oficial do projeto com referência à conversa da mascote.'));
     } catch (error) {
       this.toast(error.message);
     }
@@ -868,8 +870,8 @@ export class CompanionUI {
     } catch (error) {
       this.liveStatus = 'error';
       this.liveError = error.name === 'NotAllowedError'
-        ? 'Permite o acesso ao microfone no navegador para falar com a mascote.'
-        : (error.message || 'Não foi possível preparar o áudio.');
+        ? uiText('Permite o acesso ao microfone no navegador para falar com a mascote.')
+        : (error.message || uiText('Não foi possível preparar o áudio.'));
       this.renderLauncher();
       this.renderPanel();
       return;
@@ -901,7 +903,7 @@ export class CompanionUI {
     ws.addEventListener('error', () => {
       if (this.ws !== ws) return;
       this.liveStatus = 'error';
-      this.liveError ||= 'Não foi possível estabelecer a ligação Live.';
+      this.liveError ||= uiText('Não foi possível estabelecer a ligação Live.');
       this.renderLauncher();
       if (this.open) this.renderPanel();
     });
@@ -971,19 +973,19 @@ export class CompanionUI {
 
     if (msg.type === 'tool_call') {
       if (msg.name === 'delegar_exploracao') {
-        this.toast('A mascote está a delegar uma exploração só de leitura…');
+        this.toast(uiText('A mascote está a delegar uma exploração só de leitura…'));
       }
       return;
     }
 
     if (msg.type === 'tool_error') {
-      this.toast(msg.error || 'Erro ao executar ferramenta da mascote.');
+      this.toast(msg.error || uiText('Erro ao executar ferramenta da mascote.'));
       this.refresh().catch(() => {});
       return;
     }
 
     if (msg.type === 'warning') {
-      this.toast(msg.message || 'Aviso na sessão da mascote.');
+      this.toast(msg.message || uiText('Aviso na sessão da mascote.'));
       if (this.open) this.renderPanel();
       return;
     }
@@ -1001,14 +1003,14 @@ export class CompanionUI {
       if (msg.conversationId) {
         this.refresh(msg.conversationId).catch(() => {});
       }
-      this.toast(msg.message || 'Sessão Live recriada com o contexto atualizado.');
+      this.toast(msg.message || uiText('Sessão Live recriada com o contexto atualizado.'));
       return;
     }
 
     if (msg.type === 'error') {
       this.clearPlaybackQueue();
       this.liveStatus = 'error';
-      this.liveError = msg.message || 'Erro na sessão Live.';
+      this.liveError = msg.message || uiText('Erro na sessão Live.');
       this.renderLauncher();
       if (this.open) this.renderPanel();
     }

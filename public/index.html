@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-PT">
+<html lang="en-GB">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -214,6 +214,12 @@
           <details id="settings-details" class="settings-details">
             <summary>Configurações e detalhes</summary>
             <div class="config-card">
+              <section class="settings-block" aria-labelledby="language-title">
+                <label id="language-title" for="interface-language">Idioma da interface</label>
+                <select id="interface-language"><option value="en">English</option><option value="pt">Português</option></select>
+                <p class="reading-hint">Só neste navegador. As conversas mantêm a língua original.</p>
+                <p id="language-status" class="reading-hint" role="status"></p>
+              </section>
               <section id="provider-settings" class="settings-block provider-settings" aria-labelledby="provider-settings-title" hidden>
                 <p id="provider-settings-title" class="settings-title">Clientes</p>
                 <p class="reading-hint">Aplicam-se a todos os projetos deste HYDRAQ.</p>

@@ -1,25 +1,27 @@
+import { locale as uiLocale } from './i18n.js';
+import { t as uiText } from './i18n.js';
 import { quotaUsageView } from './turn-quotas.js';
 import {elicitationForm} from './elicitation.js';
 export function diagnosticsView(diagnostics = []) {
   const section=document.createElement('section');section.className='native-diagnostics';
-  section.setAttribute('role','status');section.setAttribute('aria-label','Diagnóstico do cliente');
+  section.setAttribute('role','status');section.setAttribute('aria-label',uiText('Diagnóstico do cliente'));
   for(const diagnostic of diagnostics){
     const row=document.createElement('div');row.className='native-diagnostic';row.dataset.code=diagnostic.code;
     const label=document.createElement('strong');label.textContent=diagnostic.label;
     const message=document.createElement('p');message.textContent=diagnostic.message;row.append(label,message);
-    if(diagnostic.detail){const details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent='Detalhes comunicados pelo cliente';text.textContent=diagnostic.detail;details.append(summary,text);row.append(details);}
+    if(diagnostic.detail){const details=document.createElement('details'),summary=document.createElement('summary'),text=document.createElement('pre');summary.textContent=uiText('Detalhes comunicados pelo cliente');text.textContent=diagnostic.detail;details.append(summary,text);row.append(details);}
     section.append(row);
   }
   return section;
 }
 
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
-const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',opencode:'OpenCode · gratuitos',cursor:'Cursor'};
-const statuses={queued:'Em fila',starting:'A preparar',running:'A responder',stopping:'A parar',completed:'Concluído',failed:'Falhou',uncertain:'Resultado incerto',interrupted:'Interrompido'};
-const effortLabels={none:'Sem raciocínio',minimal:'Mínimo',low:'Leve',medium:'Médio',high:'Alto',xhigh:'Muito alto',max:'Máximo',ultra:'Ultra'};
+const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',opencode:uiText('OpenCode · gratuitos'),cursor:'Cursor'};
+const statuses={queued:uiText('Em fila'),starting:uiText('A preparar'),running:uiText('A responder'),stopping:uiText('A parar'),completed:uiText('Concluído'),failed:uiText('Falhou'),uncertain:uiText('Resultado incerto'),interrupted:uiText('Interrompido')};
+const effortLabels={none:uiText('Sem raciocínio'),minimal:uiText('Mínimo'),low:uiText('Leve'),medium:uiText('Médio'),high:uiText('Alto'),xhigh:uiText('Muito alto'),max:uiText('Máximo'),ultra:'Ultra'};
 const active=j=>['queued','starting','running','stopping'].includes(j.status);
-const reviewModes={comment:'Comentar resposta',plan:'Criticar plano',implementation:'Rever implementação'};
-const cycleStates={'waiting-main':'Resposta inicial em curso',preparing:'Resposta inicial pronta · a consultar revisores',reviewing:'Revisores a analisar',delivering:'Pareceres prontos · a enviar ao principal',assessing:'Principal a preparar resposta final',completed:'Revisão concluída',skipped:'Revisão dispensada',failed:'Revisão falhou',suspended:'Revisão suspensa',cancelled:'Revisão parada','needs-decision':'Decisão de envio pendente'};
+const reviewModes={comment:uiText('Comentar resposta'),plan:uiText('Criticar plano'),implementation:uiText('Rever implementação')};
+const cycleStates={'waiting-main':uiText('Resposta inicial em curso'),preparing:uiText('Resposta inicial pronta · a consultar revisores'),reviewing:uiText('Revisores a analisar'),delivering:uiText('Pareceres prontos · a enviar ao principal'),assessing:uiText('Principal a preparar resposta final'),completed:uiText('Revisão concluída'),skipped:uiText('Revisão dispensada'),failed:uiText('Revisão falhou'),suspended:uiText('Revisão suspensa'),cancelled:uiText('Revisão parada'),'needs-decision':uiText('Decisão de envio pendente')};
 const shortNames={codex:'Codex',claude:'Claude',antigravity:'Antigravity',opencode:'OpenCode',cursor:'Cursor'};
 const REVIEW_VIEW_KEY='hydraq.review.view',REVIEW_VIEWS=['panels','list','collapsed'];
 const glyphPaths={
@@ -90,8 +92,8 @@ export function reviewProgress(cycle, jobs = []) {
  const done=jobs.filter(j=>j.status==='completed'&&j.text?.trim()).length;
  const failed=jobs.filter(j=>['failed','uncertain','interrupted'].includes(j.status)).length;
  const pending=jobs.filter(j=>j.approvals?.length).length;
- const count=jobs.length?`${done}/${jobs.length} pareceres prontos${failed?` · ${failed} sem parecer`:''}`:'';
- const phase=cycle?.status==='waiting-main'?'Resposta inicial a ser escrita':cycle?.status==='preparing'?'Resposta inicial pronta · a consultar revisores':cycle?.status==='reviewing'?(pending?'Aguarda a tua decisão':'Revisores a analisar'):cycleStates[cycle?.status]||'Consulta concluída';
+ const count=jobs.length?uiText`${done}/${jobs.length} pareceres prontos${failed?uiText` · ${failed} sem parecer`:''}`:'';
+ const phase=cycle?.status==='waiting-main'?uiText('Resposta inicial a ser escrita'):cycle?.status==='preparing'?uiText('Resposta inicial pronta · a consultar revisores'):cycle?.status==='reviewing'?(pending?uiText('Aguarda a tua decisão'):uiText('Revisores a analisar')):cycleStates[cycle?.status]||uiText('Consulta concluída');
  return [phase,count].filter(Boolean).join(' · ');
 }
 const pendingCycle=status=>['waiting-main','preparing','reviewing','delivering','assessing'].includes(status);
@@ -100,32 +102,32 @@ export function reviewSteps(cycle, jobs = [], context = {}) {
  const status=cycle?.status,final=context.final||{},total=jobs.length||automaticParticipants(cycle?.config).length;
  const ready=jobs.filter(j=>j.status==='completed'&&j.text?.trim()).length,missing=jobs.filter(j=>['failed','uncertain','interrupted'].includes(j.status)).length,deciding=jobs.some(j=>j.approvals?.length);
  const sent=cycle?.selectedJobIds?.length??ready,separate=cycle?.selectedJobIds?Math.max(0,total-sent):0;
- const count=total?`${ready}/${total} ${total===1?'parecer':'pareceres'}`:'';
+ const count=total?`${ready}/${total} ${total===1?uiText('parecer'):uiText('pareceres')}`:'';
  const steps=[
-  {key:'initial',label:'Resposta inicial',state:'done',detail:'Pronta'},
-  {key:'review',label:total>1?'Revisores':'Revisor',state:'done',detail:count+(missing?` · ${missing} sem parecer`:'')},
-  {key:'delivery',label:'Envio ao principal',state:'done',detail:`${sent} ${sent===1?'enviado':'enviados'}${separate?` · ${separate} ${separate===1?'separado':'separados'}`:''}`},
-  {key:'final',label:'Resposta final',state:'done',detail:'Pronta'},
+  {key:'initial',label:uiText('Resposta inicial'),state:'done',detail:uiText('Pronta')},
+  {key:'review',label:total>1?uiText('Revisores'):uiText('Revisor'),state:'done',detail:count+(missing?uiText` · ${missing} sem parecer`:'')},
+  {key:'delivery',label:uiText('Envio ao principal'),state:'done',detail:`${sent} ${sent===1?uiText('enviado'):uiText('enviados')}${separate?` · ${separate} ${separate===1?uiText('separado'):uiText('separados')}`:''}`},
+  {key:'final',label:uiText('Resposta final'),state:'done',detail:uiText('Pronta')},
  ];
  const set=(i,state,detail)=>{steps[i]={...steps[i],state,...(detail===undefined?{}:{detail})};};
  const from=i=>{for(let k=i;k<steps.length;k++)set(k,'pending','');};
  const stopAt=()=>context.initial&&!['starting','running','waiting'].includes(context.initial)?(!jobs.length||ready<total?1:final.exists?3:2):0;
  switch(status){
-  case 'waiting-main':set(0,'active','A escrever');from(1);if(total)set(1,'pending',`${total} à espera`);break;
-  case 'preparing':set(1,'active','A consultar');from(2);break;
-  case 'reviewing':set(1,deciding?'warn':'active',deciding?'Aguarda a tua decisão':count);from(2);break;
-  case 'delivering':set(2,'active',`A enviar ${sent}`);from(3);break;
-  case 'assessing':set(3,'active',final.streaming?'A escrever':'A preparar');break;
-  case 'completed':if(!final.exists){set(2,'skipped','Nenhum recomendado');set(3,'done','Mantida a inicial');}else if(!final.confirmed)set(3,'warn','Parcial');break;
-  case 'needs-decision':set(2,'warn','Decisão pendente');from(3);break;
-  case 'suspended':set(3,'warn','Suspensa · nada reenviado');break;
+  case 'waiting-main':set(0,'active',uiText('A escrever'));from(1);if(total)set(1,'pending',uiText`${total} à espera`);break;
+  case 'preparing':set(1,'active',uiText('A consultar'));from(2);break;
+  case 'reviewing':set(1,deciding?'warn':'active',deciding?uiText('Aguarda a tua decisão'):count);from(2);break;
+  case 'delivering':set(2,'active',uiText`A enviar ${sent}`);from(3);break;
+  case 'assessing':set(3,'active',final.streaming?uiText('A escrever'):uiText('A preparar'));break;
+  case 'completed':if(!final.exists){set(2,'skipped',uiText('Nenhum recomendado'));set(3,'done',uiText('Mantida a inicial'));}else if(!final.confirmed)set(3,'warn',uiText('Parcial'));break;
+  case 'needs-decision':set(2,'warn',uiText('Decisão pendente'));from(3);break;
+  case 'suspended':set(3,'warn',uiText('Suspensa · nada reenviado'));break;
   case 'failed':
-   if(!jobs.length&&context.initial&&context.initial!=='completed'){set(0,'failed','Sem resposta');from(1);}
-   else if(final.exists)set(3,'failed','Sem confirmação');
-   else if(cycle?.selectedJobIds?.length&&ready===total){set(2,'failed','Envio falhou');from(3);}
-   else{set(1,'failed',jobs.length?(missing?`${missing} sem parecer`:'Falhou'):'Não iniciada');from(2);}
+   if(!jobs.length&&context.initial&&context.initial!=='completed'){set(0,'failed',uiText('Sem resposta'));from(1);}
+   else if(final.exists)set(3,'failed',uiText('Sem confirmação'));
+   else if(cycle?.selectedJobIds?.length&&ready===total){set(2,'failed',uiText('Envio falhou'));from(3);}
+   else{set(1,'failed',jobs.length?(missing?uiText`${missing} sem parecer`:uiText('Falhou')):uiText('Não iniciada'));from(2);}
    break;
-  case 'cancelled':{const at=stopAt();from(at);set(at,'stopped','Parada');break;}
+  case 'cancelled':{const at=stopAt();from(at);set(at,'stopped',uiText('Parada'));break;}
  }
  if(steps[1].state==='done'&&missing)steps[1]={...steps[1],state:'warn'};
  return steps;
@@ -133,17 +135,17 @@ export function reviewSteps(cycle, jobs = [], context = {}) {
 export function opinionContextLabel(job, delivery) {
  if (delivery.state !== 'separate') return delivery.label;
  const recommendation = job.recommendation;
- if (recommendation?.status === 'pending') return 'Separado · decisão de envio pendente';
- if (recommendation?.status === 'decided') return recommendation.sendToPrincipal ? 'Separado · revisor recomenda enviar' : 'Separado · revisor não recomendou enviar';
+ if (recommendation?.status === 'pending') return uiText('Separado · decisão de envio pendente');
+ if (recommendation?.status === 'decided') return recommendation.sendToPrincipal ? uiText('Separado · revisor recomenda enviar') : uiText('Separado · revisor não recomendou enviar');
  return delivery.label;
 }
 export function opinionDelivery(jobId, merges = []) {
  const deliveries = merges.filter(merge => merge.jobIds?.includes(jobId));
- if (deliveries.some(merge => merge.status === 'submitted')) return {state:'submitted', label:'Enviado ao principal'};
- if (deliveries.some(merge => merge.status === 'uncertain')) return {state:'uncertain', label:'Entrega incerta · não reenviado'};
- if (deliveries.some(merge => merge.status === 'sending')) return {state:'sending', label:'A enviar ao principal'};
- if (deliveries.some(merge => merge.status === 'failed')) return {state:'separate', label:'Envio falhou · separado do contexto principal'};
- return {state:'separate', label:'Separado · ainda não enviado ao principal'};
+ if (deliveries.some(merge => merge.status === 'submitted')) return {state:'submitted', label:uiText('Enviado ao principal')};
+ if (deliveries.some(merge => merge.status === 'uncertain')) return {state:'uncertain', label:uiText('Entrega incerta · não reenviado')};
+ if (deliveries.some(merge => merge.status === 'sending')) return {state:'sending', label:uiText('A enviar ao principal')};
+ if (deliveries.some(merge => merge.status === 'failed')) return {state:'separate', label:uiText('Envio falhou · separado do contexto principal')};
+ return {state:'separate', label:uiText('Separado · ainda não enviado ao principal')};
 }
 let sequence=0;
 
@@ -158,9 +160,9 @@ export class PanelKit{
   const viewport=node('div','review-panel-viewport'),body=node('div','review-panel-body'),alert=node('div','review-panel-alert'),foot=node('footer','review-panel-foot');
   body.id='review-panel-'+(++sequence);body.tabIndex=0;body.setAttribute('role','region');body.dataset.panelKey=key;alert.hidden=true;foot.hidden=true;
   const view={panel,avatar,name,meta,status,tools,alert,body,foot,key,text:''};
-  const jump=this.button('',()=>{this.scroll.set(key,{top:0,follow:true});this.restore(body);},'review-panel-jump');jump.append(glyph('down','review-icon'),node('span','','Mais recente'));jump.dataset.tip='Voltar a acompanhar o texto mais recente';
-  view.copy=this.button('',async()=>{try{await navigator.clipboard.writeText(view.text);view.copy.dataset.copied='true';view.copy.dataset.tip='Copiado';setTimeout(()=>{delete view.copy.dataset.copied;view.copy.dataset.tip='Copiar o texto deste painel';},1600);}catch{this.toast('Não foi possível copiar o texto.');}},'review-panel-tool');
-  view.copy.append(glyph('copy','review-icon'));view.copy.setAttribute('aria-label','Copiar texto · '+title);view.copy.dataset.tip='Copiar o texto deste painel';view.copy.hidden=true;
+  const jump=this.button('',()=>{this.scroll.set(key,{top:0,follow:true});this.restore(body);},'review-panel-jump');jump.append(glyph('down','review-icon'),node('span','',uiText('Mais recente')));jump.dataset.tip=uiText('Voltar a acompanhar o texto mais recente');
+  view.copy=this.button('',async()=>{try{await navigator.clipboard.writeText(view.text);view.copy.dataset.copied='true';view.copy.dataset.tip=uiText('Copiado');setTimeout(()=>{delete view.copy.dataset.copied;view.copy.dataset.tip=uiText('Copiar o texto deste painel');},1600);}catch{this.toast(uiText('Não foi possível copiar o texto.'));}},'review-panel-tool');
+  view.copy.append(glyph('copy','review-icon'));view.copy.setAttribute('aria-label',uiText('Copiar texto · ')+title);view.copy.dataset.tip=uiText('Copiar o texto deste painel');view.copy.hidden=true;
   view.expand=this.button('',()=>this.toggleFocus(panel),'review-panel-tool review-panel-expand');view.expand.setAttribute('aria-controls',body.id);
   tools.append(view.copy,view.expand);titles.append(name,meta);head.append(avatar,titles,status,tools);viewport.append(body,jump);panel.append(head,alert,viewport,foot);
   body.addEventListener('scroll',()=>{const follow=body.scrollHeight-body.scrollTop-body.clientHeight<28;this.scroll.set(key,{top:body.scrollTop,follow});panel.toggleAttribute('data-behind',panel.dataset.live==='true'&&!follow);},{passive:true});
@@ -182,15 +184,15 @@ export class PanelKit{
  applyFocus(stage){
   const key=this.focusKey(stage),panels=[...stage.grid.children],focused=panels.some(p=>p.dataset.panelKey===key);
   stage.grid.dataset.focus=String(focused);stage.grid.style.setProperty('--rest-span',String(12/Math.max(1,Math.min(4,panels.length-1))));
-  for(const panel of panels){const on=focused&&panel.dataset.panelKey===key,button=panel.view.expand;panel.toggleAttribute('data-expanded',on);button.replaceChildren(glyph(on?'shrink':'expand','review-icon'));button.setAttribute('aria-expanded',String(on));button.setAttribute('aria-label',(on?'Repor tamanho · ':'Expandir · ')+panel.view.name.textContent);button.dataset.tip=on?'Repor o tamanho fixo':'Expandir este painel em largura total';this.restore(panel.view.body);}
+  for(const panel of panels){const on=focused&&panel.dataset.panelKey===key,button=panel.view.expand;panel.toggleAttribute('data-expanded',on);button.replaceChildren(glyph(on?'shrink':'expand','review-icon'));button.setAttribute('aria-expanded',String(on));button.setAttribute('aria-label',(on?uiText('Repor tamanho · '):uiText('Expandir · '))+panel.view.name.textContent);button.dataset.tip=on?uiText('Repor o tamanho fixo'):uiText('Expandir este painel em largura total');this.restore(panel.view.body);}
  }
 }
 export class OpinionUI{
- constructor({getState,api,getTarget,getSettings,getKey,refresh,toast,markdown}){Object.assign(this,{getState,api,getTarget,getSettings,getKey,refresh,toast,markdown});this.refreshState=refresh;delete this.refresh;this.selected=new Set();this.deliveryFilters=new Map();this.slots=new Set();this.submissions=new Map();this.quickDrafts=new Map();this.automaticDrafts=new Map();this.archived=new Map();this.archiveRevision=0;this.sequence=0;this.dialog=node('dialog','opinion-dialog');this.dialog.setAttribute('aria-label','Consultar outros modelos');document.body.append(this.dialog);
+ constructor({getState,api,getTarget,getSettings,getKey,refresh,toast,markdown}){Object.assign(this,{getState,api,getTarget,getSettings,getKey,refresh,toast,markdown});this.refreshState=refresh;delete this.refresh;this.selected=new Set();this.deliveryFilters=new Map();this.slots=new Set();this.submissions=new Map();this.quickDrafts=new Map();this.automaticDrafts=new Map();this.archived=new Map();this.archiveRevision=0;this.sequence=0;this.dialog=node('dialog','opinion-dialog');this.dialog.setAttribute('aria-label',uiText('Consultar outros modelos'));document.body.append(this.dialog);
   this.folds=new Map();this.reviewGroups=new Set();this.seenApprovals=new Set();
   this.panels=new PanelKit({toast:message=>this.toast(message)});this.staged={batches:new Set(),cycles:new Set()};
   try{this.reviewView=REVIEW_VIEWS.includes(localStorage.getItem(REVIEW_VIEW_KEY))?localStorage.getItem(REVIEW_VIEW_KEY):'panels';}catch{this.reviewView='panels';}
-  this.quick=node('section','opinion-quick');this.quick.id='opinion-quick';this.quick.hidden=true;this.quick.setAttribute('role','dialog');this.quick.setAttribute('aria-modal','false');this.quick.setAttribute('aria-label','Escolha rápida de modelos');document.body.append(this.quick);
+  this.quick=node('section','opinion-quick');this.quick.id='opinion-quick';this.quick.hidden=true;this.quick.setAttribute('role','dialog');this.quick.setAttribute('aria-modal','false');this.quick.setAttribute('aria-label',uiText('Escolha rápida de modelos'));document.body.append(this.quick);
   this.quick.addEventListener('pointerenter',()=>clearTimeout(this.hoverClose));this.quick.addEventListener('pointerleave',()=>this.scheduleClose());
   document.getElementById('review-toggle')?.addEventListener('click',()=>this.configureAutomatic());
   document.addEventListener('pointerdown',event=>{if(!this.quick.hidden&&!this.quick.contains(event.target)&&!this.quickAnchor?.contains(event.target))this.closeQuick();});
@@ -207,7 +209,7 @@ export class OpinionUI{
   const key='message:'+owner.id+':'+opinionMessageKey(message,owner.messages.indexOf(message)),body=node('div','message-body');
   body.id='message-body-'+(++this.sequence);while(header.nextSibling)body.append(header.nextSibling);article.append(body);
   const button=this.button('',()=>{this.folds.set(key,body.hidden);sync();},'message-fold-toggle');
-  const sync=()=>{body.hidden=!(this.folds.get(key)??true);article.classList.toggle('message-folded',body.hidden);button.textContent=body.hidden?'Expandir':'Recolher';button.setAttribute('aria-expanded',String(!body.hidden));button.dataset.tip=body.hidden?'Mostrar esta mensagem completa':'Recolher o texto desta mensagem';};
+  const sync=()=>{body.hidden=!(this.folds.get(key)??true);article.classList.toggle('message-folded',body.hidden);button.textContent=body.hidden?uiText('Expandir'):uiText('Recolher');button.setAttribute('aria-expanded',String(!body.hidden));button.dataset.tip=body.hidden?uiText('Mostrar esta mensagem completa'):uiText('Recolher o texto desta mensagem');};
   button.setAttribute('aria-controls',body.id);header.append(button);sync();
  }
  submission(message,owner){if(message.role!=='user')return null;const state=this.viewState();return state?.merges.find(m=>m.requestId===message.requestId&&m.conversationId===owner.id)||state?.automatic?.cycles.find(c=>c.returnRequestId===message.requestId&&c.conversationId===owner.id);}
@@ -227,19 +229,19 @@ export class OpinionUI{
   const turn=owner.turns?.find(t=>t.requestId===(cycle?.requestId||source.message.requestId)||t.id===source.message.turnId);
   const finalAt=group.finals.at(-1),finalEntry=finalAt===undefined?null:timeline[finalAt],finalTurn=finalEntry?.owner.turns?.find(t=>t.requestId===finalEntry.message.requestId||t.id===finalEntry.message.turnId);
   const writing=cycle?.status==='waiting-main'||['starting','running','waiting'].includes(turn?.status);
-  const stage=node('section','review-stage');stage.dataset.reviewGroup=group.id;stage.dataset.client=owner.provider;stage.reviewGroup=group;stage.dataset.panelStage='review';stage.panelStageId=group.id;stage.setAttribute('aria-label','Resposta inicial e revisão');
+  const stage=node('section','review-stage');stage.dataset.reviewGroup=group.id;stage.dataset.client=owner.provider;stage.reviewGroup=group;stage.dataset.panelStage='review';stage.panelStageId=group.id;stage.setAttribute('aria-label',uiText('Resposta inicial e revisão'));
   stage.context={initial:turn?.status||null,final:{exists:Boolean(finalEntry),confirmed:finalTurn?.status==='completed',streaming:Boolean(finalEntry?.message.streaming)||['starting','running','waiting'].includes(finalTurn?.status)}};
   // Once the cycle ends without a final answer, the initial answer is the answer: show it whole.
   stage.defaultFocus=cycle&&!pendingCycle(cycle.status)&&!finalEntry?group.id+':initial':null;
   const head=node('header','review-stage-head'),heading=node('div','review-stage-heading'),tools=node('div','review-stage-tools');
   stage.stateText=node('span','review-stage-state');stage.stateText.setAttribute('role','status');
-  heading.append(node('strong','review-stage-title','Resposta inicial e revisão'),stage.stateText);
+  heading.append(node('strong','review-stage-title',uiText('Resposta inicial e revisão')),stage.stateText);
   stage.stopButton=this.button('',async()=>{if(!stage.cycle)return;stage.stopButton.disabled=true;try{await this.api('/api/automatic-reviews/'+stage.cycle.id+'/cancel',{});await this.refreshState();}catch(e){this.toast(e.message);}finally{stage.stopButton.disabled=false;}},'review-stage-stop');
-  stage.stopButton.append(glyph('stop','review-icon'),node('span','','Parar revisão'));stage.stopButton.dataset.tip='Parar a revisão automática. A resposta inicial e os pareceres já recebidos ficam guardados.';
+  stage.stopButton.append(glyph('stop','review-icon'),node('span','',uiText('Parar revisão')));stage.stopButton.dataset.tip=uiText('Parar a revisão automática. A resposta inicial e os pareceres já recebidos ficam guardados.');
   tools.append(this.viewSwitch(),stage.stopButton);head.append(heading,tools);
   stage.grid=node('div','review-grid');stage.reviewers=[];
-  const initial=this.panel({key:group.id+':initial',client:owner.provider,title:'Resposta inicial',role:'initial'});stage.initial=initial;stage.grid.append(initial.panel);
-  stage.steps=node('ol','review-steps');stage.steps.setAttribute('aria-label','Etapas da revisão');
+  const initial=this.panel({key:group.id+':initial',client:owner.provider,title:uiText('Resposta inicial'),role:'initial'});stage.initial=initial;stage.grid.append(initial.panel);
+  stage.steps=node('ol','review-steps');stage.steps.setAttribute('aria-label',uiText('Etapas da revisão'));
   stage.note=node('p','review-stage-note');stage.note.hidden=true;
   stage.actions=node('div','review-stage-actions');stage.actions.hidden=true;
   const extra=node('div','review-stage-extra');
@@ -248,30 +250,30 @@ export class OpinionUI{
   const last=group.original.length?timeline[group.original.at(-1)].message:null,model=last?.model||turn?.model||cycle?.settings?.model,effort=last?.effort||turn?.effort||cycle?.settings?.effort;
   initial.meta.textContent=[names[owner.provider],this.modelName(owner.provider,model),effortLabels[effort]||effort].filter(Boolean).join(' · ');
   initial.panel.dataset.live=String(writing);initial.panel.dataset.status=writing?'running':turn?.status||'completed';
-  this.statusPill(initial,writing?(turn?.status==='waiting'?'Aguarda decisão':'A responder'):({failed:'Falhou',interrupted:'Interrompida',uncertain:'Resultado incerto'})[turn?.status]||'Pronta',writing?(turn?.status==='waiting'?'warn':'active'):['failed','interrupted','uncertain'].includes(turn?.status)?'failed':'done');
+  this.statusPill(initial,writing?(turn?.status==='waiting'?uiText('Aguarda decisão'):uiText('A responder')):({failed:uiText('Falhou'),interrupted:uiText('Interrompida'),uncertain:uiText('Resultado incerto')})[turn?.status]||uiText('Pronta'),writing?(turn?.status==='waiting'?'warn':'active'):['failed','interrupted','uncertain'].includes(turn?.status)?'failed':'done');
   const items=owner.items?.filter(i=>i.turnId===turn?.id).slice(-8)||[];
   if(items.length){
-   const activity=this.fold('initial-activity:'+group.id,'review-activity',`Raciocínio e atividade · ${items.length} ${items.length===1?'passo':'passos'}`,!group.original.length);
-   for(const item of items){activity.append(node('p','opinion-caption',`${item.type==='reasoning'?'A analisar o pedido':item.command||item.title||item.tool||item.type} · ${item.status||''}`));if(item.type==='reasoning'&&item.summary?.length)activity.append(node('p','opinion-caption',Array.isArray(item.summary)?item.summary.join('\n'):String(item.summary)));}
+   const activity=this.fold('initial-activity:'+group.id,'review-activity',uiText`Raciocínio e atividade · ${items.length} ${items.length===1?uiText('passo'):uiText('passos')}`,!group.original.length);
+   for(const item of items){activity.append(node('p','opinion-caption',`${item.type==='reasoning'?uiText('A analisar o pedido'):item.command||item.title||item.tool||item.type} · ${item.status||''}`));if(item.type==='reasoning'&&item.summary?.length)activity.append(node('p','opinion-caption',Array.isArray(item.summary)?item.summary.join('\n'):String(item.summary)));}
    initial.body.append(activity);
   }
   for(const at of group.original){
    const article=articles.get(at);if(!article)continue;const message=timeline[at].message;
-   if(group.original.length>1)article.prepend(node('p','review-message-phase',message.phase==='final_answer'||!writing&&at===group.original.at(-1)?'Resposta':'Progresso'));
+   if(group.original.length>1)article.prepend(node('p','review-message-phase',message.phase==='final_answer'||!writing&&at===group.original.at(-1)?uiText('Resposta'):uiText('Progresso')));
    const folded=article.querySelector(':scope > .message-body');if(folded)folded.hidden=false;article.classList.remove('message-folded');
    initial.body.append(article);
   }
-  if(!group.original.length)initial.body.append(this.placeholder(writing?'A preparar a resposta inicial…':'Sem resposta inicial visível.'));
-  const latest=items.at(-1);if(writing&&latest){initial.foot.append(this.activityLine(latest.type==='reasoning'?'A analisar o pedido':latest.command||latest.title||latest.tool||latest.type,latest.status));initial.foot.hidden=false;}
-  initial.text=last?.text||'';initial.copy.hidden=!initial.text;initial.body.setAttribute('aria-label','Resposta inicial de '+names[owner.provider]);
+  if(!group.original.length)initial.body.append(this.placeholder(writing?uiText('A preparar a resposta inicial…'):uiText('Sem resposta inicial visível.')));
+  const latest=items.at(-1);if(writing&&latest){initial.foot.append(this.activityLine(latest.type==='reasoning'?uiText('A analisar o pedido'):latest.command||latest.title||latest.tool||latest.type,latest.status));initial.foot.hidden=false;}
+  initial.text=last?.text||'';initial.copy.hidden=!initial.text;initial.body.setAttribute('aria-label',uiText('Resposta inicial de ')+names[owner.provider]);
   const sourceIndices=new Set([...group.original,...group.questions]);
   for(const slot of this.slots)if(slot.isConnected&&sourceIndices.has(Number(slot.dataset.sourceIndex)))extra.append(slot);
   for(const at of group.deliveries){const article=articles.get(at);if(article)extra.append(article);}
   const sentIds=new Set((state?.merges||[]).filter(m=>group.deliveries.some(i=>timeline[i].message.requestId===m.requestId)).flatMap(m=>m.jobIds||[]));
   const reviewers=(state?.batches||[]).filter(b=>group.batchIds.includes(b.id)).flatMap(b=>b.jobs).filter(j=>sentIds.has(j.id));
-  if(group.finals.length>1){const assessment=this.fold('assessment:'+group.id,'review-original','Etapas da avaliação do principal');for(const at of group.finals.slice(0,-1)){const article=articles.get(at);if(article)assessment.append(article);}extra.append(assessment);}
+  if(group.finals.length>1){const assessment=this.fold('assessment:'+group.id,'review-original',uiText('Etapas da avaliação do principal'));for(const at of group.finals.slice(0,-1)){const article=articles.get(at);if(article)assessment.append(article);}extra.append(assessment);}
   const final=articles.get(finalAt);
-  if(final){const {message}=finalEntry,confirmed=finalTurn?.status==='completed';final.classList.add('review-final');const label=node('div','review-final-label',confirmed?'Resposta final':message.streaming||['running','starting','waiting'].includes(finalTurn?.status)?'A preparar resposta final':'Resposta da avaliação · parcial');if(confirmed)label.append(node('span','review-final-hint','· após os pareceres recebidos'));for(const provider of new Set(reviewers.map(j=>j.provider))){const badge=node('span','opinion-provider review-provider-badge',names[provider]);badge.dataset.provider=provider;badge.title='Parecer recebido deste cliente; a resposta indica quais as sugestões aceites.';label.append(badge);}final.prepend(label);}
+  if(final){const {message}=finalEntry,confirmed=finalTurn?.status==='completed';final.classList.add('review-final');const label=node('div','review-final-label',confirmed?uiText('Resposta final'):message.streaming||['running','starting','waiting'].includes(finalTurn?.status)?uiText('A preparar resposta final'):uiText('Resposta da avaliação · parcial'));if(confirmed)label.append(node('span','review-final-hint',uiText('· após os pareceres recebidos')));for(const provider of new Set(reviewers.map(j=>j.provider))){const badge=node('span','opinion-provider review-provider-badge',names[provider]);badge.dataset.provider=provider;badge.title=uiText('Parecer recebido deste cliente; a resposta indica quais as sugestões aceites.');label.append(badge);}final.prepend(label);}
   this.reviewGroups.add(stage);this.updateGroup(stage);
  }
  // Panels are shared with the dual conversation; the review keeps its own scroll and focus memory.
@@ -282,8 +284,8 @@ export class OpinionUI{
  activityLine(label,status){return this.panels.activity(label,status);}
  modelName(provider,id){return this.getState()?.providers?.[provider]?.models?.find(m=>m.id===id)?.name||id||'';}
  viewSwitch(){
-  const group=node('div','review-view-switch');group.setAttribute('role','group');group.setAttribute('aria-label','Apresentação da revisão');
-  for(const [value,label,tip,icon] of [['panels','Painéis','Resposta inicial e revisores lado a lado, em painéis de tamanho fixo','panels'],['list','Lista','Mensagens completas, umas por baixo das outras','list'],['collapsed','Recolhido','Mostrar só as etapas; a resposta final continua visível','fold']]){
+  const group=node('div','review-view-switch');group.setAttribute('role','group');group.setAttribute('aria-label',uiText('Apresentação da revisão'));
+  for(const [value,label,tip,icon] of [['panels',uiText('Painéis'),uiText('Resposta inicial e revisores lado a lado, em painéis de tamanho fixo'),'panels'],['list',uiText('Lista'),uiText('Mensagens completas, umas por baixo das outras'),'list'],['collapsed',uiText('Recolhido'),uiText('Mostrar só as etapas; a resposta final continua visível'),'fold']]){
    const option=this.button('',()=>this.setReviewView(value),'review-view-option');option.dataset.view=value;option.dataset.tip=tip;option.setAttribute('aria-label',label);option.append(glyph(icon,'review-icon'),node('span','',label));group.append(option);
   }
   return group;
@@ -301,7 +303,7 @@ export class OpinionUI{
   const item=node('li','review-step'),mark=node('span','review-step-mark'),text=node('span','review-step-text'),icon={done:'check',failed:'cross',warn:'alert',skipped:'dash',stopped:'stop'}[step.state];
   item.dataset.state=step.state;item.dataset.step=step.key;mark.setAttribute('aria-hidden','true');if(icon)mark.append(glyph(icon,'review-icon'));else if(step.state==='pending')mark.textContent=String(index+1);
   text.append(node('strong','',step.label));if(step.detail)text.append(node('small','',step.detail));item.append(mark,text);
-  item.setAttribute('aria-label',`${step.label}: ${({done:'concluído',active:'em curso',pending:'por fazer',warn:'requer atenção',failed:'falhou',skipped:'dispensado',stopped:'parado'})[step.state]}${step.detail?' · '+step.detail:''}`);
+  item.setAttribute('aria-label',`${step.label}: ${({done:uiText('concluído'),active:uiText('em curso'),pending:uiText('por fazer'),warn:uiText('requer atenção'),failed:uiText('falhou'),skipped:uiText('dispensado'),stopped:uiText('parado')})[step.state]}${step.detail?' · '+step.detail:''}`);
   if(step.state==='active')item.setAttribute('aria-current','step');return item;
  }
  updateGroup(stage){
@@ -328,49 +330,49 @@ export class OpinionUI{
  stageActions(stage,entries,pending){
   const state=this.viewState(),separate=pending?[]:entries.filter(({job})=>job.status==='completed'&&job.text&&opinionDelivery(job.id,state?.merges).state==='separate'),chosen=separate.filter(({job})=>this.selected.has(job.id));
   stage.actions.hidden=!separate.length;if(!separate.length)return stage.actions.replaceChildren();
-  const send=this.button(chosen.length?`Enviar ${chosen.length} ${chosen.length===1?'selecionado':'selecionados'} à conversa`:'Enviar selecionados à conversa',()=>this.incorporate(chosen[0].batch,chosen.map(e=>e.job.id)),'secondary-button');
-  send.disabled=!chosen.length||new Set(chosen.map(e=>e.batch.id)).size>1;send.dataset.tip='Enviar ao principal os pareceres selecionados que ficaram separados, com um comentário opcional.';
-  stage.actions.replaceChildren(node('span','opinion-caption',`${separate.length} ${separate.length===1?'parecer separado':'pareceres separados'} do contexto principal`),send);
+  const send=this.button(chosen.length?uiText`Enviar ${chosen.length} ${chosen.length===1?uiText('selecionado'):uiText('selecionados')} à conversa`:uiText('Enviar selecionados à conversa'),()=>this.incorporate(chosen[0].batch,chosen.map(e=>e.job.id)),'secondary-button');
+  send.disabled=!chosen.length||new Set(chosen.map(e=>e.batch.id)).size>1;send.dataset.tip=uiText('Enviar ao principal os pareceres selecionados que ficaram separados, com um comentário opcional.');
+  stage.actions.replaceChildren(node('span','opinion-caption',uiText`${separate.length} ${separate.length===1?uiText('parecer separado'):uiText('pareceres separados')} do contexto principal`),send);
  }
  fillPlaceholder(view,participant,cycle){
   const signature=JSON.stringify([participant,cycle?.status]);if(view.signature===signature)return false;view.signature=signature;
   view.panel.dataset.live='false';view.panel.dataset.status='queued';view.panel.removeAttribute('data-attention');
-  view.meta.textContent=['Revisor',this.modelName(participant.provider,participant.model),effortLabels[participant.effort]||participant.effort].filter(Boolean).join(' · ');
-  this.statusPill(view,cycle?.status==='preparing'?'A preparar':'À espera','idle');
-  view.body.replaceChildren(this.placeholder(cycle?.status==='preparing'?'A preparar o revisor…':'Começa quando a resposta inicial estiver pronta.'));
-  view.body.setAttribute('aria-label','Revisor '+(names[participant.provider]||participant.provider));view.text='';view.copy.hidden=true;view.alert.hidden=true;view.foot.hidden=true;return true;
+  view.meta.textContent=[uiText('Revisor'),this.modelName(participant.provider,participant.model),effortLabels[participant.effort]||participant.effort].filter(Boolean).join(' · ');
+  this.statusPill(view,cycle?.status==='preparing'?uiText('A preparar'):uiText('À espera'),'idle');
+  view.body.replaceChildren(this.placeholder(cycle?.status==='preparing'?uiText('A preparar o revisor…'):uiText('Começa quando a resposta inicial estiver pronta.')));
+  view.body.setAttribute('aria-label',uiText('Revisor ')+(names[participant.provider]||participant.provider));view.text='';view.copy.hidden=true;view.alert.hidden=true;view.foot.hidden=true;return true;
  }
  fillReviewer(stage,view,job,cycle){
   const state=this.viewState(),delivery=opinionDelivery(job.id,state?.merges),pending=pendingCycle(cycle?.status),signature=JSON.stringify([job,delivery,pending]);
   if(view.signature===signature)return false;view.signature=signature;
   const live=active(job),deciding=Boolean(job.approvals?.length),focused=view.panel.contains(document.activeElement)?document.activeElement:null;
   view.panel.dataset.live=String(live&&!deciding);view.panel.dataset.status=deciding?'waiting':job.status;view.panel.toggleAttribute('data-attention',deciding);
-  view.meta.replaceChildren(document.createTextNode(['Revisor',this.modelName(job.provider,job.model),effortLabels[job.effort]||job.effort].filter(Boolean).join(' · ')));
-  view.meta.title=job.allowWrite?'Escrita explicitamente ativada · autorizações nativas':'Planear / só leitura · não edita ficheiros';
-  if(job.allowWrite)view.meta.append(node('span','review-panel-tag','Escrita ativada'));
-  this.statusPill(view,deciding?'Aguarda decisão':statuses[job.status]||job.status,deciding?'warn':live?'active':job.status==='completed'?'done':['failed','uncertain','interrupted'].includes(job.status)?'failed':'idle');
+  view.meta.replaceChildren(document.createTextNode([uiText('Revisor'),this.modelName(job.provider,job.model),effortLabels[job.effort]||job.effort].filter(Boolean).join(' · ')));
+  view.meta.title=job.allowWrite?uiText('Escrita explicitamente ativada · autorizações nativas'):uiText('Planear / só leitura · não edita ficheiros');
+  if(job.allowWrite)view.meta.append(node('span','review-panel-tag',uiText('Escrita ativada')));
+  this.statusPill(view,deciding?uiText('Aguarda decisão'):statuses[job.status]||job.status,deciding?'warn':live?'active':job.status==='completed'?'done':['failed','uncertain','interrupted'].includes(job.status)?'failed':'idle');
   // Decisions sit above the scrolling text, so they stay visible whatever the scroll position.
   const previous=new Map([...view.alert.querySelectorAll('.opinion-approval')].map(e=>[e.dataset.approvalId,e]));
   view.alert.replaceChildren(...(job.approvals||[]).map(request=>{const old=previous.get(String(request.id));return old?.approvalSignature===JSON.stringify(request)?old:this.approval(job,request);}));view.alert.hidden=!deciding;
   const content=[];
-  if(job.recommendation)content.push(node('p','opinion-recommendation',(job.recommendation.status==='pending'?'Decisão pendente: ':job.recommendation.sendToPrincipal?'Recomenda enviar: ':'Não recomenda enviar: ')+job.recommendation.reason));
+  if(job.recommendation)content.push(node('p','opinion-recommendation',(job.recommendation.status==='pending'?uiText('Decisão pendente: '):job.recommendation.sendToPrincipal?uiText('Recomenda enviar: '):uiText('Não recomenda enviar: '))+job.recommendation.reason));
   if(job.text){const text=this.markdown(job.text);if(live)streamingTarget(text).append(node('span','streaming-indicator'));content.push(text);}
-  else if(live||deciding)content.push(this.placeholder(deciding?'O revisor aguarda a tua decisão.':'A analisar a resposta inicial…'));
+  else if(live||deciding)content.push(this.placeholder(deciding?uiText('O revisor aguarda a tua decisão.'):uiText('A analisar a resposta inicial…')));
   if(job.error)content.push(node('p','opinion-error',job.error));
   if(job.quotaUsage)content.push(quotaUsageView(job.quotaUsage));
   if(job.diagnostics?.length)content.push(diagnosticsView(job.diagnostics));
-  if(!content.length)content.push(this.placeholder('Sem texto comunicado pelo revisor.'));
-  view.body.replaceChildren(...content);view.body.setAttribute('aria-label','Parecer de '+names[job.provider]);view.text=job.text||'';view.copy.hidden=!view.text;
+  if(!content.length)content.push(this.placeholder(uiText('Sem texto comunicado pelo revisor.')));
+  view.body.replaceChildren(...content);view.body.setAttribute('aria-label',uiText('Parecer de ')+names[job.provider]);view.text=job.text||'';view.copy.hidden=!view.text;
   const foot=[],latest=job.activity?.at(-1);
   if(live&&latest)foot.push(this.activityLine(latest.label,latest.status));
-  if(job.status==='completed'&&job.text){const badge=node('span','review-delivery-badge',delivery.state==='submitted'?'Enviado ao principal':delivery.state==='uncertain'?'Entrega incerta':delivery.state==='sending'?'A enviar':job.recommendation?.status==='decided'&&!job.recommendation.sendToPrincipal?'Não recomenda enviar':'Separado');badge.dataset.delivery=delivery.state;badge.title=opinionContextLabel(job,delivery);foot.push(badge);}
-  if(job.usage&&!live){const u=job.usage,usage=node('span','review-panel-usage',`Entrada ${u.inputTokens??u.input_tokens??'—'} · Saída ${u.outputTokens??u.output_tokens??'—'}${job.provider==='opencode'?' · '+(Number.isFinite(job.costUSD)?job.costUSD+' USD':'custo não medido'):''}`);usage.title=usage.textContent;foot.push(usage);}
+  if(job.status==='completed'&&job.text){const badge=node('span','review-delivery-badge',delivery.state==='submitted'?uiText('Enviado ao principal'):delivery.state==='uncertain'?uiText('Entrega incerta'):delivery.state==='sending'?uiText('A enviar'):job.recommendation?.status==='decided'&&!job.recommendation.sendToPrincipal?uiText('Não recomenda enviar'):uiText('Separado'));badge.dataset.delivery=delivery.state;badge.title=opinionContextLabel(job,delivery);foot.push(badge);}
+  if(job.usage&&!live){const u=job.usage,usage=node('span','review-panel-usage',uiText`Entrada ${u.inputTokens??u.input_tokens??'—'} · Saída ${u.outputTokens??u.output_tokens??'—'}${job.provider==='opencode'?' · '+(Number.isFinite(job.costUSD)?job.costUSD+' USD':uiText('custo não medido')):''}`);usage.title=usage.textContent;foot.push(usage);}
   const controls=node('span','review-panel-actions');
-  if(live&&!deciding)controls.append(this.button('Parar',async()=>{try{await this.api('/api/opinions/'+job.id+'/stop',{});await this.refreshState();}catch(e){this.toast(e.message);}},'review-panel-action'));
+  if(live&&!deciding)controls.append(this.button(uiText('Parar'),async()=>{try{await this.api('/api/opinions/'+job.id+'/stop',{});await this.refreshState();}catch(e){this.toast(e.message);}},'review-panel-action'));
   if(job.status==='completed'&&job.text&&delivery.state==='separate'&&!pending){
-   const label=node('label','review-panel-select'),check=node('input');check.type='checkbox';check.checked=this.selected.has(job.id);check.setAttribute('aria-label','Selecionar parecer de '+names[job.provider]);
-   check.addEventListener('change',()=>{check.checked?this.selected.add(job.id):this.selected.delete(job.id);this.updateGroup(stage);});label.append(check,document.createTextNode('Selecionar'));
-   const batch=(state?.batches||[]).find(b=>b.jobs.some(j=>j.id===job.id));controls.append(label,this.button('Enviar este',()=>this.incorporate(batch,[job.id]),'review-panel-action'));
+   const label=node('label','review-panel-select'),check=node('input');check.type='checkbox';check.checked=this.selected.has(job.id);check.setAttribute('aria-label',uiText('Selecionar parecer de ')+names[job.provider]);
+   check.addEventListener('change',()=>{check.checked?this.selected.add(job.id):this.selected.delete(job.id);this.updateGroup(stage);});label.append(check,document.createTextNode(uiText('Selecionar')));
+   const batch=(state?.batches||[]).find(b=>b.jobs.some(j=>j.id===job.id));controls.append(label,this.button(uiText('Enviar este'),()=>this.incorporate(batch,[job.id]),'review-panel-action'));
   }
   if(controls.childElementCount)foot.push(controls);
   view.foot.replaceChildren(...foot);view.foot.hidden=!foot.length;
@@ -380,12 +382,12 @@ export class OpinionUI{
  }
  field(parent,label,tag='select'){const wrap=node('label','opinion-field',label),e=node(tag);e.id='opinion-control-'+(++this.sequence);wrap.htmlFor=e.id;e.setAttribute('aria-label',label);wrap.append(e);parent.append(wrap);return e;}
  options(select,values,value){select.replaceChildren(...values.map(v=>{const o=node('option','',v.label||v.value);o.value=v.value;o.disabled=Boolean(v.disabled);return o;}));select.value=values.some(v=>v.value===value&&!v.disabled)?value:values.find(v=>!v.disabled)?.value||'';}
- header(title){this.dialog.classList.remove('automatic-review-dialog');this.dialog.replaceChildren();const h=node('div','opinion-dialog-heading');h.append(node('h2','',title),this.button('Fechar',()=>this.dialog.close()));this.dialog.append(h);}
+ header(title){this.dialog.classList.remove('automatic-review-dialog');this.dialog.replaceChildren();const h=node('div','opinion-dialog-heading');h.append(node('h2','',title),this.button(uiText('Fechar'),()=>this.dialog.close()));this.dialog.append(h);}
  error(text){if(!this.errorBox){this.errorBox=node('p','opinion-error');this.errorBox.setAttribute('role','alert');this.dialog.append(this.errorBox);}this.errorBox.textContent=text;}
  mount(article,owner,message){
   if(!['user','assistant'].includes(message.role)||message.internal||message.streaming||this.submission(message,owner)||!message.text?.trim())return;
   const sourceKey=opinionMessageKey(message,owner.messages.indexOf(message)),bar=node('div','message-opinions');
-  const alternative=message.role==='user',ask=this.button('',()=>this.openQuick(owner,sourceKey,message.role,ask),'opinion-trigger');ask.append(glyph(alternative?'alternative':'opinion'),node('span','',alternative?'Outra resposta':'Segunda opinião'));ask.setAttribute('aria-haspopup','dialog');ask.setAttribute('aria-controls',this.quick.id);ask.setAttribute('aria-expanded','false');ask.addEventListener('pointerenter',event=>{if(event.pointerType!=='mouse')return;clearTimeout(this.hoverClose);this.hoverOpen=setTimeout(()=>{if(!this.dialog.open)this.openQuick(owner,sourceKey,message.role,ask,true);},450);});ask.addEventListener('pointerleave',()=>{clearTimeout(this.hoverOpen);this.scheduleClose();});bar.append(ask);article.append(bar);
+  const alternative=message.role==='user',ask=this.button('',()=>this.openQuick(owner,sourceKey,message.role,ask),'opinion-trigger');ask.append(glyph(alternative?'alternative':'opinion'),node('span','',alternative?uiText('Outra resposta'):uiText('Segunda opinião')));ask.setAttribute('aria-haspopup','dialog');ask.setAttribute('aria-controls',this.quick.id);ask.setAttribute('aria-expanded','false');ask.addEventListener('pointerenter',event=>{if(event.pointerType!=='mouse')return;clearTimeout(this.hoverClose);this.hoverOpen=setTimeout(()=>{if(!this.dialog.open)this.openQuick(owner,sourceKey,message.role,ask,true);},450);});ask.addEventListener('pointerleave',()=>{clearTimeout(this.hoverOpen);this.scheduleClose();});bar.append(ask);article.append(bar);
  }
  mountResults(parent,owner,message,sourceIndex){
   if(!['user','assistant'].includes(message.role)||message.internal||!message.text?.trim())return;
@@ -393,8 +395,8 @@ export class OpinionUI{
  }
  preferences(){try{const value=JSON.parse(localStorage.getItem('hydraq.opinions.preferences')||'[]');return Array.isArray(value)?value.slice(0,4):[];}catch{return [];}}
  participant(parent,owner,pref){
-  const p=this.field(parent,'Cliente'),m=this.field(parent,'Modelo'),e=this.field(parent,'Raciocínio'),state=this.getState(),caps=state.opinions?.capabilities||{},available=Object.entries(names).filter(([id])=>state.providers[id]?.models?.length);
-  this.options(p,available.map(([id,name])=>({value:id,label:name+(caps[id]?.available?'':' · indisponível'),disabled:!caps[id]?.available})),pref?.provider||available.find(([id])=>id!==owner.provider&&caps[id]?.available)?.[0]);
+  const p=this.field(parent,uiText('Cliente')),m=this.field(parent,uiText('Modelo')),e=this.field(parent,uiText('Raciocínio')),state=this.getState(),caps=state.opinions?.capabilities||{},available=Object.entries(names).filter(([id])=>state.providers[id]?.models?.length);
+  this.options(p,available.map(([id,name])=>({value:id,label:name+(caps[id]?.available?'':uiText(' · indisponível')),disabled:!caps[id]?.available})),pref?.provider||available.find(([id])=>id!==owner.provider&&caps[id]?.available)?.[0]);
   const efforts=()=>{const model=this.getState().providers[p.value]?.models.find(x=>x.id===m.value);this.options(e,(model?.efforts||[]).map(value=>({value,label:effortLabels[value]||value})),pref?.model===m.value?pref.effort:model?.defaultEffort);};
   const models=()=>{this.options(m,(this.getState().providers[p.value]?.models||[]).filter(x=>p.value!=='opencode'||x.free).map(x=>({value:x.id,label:x.name||x.id})),pref?.provider===p.value?pref.model:undefined);efforts();};p.addEventListener('change',models);m.addEventListener('change',efforts);models();return {p,m,e,read:()=>({provider:p.value,model:m.value,effort:e.value})};
  }
@@ -411,11 +413,11 @@ export class OpinionUI{
   this.quick.style.left=left+'px';this.quick.style.top=Math.round(top)+'px';
  }
  providerChips(select){
-  const group=node('div','opinion-providers');group.setAttribute('role','radiogroup');group.setAttribute('aria-label','Cliente');
+  const group=node('div','opinion-providers');group.setAttribute('role','radiogroup');group.setAttribute('aria-label',uiText('Cliente'));
   const usable=chip=>chip.getAttribute('aria-disabled')!=='true';
   const sync=()=>{for(const chip of chips){const on=chip.dataset.provider===select.value;chip.setAttribute('aria-checked',String(on));chip.tabIndex=on?0:-1;}};
   const chips=[...select.options].map(option=>{const chip=node('button','opinion-provider');chip.type='button';chip.setAttribute('role','radio');chip.dataset.provider=option.value;
-   chip.append(node('i','opinion-provider-dot'),node('span','',shortNames[option.value]||option.textContent));if(option.value==='opencode')chip.append(node('small','','grátis'));
+   chip.append(node('i','opinion-provider-dot'),node('span','',shortNames[option.value]||option.textContent));if(option.value==='opencode')chip.append(node('small','',uiText('grátis')));
    if(option.disabled){chip.setAttribute('aria-disabled','true');chip.dataset.tip=option.textContent;}
    chip.addEventListener('click',()=>{if(!usable(chip)||select.value===option.value)return;select.value=option.value;select.dispatchEvent(new Event('change'));sync();});return chip;});
   group.addEventListener('keydown',event=>{const steps={ArrowRight:1,ArrowDown:1,ArrowLeft:-1,ArrowUp:-1};if(!(event.key in steps)&&!['Home','End'].includes(event.key))return;event.preventDefault();
@@ -429,18 +431,18 @@ export class OpinionUI{
   const problem=this.getState()?.opinions?.error;if(problem){this.toast(problem);return;}
   const alternative=role==='user';this.quickAnchor=anchor;this.quick.replaceChildren();this.quick.dataset.kind=alternative?'alternative':'opinion';
   const heading=node('header','opinion-quick-heading'),title=node('div','opinion-quick-title'),close=this.button('',()=>this.closeQuick(true),'opinion-quick-close');
-  title.append(node('strong','',alternative?'Outra resposta':'Segunda opinião'),node('small','',alternative?'Responde à mesma pergunta noutra sessão.':'Avalia esta resposta noutra sessão.'));
-  close.append(glyph('close'));close.setAttribute('aria-label','Fechar escolha rápida');heading.append(glyph(alternative?'alternative':'opinion','opinion-quick-glyph'),title,close);this.quick.append(heading);
+  title.append(node('strong','',alternative?uiText('Outra resposta'):uiText('Segunda opinião')),node('small','',alternative?uiText('Responde à mesma pergunta noutra sessão.'):uiText('Avalia esta resposta noutra sessão.')));
+  close.append(glyph('close'));close.setAttribute('aria-label',uiText('Fechar escolha rápida'));heading.append(glyph(alternative?'alternative':'opinion','opinion-quick-glyph'),title,close);this.quick.append(heading);
   const draftKey=owner.id+':'+messageKey,draft=this.quickDrafts.get(draftKey)||{},fields=node('div','opinion-quick-fields'),preferences=this.preferences(),record=this.participant(fields,owner,draft.participant||preferences[0]);
   // The client select stays the source of truth; the chips are its visible control.
   const [clientField,modelField,effortField]=[record.p,record.m,record.e].map(control=>control.closest('label')),chips=this.providerChips(record.p),row=node('div','opinion-quick-row');
   clientField.hidden=true;row.append(modelField,effortField);fields.append(chips,row);this.quick.append(fields);
-  const mode=alternative?null:this.field(this.quick,'O que verificar');if(mode){this.options(mode,Object.entries(reviewModes).map(([value,label])=>({value,label})),draft.mode||'comment');}
-  const focus=this.field(this.quick,'Instruções adicionais / foco','textarea');focus.rows=1;focus.value=draft.focus||'';focus.placeholder=alternative?'Ex.: propõe uma alternativa mais simples.':'Ex.: procura regressões e casos limite.';
+  const mode=alternative?null:this.field(this.quick,uiText('O que verificar'));if(mode){this.options(mode,Object.entries(reviewModes).map(([value,label])=>({value,label})),draft.mode||'comment');}
+  const focus=this.field(this.quick,uiText('Instruções adicionais / foco'),'textarea');focus.rows=1;focus.value=draft.focus||'';focus.placeholder=alternative?uiText('Ex.: propõe uma alternativa mais simples.'):uiText('Ex.: procura regressões e casos limite.');
   const remember=()=>this.quickDrafts.set(draftKey,{participant:record.read(),mode:mode?.value||'comment',focus:focus.value});this.quick.oninput=remember;this.quick.onchange=remember;
-  const error=node('p','opinion-error');error.setAttribute('role','alert');error.hidden=true;this.quick.append(error);const actions=node('div','opinion-quick-actions'),submit=this.button('Consultar',async()=>{
+  const error=node('p','opinion-error');error.setAttribute('role','alert');error.hidden=true;this.quick.append(error);const actions=node('div','opinion-quick-actions'),submit=this.button(uiText('Consultar'),async()=>{
    submit.disabled=true;error.hidden=true;try{const result=await this.submitOpinion(owner,messageKey,[record.read()],focus.value,mode?.value||'comment');this.quickDrafts.delete(draftKey);this.closeQuick();await this.refreshState();this.revealResult(result.id);}catch(e){error.hidden=false;error.textContent=e.message;this.positionQuick();}finally{submit.disabled=false;}
-  },'primary-button');const more=this.button('Mais opções…',()=>{const pref=record.read();this.closeQuick();this.choose(owner,messageKey,role,[pref,...preferences.slice(1)],{focus:focus.value,mode:mode?.value||'comment'});},'opinion-quick-more');more.dataset.tip='Comparar vários modelos, indicar um foco e consultar os detalhes do contexto.';submit.dataset.tip='Consultar agora (Ctrl+Enter). As escolhas desta conversa mantêm-se.';
+  },'primary-button');const more=this.button(uiText('Mais opções…'),()=>{const pref=record.read();this.closeQuick();this.choose(owner,messageKey,role,[pref,...preferences.slice(1)],{focus:focus.value,mode:mode?.value||'comment'});},'opinion-quick-more');more.dataset.tip=uiText('Comparar vários modelos, indicar um foco e consultar os detalhes do contexto.');submit.dataset.tip=uiText('Consultar agora (Ctrl+Enter). As escolhas desta conversa mantêm-se.');
   this.quick.onkeydown=event=>{if(event.key==='Enter'&&(event.ctrlKey||event.metaKey)&&!submit.disabled){event.preventDefault();submit.click();}};
   actions.append(more,submit);this.quick.append(actions);this.quick.hidden=false;anchor.setAttribute('aria-expanded','true');this.positionQuick();if(!hover)(chips.querySelector('[aria-checked="true"]')||record.p).focus({preventScroll:true});
  }
@@ -453,11 +455,11 @@ export class OpinionUI{
   const state=this.viewState(),merge=state?.merges.find(m=>m.requestId===message.requestId),marker='\n\n<hydraq_selected_opinions>';
   if(!merge&&!state?.automatic?.cycles.some(c=>c.returnRequestId===message.requestId))return false;
   const jobs=(merge?.jobIds||[]).map(id=>state.batches.flatMap(b=>b.jobs).find(j=>j.id===id)).filter(Boolean);
-  const details=this.fold('delivery:'+message.requestId,'review-delivery','Contexto interno · '+(merge?.jobIds?.length||jobs.length)+' parecer(es) enviado(s) ao principal');
-  details.append(node('p','opinion-caption','Pedido interno de síntese. Os pareceres são contexto citado; só o principal decide o que aceitar.'));
-  const instruction=this.fold('instruction:'+message.requestId,'review-instruction','Instruções da avaliação');instruction.append(node('pre','',message.text.split(marker)[0]));details.append(instruction);
+  const details=this.fold('delivery:'+message.requestId,'review-delivery',uiText('Contexto interno · ')+(merge?.jobIds?.length||jobs.length)+uiText(' parecer(es) enviado(s) ao principal'));
+  details.append(node('p','opinion-caption',uiText('Pedido interno de síntese. Os pareceres são contexto citado; só o principal decide o que aceitar.')));
+  const instruction=this.fold('instruction:'+message.requestId,'review-instruction',uiText('Instruções da avaliação'));instruction.append(node('pre','',message.text.split(marker)[0]));details.append(instruction);
   for(const job of jobs){const opinion=this.fold('submitted:'+message.requestId+':'+job.id,'opinion-submitted',names[job.provider]+' · '+job.model);opinion.append(this.markdown(job.text));details.append(opinion);}
-  if(jobs.length<(merge?.jobIds?.length||0)){const raw=this.fold('raw:'+message.requestId,'review-instruction','Conteúdo enviado · histórico arquivado');raw.append(node('pre','',message.text));details.append(raw);}
+  if(jobs.length<(merge?.jobIds?.length||0)){const raw=this.fold('raw:'+message.requestId,'review-instruction',uiText('Conteúdo enviado · histórico arquivado'));raw.append(node('pre','',message.text));details.append(raw);}
   content.append(details);return true;
  }
 
@@ -468,72 +470,72 @@ export class OpinionUI{
   if(changed&&view)view.scrollTop=nearBottom?view.scrollHeight:top;this.positionQuick();
  }
  renderSlot(slot){const state=this.viewState(),batches=state?.batches.filter(b=>b.conversationId===slot.dataset.conversationId&&b.sourceKey===slot.dataset.messageKey&&!this.staged.batches.has(b.id))||[],cycles=slot.dataset.role==='user'?(state?.automatic?.cycles||[]).filter(r=>r.conversationId===slot.dataset.conversationId&&r.requestId===slot.dataset.requestId&&!this.staged.cycles.has(r.id)):[];const signature=JSON.stringify([batches,cycles,state?.merges,state?.automatic?.cycles,state?.error,batches.map(batch=>this.deliveryFilters.get(batch.id))]);if(slot.signature===signature)return;slot.signature=signature;const focused=slot.contains(document.activeElement)?document.activeElement:null,approvalNodes=new Map([...slot.querySelectorAll('.opinion-approval')].map(e=>[e.dataset.approvalId,e]));slot.opinionList.replaceChildren();slot.hidden=!batches.length&&!cycles.length;
-  for(const cycle of cycles){const note=node('div','automatic-review-note');note.setAttribute('role','status');note.append(node('strong','','Revisão automática · '+(cycleStates[cycle.status]||cycle.status)));if(cycle.reason||cycle.error)note.append(node('p',cycle.error?'opinion-error':'opinion-caption',cycle.error||cycle.reason));if(['waiting-main','preparing','reviewing','delivering','assessing'].includes(cycle.status))note.append(this.button('Parar revisão automática',async()=>{try{await this.api('/api/automatic-reviews/'+cycle.id+'/cancel',{});await this.refreshState();}catch(e){this.toast(e.message);}}));slot.opinionList.append(note);}
+  for(const cycle of cycles){const note=node('div','automatic-review-note');note.setAttribute('role','status');note.append(node('strong','',uiText('Revisão automática · ')+(cycleStates[cycle.status]||cycle.status)));if(cycle.reason||cycle.error)note.append(node('p',cycle.error?'opinion-error':'opinion-caption',cycle.error||cycle.reason));if(['waiting-main','preparing','reviewing','delivering','assessing'].includes(cycle.status))note.append(this.button(uiText('Parar revisão automática'),async()=>{try{await this.api('/api/automatic-reviews/'+cycle.id+'/cancel',{});await this.refreshState();}catch(e){this.toast(e.message);}}));slot.opinionList.append(note);}
   if(state?.error&&batches.length)slot.opinionList.append(node('p','opinion-error',state.error));
-  for(const batch of batches){const panel=this.fold('batch:'+batch.id,'opinion-batch',(batch.kind==='delegation'?'Investigação delegada':batch.kind==='alternative'?'Outras respostas':'Pareceres')+' · '+batch.jobs.filter(j=>j.status==='completed').length+'/'+batch.jobs.length+' prontos'+(batch.jobs.some(j=>j.approvals?.length)?' · Decisão pendente':batch.jobs.some(active)?' · Em curso':batch.jobs.some(j=>j.status!=='completed')?' · Com falhas':''),Boolean(batch.automaticCycleId));panel.dataset.batchId=batch.id;
-   panel.append(node('p','opinion-caption',batch.automaticCycleId?'Revisão automática · '+(reviewModes[batch.reviewMode]||'Comentar resposta'):(batch.kind==='alternative'?'Resposta independente':reviewModes[batch.reviewMode]||'Comentar resposta')+' · não entra automaticamente no contexto da conversa.'));
-   const filter=node('div','opinion-delivery-filter');filter.setAttribute('role','group');filter.setAttribute('aria-label','Filtrar pareceres por entrega');
+  for(const batch of batches){const panel=this.fold('batch:'+batch.id,'opinion-batch',(batch.kind==='delegation'?uiText('Investigação delegada'):batch.kind==='alternative'?uiText('Outras respostas'):uiText('Pareceres'))+' · '+batch.jobs.filter(j=>j.status==='completed').length+'/'+batch.jobs.length+uiText(' prontos')+(batch.jobs.some(j=>j.approvals?.length)?uiText(' · Decisão pendente'):batch.jobs.some(active)?uiText(' · Em curso'):batch.jobs.some(j=>j.status!=='completed')?uiText(' · Com falhas'):''),Boolean(batch.automaticCycleId));panel.dataset.batchId=batch.id;
+   panel.append(node('p','opinion-caption',batch.automaticCycleId?uiText('Revisão automática · ')+(reviewModes[batch.reviewMode]||uiText('Comentar resposta')):(batch.kind==='alternative'?uiText('Resposta independente'):reviewModes[batch.reviewMode]||uiText('Comentar resposta'))+uiText(' · não entra automaticamente no contexto da conversa.')));
+   const filter=node('div','opinion-delivery-filter');filter.setAttribute('role','group');filter.setAttribute('aria-label',uiText('Filtrar pareceres por entrega'));
    const pendingOnly=this.deliveryFilters.get(batch.id)===true;
-   for(const [value,label] of [[false,'Todos'],[true,'Por enviar']]){const button=this.button(label,()=>{this.deliveryFilters.set(batch.id,value);slot.signature='';this.renderSlot(slot);});button.setAttribute('aria-pressed',String(value===pendingOnly));filter.append(button);}panel.append(filter);
+   for(const [value,label] of [[false,uiText('Todos')],[true,uiText('Por enviar')]]){const button=this.button(label,()=>{this.deliveryFilters.set(batch.id,value);slot.signature='';this.renderSlot(slot);});button.setAttribute('aria-pressed',String(value===pendingOnly));filter.append(button);}panel.append(filter);
    const cycle=state?.automatic?.cycles.find(r=>r.id===batch.automaticCycleId),automaticPending=cycle&&['waiting-main','preparing','reviewing','delivering','assessing'].includes(cycle.status);
-   if(batch.comment)panel.append(node('p','opinion-focus','Foco: '+batch.comment));for(const warning of batch.warnings||[])panel.append(node('p','opinion-caption',warning));
+   if(batch.comment)panel.append(node('p','opinion-focus',uiText('Foco: ')+batch.comment));for(const warning of batch.warnings||[])panel.append(node('p','opinion-caption',warning));
    for(const job of batch.jobs){const delivery=opinionDelivery(job.id,state?.merges);if(pendingOnly&&delivery.state==='submitted')continue;const card=this.fold('job:'+job.id,'message assistant opinion-card','');const jobSummary=card.firstElementChild;card.dataset.provider=job.provider;card.dataset.jobId=job.id;card.dataset.delivery=delivery.state;
-    const contextNote=node('p','opinion-context-status',opinionContextLabel(job,delivery)+(automaticPending&&delivery.state==='separate'&&automaticReturnMode(cycle.config)!=='manual'?' · ciclo automático em curso':''));contextNote.dataset.delivery=delivery.state;jobSummary.append(node('strong','',names[job.provider]),node('span','opinion-summary-model',this.getState().providers[job.provider]?.models.find(m=>m.id===job.model)?.name||job.model),node('span','opinion-summary-state',job.approvals?.length?'Decisão pendente':statuses[job.status]||job.status));const contextBadge=node('span','opinion-summary-context',delivery.state==='submitted'?'Enviado':delivery.state==='uncertain'?'Entrega incerta':delivery.state==='sending'?'A enviar':job.recommendation?.status==='decided'&&!job.recommendation.sendToPrincipal?'Não recomenda enviar':'Separado');contextBadge.dataset.delivery=delivery.state;contextBadge.title=contextNote.textContent;jobSummary.append(contextBadge);card.append(contextNote);
+    const contextNote=node('p','opinion-context-status',opinionContextLabel(job,delivery)+(automaticPending&&delivery.state==='separate'&&automaticReturnMode(cycle.config)!=='manual'?uiText(' · ciclo automático em curso'):''));contextNote.dataset.delivery=delivery.state;jobSummary.append(node('strong','',names[job.provider]),node('span','opinion-summary-model',this.getState().providers[job.provider]?.models.find(m=>m.id===job.model)?.name||job.model),node('span','opinion-summary-state',job.approvals?.length?uiText('Decisão pendente'):statuses[job.status]||job.status));const contextBadge=node('span','opinion-summary-context',delivery.state==='submitted'?uiText('Enviado'):delivery.state==='uncertain'?uiText('Entrega incerta'):delivery.state==='sending'?uiText('A enviar'):job.recommendation?.status==='decided'&&!job.recommendation.sendToPrincipal?uiText('Não recomenda enviar'):uiText('Separado'));contextBadge.dataset.delivery=delivery.state;contextBadge.title=contextNote.textContent;jobSummary.append(contextBadge);card.append(contextNote);
     if(job.error)jobSummary.append(node('span','opinion-summary-error',job.error));
     if(job.diagnostics?.length){jobSummary.append(node('span','opinion-diagnostic-summary',job.diagnostics.map(d=>d.label).join(' · ')));card.append(diagnosticsView(job.diagnostics));}
-    card.append(node('p','opinion-access',job.allowWrite?'Escrita explicitamente ativada · autorizações nativas':'Planear / só leitura · não edita ficheiros'));
-    if(job.recommendation)card.append(node('p','opinion-recommendation',(job.recommendation.status==='pending'?'Decisão pendente: ':job.recommendation.sendToPrincipal?'Recomenda enviar: ':'Não recomenda enviar: ')+job.recommendation.reason));
+    card.append(node('p','opinion-access',job.allowWrite?uiText('Escrita explicitamente ativada · autorizações nativas'):uiText('Planear / só leitura · não edita ficheiros')));
+    if(job.recommendation)card.append(node('p','opinion-recommendation',(job.recommendation.status==='pending'?uiText('Decisão pendente: '):job.recommendation.sendToPrincipal?uiText('Recomenda enviar: '):uiText('Não recomenda enviar: '))+job.recommendation.reason));
 
-    const header=node('header','message-header'),avatar=node('span','avatar',({codex:'C',claude:'C',antigravity:'A',cursor:'G',opencode:'O'})[job.provider]),model=this.getState().providers[job.provider]?.models.find(m=>m.id===job.model),time=node('time','',new Date(job.startedAt||job.createdAt).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'}));avatar.setAttribute('aria-hidden','true');time.dateTime=job.startedAt||job.createdAt;
-    header.append(avatar,node('strong','',names[job.provider]),node('span','message-model',(model?.name||job.model)+' · '+(effortLabels[job.effort]||job.effort)),node('span','opinion-role',batch.kind==='alternative'?'Outra resposta':'Parecer'),time);card.append(header);
-    const status=node('p','opinion-state',job.approvals?.length?'Aguarda a tua decisão':statuses[job.status]||job.status);if(active(job))status.setAttribute('role','status');card.append(status);
+    const header=node('header','message-header'),avatar=node('span','avatar',({codex:'C',claude:'C',antigravity:'A',cursor:'G',opencode:'O'})[job.provider]),model=this.getState().providers[job.provider]?.models.find(m=>m.id===job.model),time=node('time','',new Date(job.startedAt||job.createdAt).toLocaleTimeString(uiLocale(),{hour:'2-digit',minute:'2-digit'}));avatar.setAttribute('aria-hidden','true');time.dateTime=job.startedAt||job.createdAt;
+    header.append(avatar,node('strong','',names[job.provider]),node('span','message-model',(model?.name||job.model)+' · '+(effortLabels[job.effort]||job.effort)),node('span','opinion-role',batch.kind==='alternative'?uiText('Outra resposta'):uiText('Parecer')),time);card.append(header);
+    const status=node('p','opinion-state',job.approvals?.length?uiText('Aguarda a tua decisão'):statuses[job.status]||job.status);if(active(job))status.setAttribute('role','status');card.append(status);
     if(job.healthCheck&&active(job)){
-     const label={'awaiting-approval':'À espera de autorização',starting:'Ainda a preparar o cliente','recent-activity':'Atividade recente do cliente','no-recent-activity':'Sem atividade recente reportada pelo cliente'}[job.healthCheck.state];
-     if(label)card.append(node('p','opinion-caption','Verificado às '+new Date(job.healthCheck.checkedAt).toLocaleTimeString('pt-PT',{hour:'2-digit',minute:'2-digit'})+' · '+label));
+     const label={'awaiting-approval':uiText('À espera de autorização'),starting:uiText('Ainda a preparar o cliente'),'recent-activity':uiText('Atividade recente do cliente'),'no-recent-activity':uiText('Sem atividade recente reportada pelo cliente')}[job.healthCheck.state];
+     if(label)card.append(node('p','opinion-caption',uiText('Verificado às ')+new Date(job.healthCheck.checkedAt).toLocaleTimeString(uiLocale(),{hour:'2-digit',minute:'2-digit'})+' · '+label));
     }
-    if(job.activity?.length){const activity=this.fold('activity:'+job.id,'review-activity','Raciocínio e atividade comunicados pelo cliente',true);for(const item of job.activity)activity.append(node('p','opinion-caption',`${item.label} · ${item.status}`));card.append(activity);}
-    if(job.text)card.append(this.markdown(job.text));else if(active(job))card.append(node('p','opinion-caption','A aguardar texto do revisor…'));if(job.error)card.append(node('p','opinion-error',job.error));
+    if(job.activity?.length){const activity=this.fold('activity:'+job.id,'review-activity',uiText('Raciocínio e atividade comunicados pelo cliente'),true);for(const item of job.activity)activity.append(node('p','opinion-caption',`${item.label} · ${item.status}`));card.append(activity);}
+    if(job.text)card.append(this.markdown(job.text));else if(active(job))card.append(node('p','opinion-caption',uiText('A aguardar texto do revisor…')));if(job.error)card.append(node('p','opinion-error',job.error));
     for(const request of job.approvals||[]){const previous=approvalNodes.get(String(request.id)),approval=previous?.approvalSignature===JSON.stringify(request)?previous:this.approval(job,request);card.append(approval);if(!this.seenApprovals.has(request.id)){this.seenApprovals.add(request.id);this.openAncestors(card);slot.pendingReveal=approval;}}
-    if(job.usage){const u=job.usage;card.append(node('p','opinion-caption',`Entrada: ${u.inputTokens??u.input_tokens??'não medida'} · Saída: ${u.outputTokens??u.output_tokens??'não medida'}${job.provider==='opencode'?' · Custo: '+(Number.isFinite(job.costUSD)?job.costUSD+' USD':'não medido'):''}`));}
+    if(job.usage){const u=job.usage;card.append(node('p','opinion-caption',uiText`Entrada: ${u.inputTokens??u.input_tokens??uiText('não medida')} · Saída: ${u.outputTokens??u.output_tokens??uiText('não medida')}${job.provider==='opencode'?uiText(' · Custo: ')+(Number.isFinite(job.costUSD)?job.costUSD+' USD':uiText('não medido')):''}`));}
     if(job.quotaUsage)card.append(quotaUsageView(job.quotaUsage));
     const controls=node('div','opinion-card-actions');
-    if(active(job)&&(batch.kind==='delegation'||!job.approvals?.length))controls.append(this.button(batch.kind==='delegation'?'Parar delegação':'Parar este parecer',async()=>{try{await this.api('/api/opinions/'+job.id+'/stop',{});await this.refreshState();}catch(e){this.toast(e.message);}}));
-    if(job.status==='completed'&&job.text&&delivery.state==='separate'&&!automaticPending){const label=node('label','opinion-selection'),check=node('input');check.type='checkbox';check.checked=this.selected.has(job.id);check.setAttribute('aria-label','Selecionar parecer de '+names[job.provider]+' '+job.model);check.addEventListener('change',()=>{check.checked?this.selected.add(job.id):this.selected.delete(job.id);this.updateUseButton(panel,batch);});label.append(check,document.createTextNode('Selecionar'));controls.append(label,this.button(batch.kind==='delegation'?'Enviar ao principal':'Enviar este à conversa',()=>this.incorporate(batch,[job.id])));}
+    if(active(job)&&(batch.kind==='delegation'||!job.approvals?.length))controls.append(this.button(batch.kind==='delegation'?uiText('Parar delegação'):uiText('Parar este parecer'),async()=>{try{await this.api('/api/opinions/'+job.id+'/stop',{});await this.refreshState();}catch(e){this.toast(e.message);}}));
+    if(job.status==='completed'&&job.text&&delivery.state==='separate'&&!automaticPending){const label=node('label','opinion-selection'),check=node('input');check.type='checkbox';check.checked=this.selected.has(job.id);check.setAttribute('aria-label',uiText('Selecionar parecer de ')+names[job.provider]+' '+job.model);check.addEventListener('change',()=>{check.checked?this.selected.add(job.id):this.selected.delete(job.id);this.updateUseButton(panel,batch);});label.append(check,document.createTextNode(uiText('Selecionar')));controls.append(label,this.button(batch.kind==='delegation'?uiText('Enviar ao principal'):uiText('Enviar este à conversa'),()=>this.incorporate(batch,[job.id])));}
     card.append(controls);panel.append(card);
    }
-   panel.useButton=this.button('Enviar selecionados à conversa',()=>this.incorporate(batch,batch.jobs.filter(j=>this.selected.has(j.id)&&j.status==='completed'&&opinionDelivery(j.id,this.viewState()?.merges).state==='separate').map(j=>j.id)));panel.append(panel.useButton);this.updateUseButton(panel,batch);slot.opinionList.append(panel);if(slot.pendingReveal){this.openAncestors(slot.pendingReveal);slot.pendingReveal=null;}
+   panel.useButton=this.button(uiText('Enviar selecionados à conversa'),()=>this.incorporate(batch,batch.jobs.filter(j=>this.selected.has(j.id)&&j.status==='completed'&&opinionDelivery(j.id,this.viewState()?.merges).state==='separate').map(j=>j.id)));panel.append(panel.useButton);this.updateUseButton(panel,batch);slot.opinionList.append(panel);if(slot.pendingReveal){this.openAncestors(slot.pendingReveal);slot.pendingReveal=null;}
   }
   if(focused?.isConnected&&document.activeElement!==focused)focused.focus({preventScroll:true});
  }
  approval(job,request){const card=node('section','opinion-approval'),p=request.params||{},send=async result=>{try{await this.api('/api/opinions/'+job.id+'/respond',{id:request.id,...result});await this.refreshState();}catch(error){this.toast(error.message);}};
   card.dataset.approvalId=String(request.id);card.approvalSignature=JSON.stringify(request);
-  card.append(node('h4','',names[job.provider]+' · decisão pendente'));
+  card.append(node('h4','',names[job.provider]+uiText(' · decisão pendente')));
   const preview=p.description||p.reason||p.toolCall?.title||p.displayName||p.toolName||p.message||request.method;
   card.append(node('p','',preview));const input=p.input||p.toolCall?.rawInput;if(input)card.append(node('pre','',typeof input==='string'?input:JSON.stringify(input,null,2)));
   if(request.method==='session/request_permission'){
-   if(job.provider==='cursor'&&p.options?.some(option=>option.kind==='allow_always'))card.append(node('p','opinion-caption','Permitir sempre pode guardar a autorização na configuração do Cursor para pedidos futuros.'));
+   if(job.provider==='cursor'&&p.options?.some(option=>option.kind==='allow_always'))card.append(node('p','opinion-caption',uiText('Permitir sempre pode guardar a autorização na configuração do Cursor para pedidos futuros.')));
    for(const option of p.options||[])card.append(this.button(option.name||option.optionId,()=>send({optionId:option.optionId})));
   }else if(['elicitation/create','mcpServer/elicitation/request'].includes(request.method)){
-   try{const form=elicitationForm(p.requestedSchema);card.append(form.container,this.button('Responder',()=>{try{send({action:'accept',content:form.read()});}catch(e){this.toast(e.message);}}),this.button('Recusar',()=>send({action:'decline'})));}catch(e){card.append(node('p','opinion-error',e.message),this.button('Recusar',()=>send({action:'decline'})));}
+   try{const form=elicitationForm(p.requestedSchema);card.append(form.container,this.button(uiText('Responder'),()=>{try{send({action:'accept',content:form.read()});}catch(e){this.toast(e.message);}}),this.button(uiText('Recusar'),()=>send({action:'decline'})));}catch(e){card.append(node('p','opinion-error',e.message),this.button(uiText('Recusar'),()=>send({action:'decline'})));}
   }else if(request.method==='tool/requestUserInput'){
-   const fields=(p.questions||[]).map(q=>({q,input:this.field(card,q.question||q.header||q.id,'textarea')}));card.append(this.button('Responder',()=>send({answers:Object.fromEntries(fields.map(({q,input})=>[q.id,input.value]))})));
+   const fields=(p.questions||[]).map(q=>({q,input:this.field(card,q.question||q.header||q.id,'textarea')}));card.append(this.button(uiText('Responder'),()=>send({answers:Object.fromEntries(fields.map(({q,input})=>[q.id,input.value]))})));
   }else if(request.method==='cursor/ask_question'){
-   const fields=(p.questions||[]).map(q=>{const group=node('fieldset');group.append(node('legend','',q.prompt));const inputs=(q.options||[]).map(option=>{const label=node('label'),i=node('input');i.type=q.allowMultiple?'checkbox':'radio';i.name=request.id+q.id;i.value=option.id;label.append(i,document.createTextNode(option.label));group.append(label);return i;});card.append(group);return {q,inputs};});card.append(this.button('Responder',()=>send({answers:fields.map(({q,inputs})=>({questionId:q.id,selectedOptionIds:inputs.filter(i=>i.checked).map(i=>i.value)}))})));
+   const fields=(p.questions||[]).map(q=>{const group=node('fieldset');group.append(node('legend','',q.prompt));const inputs=(q.options||[]).map(option=>{const label=node('label'),i=node('input');i.type=q.allowMultiple?'checkbox':'radio';i.name=request.id+q.id;i.value=option.id;label.append(i,document.createTextNode(option.label));group.append(label);return i;});card.append(group);return {q,inputs};});card.append(this.button(uiText('Responder'),()=>send({answers:fields.map(({q,inputs})=>({questionId:q.id,selectedOptionIds:inputs.filter(i=>i.checked).map(i=>i.value)}))})));
   }else if(request.method==='cursor/create_plan'){
-   card.append(node('pre','',p.plan||''),this.button('Aceitar plano',()=>send({decision:'accept'})),this.button('Recusar',()=>send({decision:'decline'})));
-  }else if(request.method==='claude/canUseTool'||request.method.endsWith('/requestApproval'))card.append(this.button('Permitir desta vez',()=>send({decision:'accept'})),this.button('Recusar',()=>send({decision:'decline'})));
-  card.append(this.button('Parar este parecer',async()=>{try{await this.api('/api/opinions/'+job.id+'/stop',{});await this.refreshState();}catch(e){this.toast(e.message);}}));return card;
+   card.append(node('pre','',p.plan||''),this.button(uiText('Aceitar plano'),()=>send({decision:'accept'})),this.button(uiText('Recusar'),()=>send({decision:'decline'})));
+  }else if(request.method==='claude/canUseTool'||request.method.endsWith('/requestApproval'))card.append(this.button(uiText('Permitir desta vez'),()=>send({decision:'accept'})),this.button(uiText('Recusar'),()=>send({decision:'decline'})));
+  card.append(this.button(uiText('Parar este parecer'),async()=>{try{await this.api('/api/opinions/'+job.id+'/stop',{});await this.refreshState();}catch(e){this.toast(e.message);}}));return card;
  }
- updateUseButton(panel,batch){const state=this.viewState(),cycle=state?.automatic?.cycles.find(r=>r.id===batch.automaticCycleId),pending=cycle&&['waiting-main','preparing','reviewing','delivering','assessing'].includes(cycle.status);panel.useButton.hidden=!batch.jobs.some(j=>j.status==='completed'&&opinionDelivery(j.id,state?.merges).state==='separate');panel.useButton.disabled=Boolean(pending)||batch.jobs.some(active)||!batch.jobs.some(j=>this.selected.has(j.id)&&j.status==='completed'&&opinionDelivery(j.id,state?.merges).state==='separate');panel.useButton.dataset.tip=pending?'O ciclo automático ainda está em curso.':batch.jobs.some(active)?'Aguarda os restantes pareceres ou interrompe-os antes de enviar à conversa.':'Enviar apenas os resultados selecionados que ainda estão separados, com um comentário opcional.';}
- choose(owner,messageKey,role,preferences=this.preferences(),initial={}){this.header(role==='user'?'Pedir outra resposta':'Pedir opinião');this.errorBox=null;this.dialog.append(node('p','opinion-caption',role==='user'?'Os participantes recebem a pergunta e o contexto anterior relevante, sem as respostas posteriores.':'Os participantes recebem a pergunta, esta resposta e o contexto relevante, incluindo referências aos ficheiros observados.'));
-  const mode=role==='user'?null:this.field(this.dialog,'O que verificar');if(mode)this.options(mode,Object.entries(reviewModes).map(([value,label])=>({value,label})),initial.mode||'comment');
+ updateUseButton(panel,batch){const state=this.viewState(),cycle=state?.automatic?.cycles.find(r=>r.id===batch.automaticCycleId),pending=cycle&&['waiting-main','preparing','reviewing','delivering','assessing'].includes(cycle.status);panel.useButton.hidden=!batch.jobs.some(j=>j.status==='completed'&&opinionDelivery(j.id,state?.merges).state==='separate');panel.useButton.disabled=Boolean(pending)||batch.jobs.some(active)||!batch.jobs.some(j=>this.selected.has(j.id)&&j.status==='completed'&&opinionDelivery(j.id,state?.merges).state==='separate');panel.useButton.dataset.tip=pending?uiText('O ciclo automático ainda está em curso.'):batch.jobs.some(active)?uiText('Aguarda os restantes pareceres ou interrompe-os antes de enviar à conversa.'):uiText('Enviar apenas os resultados selecionados que ainda estão separados, com um comentário opcional.');}
+ choose(owner,messageKey,role,preferences=this.preferences(),initial={}){this.header(role==='user'?uiText('Pedir outra resposta'):uiText('Pedir opinião'));this.errorBox=null;this.dialog.append(node('p','opinion-caption',role==='user'?uiText('Os participantes recebem a pergunta e o contexto anterior relevante, sem as respostas posteriores.'):uiText('Os participantes recebem a pergunta, esta resposta e o contexto relevante, incluindo referências aos ficheiros observados.')));
+  const mode=role==='user'?null:this.field(this.dialog,uiText('O que verificar'));if(mode)this.options(mode,Object.entries(reviewModes).map(([value,label])=>({value,label})),initial.mode||'comment');
   const rows=node('div','opinion-participants');this.dialog.append(rows);const controls=[];
-  const add=pref=>{if(controls.length>=4)return;const row=node('div','opinion-participant'),record={row,...this.participant(row,owner,pref)};controls.push(record);row.append(this.button('Remover',()=>{controls.splice(controls.indexOf(record),1);row.remove();}));rows.append(row);};
+  const add=pref=>{if(controls.length>=4)return;const row=node('div','opinion-participant'),record={row,...this.participant(row,owner,pref)};controls.push(record);row.append(this.button(uiText('Remover'),()=>{controls.splice(controls.indexOf(record),1);row.remove();}));rows.append(row);};
   if(preferences.length)for(const pref of preferences)add(pref);else add();
-  this.dialog.append(this.button('＋ Outro participante',()=>add()));const comment=this.field(this.dialog,'Foco opcional','textarea');comment.rows=2;comment.value=initial.focus||'';comment.placeholder='Ex.: procura falhas no plano, sugere alternativas ou avalia o design.';
-  const limits=node('details','opinion-context-info');limits.append(node('summary','','Contexto e limites'),node('p','opinion-caption','Sem troca de cliente na conversa principal. Cada participante usa uma sessão própria, com as ferramentas habituais em Planear (só leitura no Codex), e consome a sua conta/quota. As autorizações aparecem no respetivo cartão. Históricos extensos seguem como excertos identificados.'));
-  this.dialog.append(limits);const submit=this.button('Consultar modelos',async()=>{
-   const participants=controls.map(({p,m,e})=>({provider:p.value,model:m.value,effort:e.value}));if(!participants.length){this.error('Escolhe pelo menos um participante.');return;}submit.disabled=true;
+  this.dialog.append(this.button(uiText('＋ Outro participante'),()=>add()));const comment=this.field(this.dialog,uiText('Foco opcional'),'textarea');comment.rows=2;comment.value=initial.focus||'';comment.placeholder=uiText('Ex.: procura falhas no plano, sugere alternativas ou avalia o design.');
+  const limits=node('details','opinion-context-info');limits.append(node('summary','',uiText('Contexto e limites')),node('p','opinion-caption',uiText('Sem troca de cliente na conversa principal. Cada participante usa uma sessão própria, com as ferramentas habituais em Planear (só leitura no Codex), e consome a sua conta/quota. As autorizações aparecem no respetivo cartão. Históricos extensos seguem como excertos identificados.')));
+  this.dialog.append(limits);const submit=this.button(uiText('Consultar modelos'),async()=>{
+   const participants=controls.map(({p,m,e})=>({provider:p.value,model:m.value,effort:e.value}));if(!participants.length){this.error(uiText('Escolhe pelo menos um participante.'));return;}submit.disabled=true;
    try{const result=await this.submitOpinion(owner,messageKey,participants,comment.value,mode?.value||'comment');this.dialog.close();await this.refreshState();this.revealResult(result.id);}
    catch(error){this.error(error.message);await this.refreshState().catch(()=>{});}finally{submit.disabled=false;}
   },'primary-button');this.dialog.append(submit);this.dialog.showModal();}
@@ -542,29 +544,29 @@ export class OpinionUI{
  moveAutomatic(from,to){if(from!==to&&this.automaticDrafts.has(from)){this.automaticDrafts.set(to,this.automaticDrafts.get(from));this.automaticDrafts.delete(from);}}
  automaticSummary() {
   const config = this.automaticSetting();
-  return config ? 'Revisores: ' + automaticParticipants(config).map(p=>shortNames[p.provider]).join(' + ') : '';
+  return config ? uiText('Revisores: ') + automaticParticipants(config).map(p=>shortNames[p.provider]).join(' + ') : '';
  }
  renderAutomatic() {
   const button = document.getElementById('review-toggle');
   if (!button) return;
   const config = this.automaticSetting();
-  button.textContent = config ? 'Revisor · ' + ({all:'Todas',plan:'Plano',implementation:'Código'}[config.trigger]) : 'Revisor';
+  button.textContent = config ? uiText('Revisor · ') + ({all:uiText('Todas'),plan:uiText('Plano'),implementation:uiText('Código')}[config.trigger]) : uiText('Revisor');
   button.setAttribute('aria-pressed', String(Boolean(config)));
-  button.dataset.tip = config ? `${automaticParticipants(config).map(p=>`${names[p.provider]} · ${p.model} · ${effortLabels[p.effort]||p.effort} · ${p.allowWrite?'escrita ativada':'Planear / só leitura'}`).join(' + ')} · ${config.scope==='conversation'?'nesta conversa':'só no próximo pedido'} · ${{always:'pareceres reunidos numa avaliação pelo principal',necessary:'envia apenas os pareceres que os revisores recomendarem',manual:'pareceres separados, envio manual'}[automaticReturnMode(config)]}` : 'Revisor desligado. Escolher até quatro revisores para o próximo pedido ou esta conversa.';
+  button.dataset.tip = config ? `${automaticParticipants(config).map(p=>`${names[p.provider]} · ${p.model} · ${effortLabels[p.effort]||p.effort} · ${p.allowWrite?uiText('escrita ativada'):uiText('Planear / só leitura')}`).join(' + ')} · ${config.scope==='conversation'?uiText('nesta conversa'):uiText('só no próximo pedido')} · ${{always:uiText('pareceres reunidos numa avaliação pelo principal'),necessary:uiText('envia apenas os pareceres que os revisores recomendarem'),manual:uiText('pareceres separados, envio manual')}[automaticReturnMode(config)]}` : uiText('Revisor desligado. Escolher até quatro revisores para o próximo pedido ou esta conversa.');
   const warning = document.getElementById('review-unavailable');
   if (warning && warning.dataset.key !== this.getKey()) warning.hidden = true;
  }
  offerWithoutReview(error) {
   const warning = document.getElementById('review-unavailable'), key = this.getKey();
   warning.dataset.key = key;
-  warning.replaceChildren(node('strong','','O pedido ainda não foi enviado.'),node('p','',error.message));
-  warning.append(this.button('Enviar sem revisão', () => {
-   if (this.getKey() !== key) return this.toast('A conversa mudou. Revê o pedido antes de enviar.');
+  warning.replaceChildren(node('strong','',uiText('O pedido ainda não foi enviado.')),node('p','',error.message));
+  warning.append(this.button(uiText('Enviar sem revisão'), () => {
+   if (this.getKey() !== key) return this.toast(uiText('A conversa mudou. Revê o pedido antes de enviar.'));
    this.automaticDrafts.set(key, null);
    warning.hidden = true;
    this.renderAutomatic();
    document.getElementById('composer').requestSubmit();
-  }, 'primary-button'), this.button('Configurar revisor', () => this.configureAutomatic()), this.button('Fechar', () => { warning.hidden = true; }));
+  }, 'primary-button'), this.button(uiText('Configurar revisor'), () => this.configureAutomatic()), this.button(uiText('Fechar'), () => { warning.hidden = true; }));
   warning.hidden = false;
  }
  viewState() {
@@ -587,40 +589,40 @@ export class OpinionUI{
     const page = await this.api('/api/conversations/'+conversation.id+'/opinion-history?cursor='+encodeURIComponent(cache.cursor||''));
     for (const kind of ['batches','cycles','merges']) cache[kind].push(...page[kind]);
     cache.cursor = page.nextCursor; cache.loaded = true; this.archiveRevision++;
-   } catch (error) { cache.error = true; button.disabled = false; button.textContent = 'Tentar carregar pareceres'; this.toast('Não foi possível ler os pareceres anteriores: '+error.message); }
+   } catch (error) { cache.error = true; button.disabled = false; button.textContent = uiText('Tentar carregar pareceres'); this.toast(uiText('Não foi possível ler os pareceres anteriores: ')+error.message); }
    finally { cache.loading = false; await this.refreshState(); }
   };
-  const button = this.button(cache.loading?'A carregar pareceres…':'Carregar pareceres anteriores', load);
+  const button = this.button(cache.loading?uiText('A carregar pareceres…'):uiText('Carregar pareceres anteriores'), load);
   button.disabled = Boolean(cache.loading);
-  box.append(button,node('small','','Histórico preservado · carregado por páginas'));
+  box.append(button,node('small','',uiText('Histórico preservado · carregado por páginas')));
   if (!cache.loaded || cache.cursor) parent.append(box);
   if (!cache.loaded && !cache.loading && !cache.error) void load();
  }
  configureAutomatic(){
-  const target=this.getTarget(),key=this.getKey(),current=this.automaticSetting();this.header('Revisores automáticos');this.dialog.classList.add('automatic-review-dialog');this.errorBox=null;
-  this.dialog.append(node('p','opinion-caption','Cada modelo revê a resposta ou o código. Por omissão, só o principal pode implementar: os revisores apontam problemas e melhorias em Planear/Só leitura. Podes enviar sempre, deixar cada revisor decidir se vale a pena enviar, ou escolher manualmente. Os pareceres enviados seguem juntos numa única avaliação pelo principal, mantendo as permissões do pedido original. Uma ronda, sem repetição.'));
+  const target=this.getTarget(),key=this.getKey(),current=this.automaticSetting();this.header(uiText('Revisores automáticos'));this.dialog.classList.add('automatic-review-dialog');this.errorBox=null;
+  this.dialog.append(node('p','opinion-caption',uiText('Cada modelo revê a resposta ou o código. Por omissão, só o principal pode implementar: os revisores apontam problemas e melhorias em Planear/Só leitura. Podes enviar sempre, deixar cada revisor decidir se vale a pena enviar, ou escolher manualmente. Os pareceres enviados seguem juntos numa única avaliação pelo principal, mantendo as permissões do pedido original. Uma ronda, sem repetição.')));
   const timing=node('div','review-timing');this.dialog.append(timing);
-  const trigger=this.field(timing,'Quando rever');this.options(trigger,[{value:'off',label:'Desligado'},{value:'all',label:'Todas as respostas finais'},{value:'plan',label:'Só ao planear / só leitura'},{value:'implementation',label:'Só após alterações observadas'}],current?.trigger||'off');
-  const scope=this.field(timing,'Duração');this.options(scope,[{value:'request',label:'Só no próximo pedido'},{value:'conversation',label:'Manter nesta conversa'}],current?.scope||'request');
+  const trigger=this.field(timing,uiText('Quando rever'));this.options(trigger,[{value:'off',label:uiText('Desligado')},{value:'all',label:uiText('Todas as respostas finais')},{value:'plan',label:uiText('Só ao planear / só leitura')},{value:'implementation',label:uiText('Só após alterações observadas')}],current?.trigger||'off');
+  const scope=this.field(timing,uiText('Duração'));this.options(scope,[{value:'request',label:uiText('Só no próximo pedido')},{value:'conversation',label:uiText('Manter nesta conversa')}],current?.scope||'request');
   const rows=node('div','automatic-review-participants'),controls=[];this.dialog.append(rows);
   const add=pref=>{
    if(controls.length>=4)return;
-   const fieldset=node('fieldset','automatic-review-member'),legend=node('legend','','Revisor '+(controls.length+1)),row=node('div','opinion-participant'),record=this.participant(row,target||{provider:'codex'},pref);
+   const fieldset=node('fieldset','automatic-review-member'),legend=node('legend','',uiText('Revisor ')+(controls.length+1)),row=node('div','opinion-participant'),record=this.participant(row,target||{provider:'codex'},pref);
    fieldset.append(legend,row);
-   const permission=node('label','review-write'),write=node('input');write.type='checkbox';write.checked=pref?.allowWrite===true;write.setAttribute('aria-label','Permitir editar ficheiros · '+legend.textContent);permission.append(write,document.createTextNode('Permitir editar ficheiros'));permission.dataset.tip='Desligado por omissão. Ativar dá ao revisor modo de execução com autorizações nativas; nunca ativa aceitação automática. Se algum revisor puder escrever, a equipa trabalha em sequência.';
-   const entry={fieldset,record,write};controls.push(entry);fieldset.append(permission,this.button('Remover revisor',()=>{controls.splice(controls.indexOf(entry),1);fieldset.remove();renumber();}));rows.append(fieldset);renumber();
+   const permission=node('label','review-write'),write=node('input');write.type='checkbox';write.checked=pref?.allowWrite===true;write.setAttribute('aria-label',uiText('Permitir editar ficheiros · ')+legend.textContent);permission.append(write,document.createTextNode(uiText('Permitir editar ficheiros')));permission.dataset.tip=uiText('Desligado por omissão. Ativar dá ao revisor modo de execução com autorizações nativas; nunca ativa aceitação automática. Se algum revisor puder escrever, a equipa trabalha em sequência.');
+   const entry={fieldset,record,write};controls.push(entry);fieldset.append(permission,this.button(uiText('Remover revisor'),()=>{controls.splice(controls.indexOf(entry),1);fieldset.remove();renumber();}));rows.append(fieldset);renumber();
   };
-  const renumber=()=>{controls.forEach((entry,index)=>{entry.fieldset.querySelector('legend').textContent='Revisor '+(index+1);entry.write.setAttribute('aria-label','Permitir editar ficheiros · Revisor '+(index+1));});addButton.disabled=controls.length>=4;};
-  const addButton=this.button('＋ Outro revisor',()=>{const used=new Set(controls.map(entry=>entry.record.p.value));const state=this.getState();const provider=Object.keys(names).find(id=>!used.has(id)&&state.opinions?.capabilities[id]?.available&&state.providers[id]?.models?.length);add(provider?{provider}:undefined);});this.dialog.append(addButton);
+  const renumber=()=>{controls.forEach((entry,index)=>{entry.fieldset.querySelector('legend').textContent=uiText('Revisor ')+(index+1);entry.write.setAttribute('aria-label',uiText('Permitir editar ficheiros · Revisor ')+(index+1));});addButton.disabled=controls.length>=4;};
+  const addButton=this.button(uiText('＋ Outro revisor'),()=>{const used=new Set(controls.map(entry=>entry.record.p.value));const state=this.getState();const provider=Object.keys(names).find(id=>!used.has(id)&&state.opinions?.capabilities[id]?.available&&state.providers[id]?.models?.length);add(provider?{provider}:undefined);});this.dialog.append(addButton);
   const previous=automaticParticipants(current);for(const pref of previous.length?previous:[this.preferences()[0]])add(pref&&{...pref,allowWrite:current?pref.allowWrite===true:false});
-  const focus=this.field(this.dialog,'Instruções adicionais / foco','textarea');focus.rows=2;focus.value=current?.focus||'';
-  const delivery=this.field(this.dialog,'Enviar pareceres ao principal');delivery.parentElement.classList.add('review-delivery');this.options(delivery,[{value:'always',label:'Enviar sempre'},{value:'necessary',label:'Enviar apenas se necessário'},{value:'manual',label:'Envio manual'}],automaticReturnMode(current));delivery.dataset.tip='Se necessário: cada revisor decide com justificação. Só os recomendados seguem automaticamente. Os restantes ficam separados e podem ser enviados manualmente.';
-  this.dialog.append(node('p','opinion-caption','Em «Enviar apenas se necessário», cada revisor indica se encontrou um erro, risco ou melhoria relevante que justifique nova avaliação. Só os pareceres recomendados seguem automaticamente. Os restantes continuam visíveis e enviáveis à mão. Decisões inválidas ou em falta ficam pendentes, sem aprovação implícita. Cada revisor usa a sua conta/quota. A revisão de código exige alterações de ficheiros observadas.'));
-  const submit=this.button('Aplicar',async()=>{submit.disabled=true;try{if(this.getKey()!==key)throw Error('A conversa mudou. Abre novamente as opções.');const participants=controls.map(({record,write})=>({...record.read(),allowWrite:write.checked}));if(trigger.value!=='off'&&!participants.length)throw Error('Escolhe pelo menos um revisor.');const config=trigger.value==='off'?null:{trigger:trigger.value,scope:scope.value,participants,returnMode:delivery.value,focus:focus.value};if(target&&(config===null||config.scope==='conversation'))await this.api('/api/conversations/'+target.id+'/review-policy',{config});this.automaticDrafts.set(key,config);this.dialog.close();await this.refreshState();this.renderAutomatic();}catch(e){this.error(e.message);}finally{submit.disabled=false;}},'primary-button');this.dialog.append(submit);this.dialog.showModal();
+  const focus=this.field(this.dialog,uiText('Instruções adicionais / foco'),'textarea');focus.rows=2;focus.value=current?.focus||'';
+  const delivery=this.field(this.dialog,uiText('Enviar pareceres ao principal'));delivery.parentElement.classList.add('review-delivery');this.options(delivery,[{value:'always',label:uiText('Enviar sempre')},{value:'necessary',label:uiText('Enviar apenas se necessário')},{value:'manual',label:uiText('Envio manual')}],automaticReturnMode(current));delivery.dataset.tip=uiText('Se necessário: cada revisor decide com justificação. Só os recomendados seguem automaticamente. Os restantes ficam separados e podem ser enviados manualmente.');
+  this.dialog.append(node('p','opinion-caption',uiText('Em «Enviar apenas se necessário», cada revisor indica se encontrou um erro, risco ou melhoria relevante que justifique nova avaliação. Só os pareceres recomendados seguem automaticamente. Os restantes continuam visíveis e enviáveis à mão. Decisões inválidas ou em falta ficam pendentes, sem aprovação implícita. Cada revisor usa a sua conta/quota. A revisão de código exige alterações de ficheiros observadas.')));
+  const submit=this.button(uiText('Aplicar'),async()=>{submit.disabled=true;try{if(this.getKey()!==key)throw Error(uiText('A conversa mudou. Abre novamente as opções.'));const participants=controls.map(({record,write})=>({...record.read(),allowWrite:write.checked}));if(trigger.value!=='off'&&!participants.length)throw Error(uiText('Escolhe pelo menos um revisor.'));const config=trigger.value==='off'?null:{trigger:trigger.value,scope:scope.value,participants,returnMode:delivery.value,focus:focus.value};if(target&&(config===null||config.scope==='conversation'))await this.api('/api/conversations/'+target.id+'/review-policy',{config});this.automaticDrafts.set(key,config);this.dialog.close();await this.refreshState();this.renderAutomatic();}catch(e){this.error(e.message);}finally{submit.disabled=false;}},'primary-button');this.dialog.append(submit);this.dialog.showModal();
  }
- incorporate(batch,jobIds){const target=this.getTarget();if(!target||target.group!==batch.groupId&&target.id!==batch.groupId){this.toast('Abre a conversa de origem para incorporar estes pareceres.');return;}if(batch.jobs.some(active)){this.toast('Aguarda os outros pareceres ou interrompe-os antes de enviar.');return;}
-  this.header('Enviar à conversa');this.errorBox=null;this.dialog.append(node('p','opinion-caption',`Os ${jobIds.length} resultados selecionados serão enviados ao ${names[target.provider]}, mantendo as escolhas da conversa. O modelo avaliará as sugestões; não há implementação automática.`));const comment=this.field(this.dialog,'Comentário opcional','textarea');comment.rows=3;comment.maxLength=4000;comment.placeholder='Ex.: avalia estes pareceres e melhora o plano.';const requestId=crypto.randomUUID();const submit=this.button('Enviar ao '+names[target.provider],async()=>{
-   submit.disabled=true;try{const current=this.getTarget();if(current?.id!==target.id)throw Error('A conversa mudou. Fecha e escolhe novamente.');const settings=this.getSettings();const result=await this.api('/api/conversations/'+target.id+'/opinion-incorporate',{jobIds,comment:comment.value,requestId,settings});if(!result.accepted)throw Error('O envio anterior está '+result.status+'; não foi reenviado.');this.dialog.close();await this.refreshState();}
+ incorporate(batch,jobIds){const target=this.getTarget();if(!target||target.group!==batch.groupId&&target.id!==batch.groupId){this.toast(uiText('Abre a conversa de origem para incorporar estes pareceres.'));return;}if(batch.jobs.some(active)){this.toast(uiText('Aguarda os outros pareceres ou interrompe-os antes de enviar.'));return;}
+  this.header(uiText('Enviar à conversa'));this.errorBox=null;this.dialog.append(node('p','opinion-caption',uiText`Os ${jobIds.length} resultados selecionados serão enviados ao ${names[target.provider]}, mantendo as escolhas da conversa. O modelo avaliará as sugestões; não há implementação automática.`));const comment=this.field(this.dialog,uiText('Comentário opcional'),'textarea');comment.rows=3;comment.maxLength=4000;comment.placeholder=uiText('Ex.: avalia estes pareceres e melhora o plano.');const requestId=crypto.randomUUID();const submit=this.button(uiText('Enviar ao ')+names[target.provider],async()=>{
+   submit.disabled=true;try{const current=this.getTarget();if(current?.id!==target.id)throw Error(uiText('A conversa mudou. Fecha e escolhe novamente.'));const settings=this.getSettings();const result=await this.api('/api/conversations/'+target.id+'/opinion-incorporate',{jobIds,comment:comment.value,requestId,settings});if(!result.accepted)throw Error(uiText('O envio anterior está ')+result.status+uiText('; não foi reenviado.'));this.dialog.close();await this.refreshState();}
    catch(error){this.error(error.message);await this.refreshState().catch(()=>{});}finally{submit.disabled=false;}
   },'primary-button');this.dialog.append(submit);this.dialog.showModal();}
 }

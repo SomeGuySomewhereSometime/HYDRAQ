@@ -1,8 +1,10 @@
 # Estado e histórico do HYDRAQ
 
-Versão atual: 213
+Versão atual: 214
 
 ## Resumo atual
+
+- Interface bilingue (entrada 214): inglês por omissão e português selecionável em Configurações → Idioma da interface. Preferência neste navegador, catálogos locais para textos fixos e dinâmicos, datas e números adaptados. Conteúdo das conversas, nomes, caminhos, chaves e respostas nativas preservados. Mudança de idioma e rascunho confirmados no Chrome.
 
 - Mono por omissão (entrada 213): aparência inicial e recuperação de preferências inválidas usam Mono. O HTML inicial, o seletor e a cor do navegador acompanham a predefinição; escolhas válidas já guardadas continuam a ser respeitadas.
 
@@ -2803,3 +2805,9 @@ Versão atual: 213
 
 - Mono passa a ser a aparência inicial para navegadores sem preferências ou com valores inválidos. HTML inicial, nome e amostra do seletor e cor do navegador alinhados, evitando mostrar Atelier antes de carregar o JavaScript. Preferências válidas existentes conservadas.
 - Atualizadas as expectativas dos testes de disposição para a nova predefinição. Verificado: cinco testes de disposição e suíte completa 936/936, sem falhas nem ignorados, antes do commit conjunto das configurações pendentes. Apenas interface; a instância ativa serve os novos ficheiros ao recarregar a página. Artefactos de `output/` mantidos locais.
+
+### 214 — 2026-11-09 — Codex — interface em inglês e português
+
+- Inglês por omissão. O seletor em Configurações → Idioma da interface guarda a escolha no navegador e recarrega a página após guardar o rascunho. Os catálogos cobrem navegação, compositor, projetos, Git, sessões nativas, mascote, colaboração, Hydra e revisões, incluindo controlos de acessibilidade e textos dinâmicos.
+- Os textos da aplicação são traduzidos com interpolações preservadas. Conversas e respostas nativas conservam a língua original. Os módulos partilhados mantêm os textos do servidor e as datas e números da interface seguem a preferência do navegador.
+- Verificado: 117 testes focados passaram. O Chrome com cliente simulado confirmou o arranque em inglês, a troca nos dois sentidos, a persistência ao recarregar e a preservação do rascunho. A versão 214 está ativa na porta 4318, com os sete ficheiros da interface verificados, os cinco clientes ligados e 130 conversas preservadas.

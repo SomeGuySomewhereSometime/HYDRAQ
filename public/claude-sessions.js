@@ -1,3 +1,5 @@
+import { locale as uiLocale } from './i18n.js';
+import { t as uiText, translateStatic } from './i18n.js';
 // The original Claude TUI runs outside HYDRAQ: the group stays reserved until the person returns.
 export class ClaudeSessionsUI {
   constructor({api, state, current, project, choose, refresh, toast, changed}) {
@@ -14,6 +16,7 @@ export class ClaudeSessionsUI {
         <button type="button" data-claude-list>Procurar sessões</button>
         <div data-claude-results></div><button type="button" data-claude-more hidden>Mais sessões</button>
       </details>`;
+    translateStatic(this.host);
     const query = selector => this.host.querySelector(selector);
     this.query = query;
     this.open = () => this.run(async () => {
@@ -29,7 +32,7 @@ export class ClaudeSessionsUI {
       try {
         const result = await this.api(`/api/conversations/${id}/claude-release`, {confirm});
         query('[data-claude-command]').hidden = true;
-        this.toast([result.imported ? `${result.imported} pedido(s) do Claude original adicionados à conversa.` : 'Nenhum pedido novo no Claude original.', result.warning].filter(Boolean).join(' '));
+        this.toast([result.imported ? uiText`${result.imported} pedido(s) do Claude original adicionados à conversa.` : uiText('Nenhum pedido novo no Claude original.'), result.warning].filter(Boolean).join(' '));
       } catch (error) { if (!this.decide(error, kind => release(id, [...confirm, kind], context), context)) throw error; }
     });
     this.release = () => release(this.session()?.id);
@@ -80,22 +83,22 @@ export class ClaudeSessionsUI {
   list(more) {
     return this.run(async () => {
       const cwd = this.query('[data-claude-cwd]').value.trim();
-      if (more && cwd !== this.listCwd) throw Error('A pasta mudou. Procura novamente as sessões.');
+      if (more && cwd !== this.listCwd) throw Error(uiText('A pasta mudou. Procura novamente as sessões.'));
       const page = await this.api('/api/claude/sessions', {cwd, cursor: more ? this.cursor : 0});
       this.listCwd = cwd; this.cursor = page.nextCursor;
       const results = this.query('[data-claude-results]');
       if (!more) results.replaceChildren();
       for (const session of page.data) {
         const button = document.createElement('button'); button.type = 'button'; button.className = 'native-import-row';
-        const when = new Date(session.updatedAt).toLocaleString('pt-PT', {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
-        button.textContent = `${session.imported ? 'Abrir · ' : ''}${session.source} · ${session.title} · ${when}`;
+        const when = new Date(session.updatedAt).toLocaleString(uiLocale(), {day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'});
+        button.textContent = `${session.imported ? uiText('Abrir · ') : ''}${session.source} · ${session.title} · ${when}`;
         button.title = session.id;
         const context = this.context(), selectedProject = this.project();
         const associate = (confirm = []) => this.run(async () => {
           if (context !== this.context() || cwd !== this.query('[data-claude-cwd]').value.trim()) return;
           if (session.conversationId) { this.choose(session.conversationId); return; }
           const project = selectedProject;
-          if (project && cwd !== project.root) throw Error('Usa a pasta deste projeto ou escolhe outro projeto antes de associar.');
+          if (project && cwd !== project.root) throw Error(uiText('Usa a pasta deste projeto ou escolhe outro projeto antes de associar.'));
           try {
             const result = await this.api('/api/claude/import', {sessionId: session.id, cwd, projectId: project?.id, revision: this.state().projectCatalog?.revision, confirm});
             if (result.warning) this.toast(result.warning);
@@ -105,7 +108,7 @@ export class ClaudeSessionsUI {
         button.onclick = () => associate();
         results.append(button);
       }
-      if (!more && !page.data.length) results.textContent = 'Não foram encontradas sessões do Claude Code nesta pasta.';
+      if (!more && !page.data.length) results.textContent = uiText('Não foram encontradas sessões do Claude Code nesta pasta.');
       this.query('[data-claude-more]').hidden = this.cursor == null;
     });
   }
@@ -117,19 +120,19 @@ export class ClaudeSessionsUI {
     const busy = ['starting','running','waiting','uncertain'].includes(target?.status);
     const preparing = Boolean(target && state?.claudeTerminal?.pending?.includes(target.id));
     const open = this.query('[data-claude-open]');
-    open.textContent = session ? 'Ver comando do terminal' : 'Abrir no terminal';
+    open.textContent = session ? uiText('Ver comando do terminal') : uiText('Abrir no terminal');
     open.disabled = this.pending || preparing || (!session && (!c || c.provider !== 'claude' || busy || !c.sessionStarted || !c.turns?.length || c.status === 'uncertain'));
     this.query('[data-claude-release]').hidden = !session;
     this.query('[data-claude-release]').disabled = this.pending || preparing;
-    const since = session ? new Date(session.terminal.since).toLocaleTimeString('pt-PT', {hour: '2-digit', minute: '2-digit'}) : '';
+    const since = session ? new Date(session.terminal.since).toLocaleTimeString(uiLocale(), {hour: '2-digit', minute: '2-digit'}) : '';
     this.query('[data-claude-status]').textContent = session
-      ? `Esta conversa está no Claude original desde as ${since}. A HYDRAQ não envia pedidos nem trabalha nesta pasta até voltares. Sai do Claude (/exit) e escolhe Continuar na HYDRAQ para importar o que fizeste.`
-      : 'Continua a mesma sessão no Claude original, com todas as funções nativas (incluindo equipas). Envia primeiro um pedido para a guardar.';
+      ? uiText`Esta conversa está no Claude original desde as ${since}. A HYDRAQ não envia pedidos nem trabalha nesta pasta até voltares. Sai do Claude (/exit) e escolhe Continuar na HYDRAQ para importar o que fizeste.`
+      : uiText('Continua a mesma sessão no Claude original, com todas as funções nativas (incluindo equipas). Envia primeiro um pedido para a guardar.');
     if (this.commandId !== session?.id) this.query('[data-claude-command]').hidden = true;
     const confirm = this.query('[data-claude-confirm]');
     confirm.hidden = !this.confirmation;
     confirm.querySelector('p').textContent = this.confirmation?.message || '';
-    this.query('[data-claude-proceed]').textContent = this.confirmation?.kind === 'closed' ? 'Confirmo que o Claude está fechado' : 'Continuar sem esse histórico';
+    this.query('[data-claude-proceed]').textContent = this.confirmation?.kind === 'closed' ? uiText('Confirmo que o Claude está fechado') : uiText('Continuar sem esse histórico');
     for (const button of confirm.querySelectorAll('button')) button.disabled = Boolean(this.pending);
     const scope = c?.cwd || this.project()?.root || state?.defaultCwd || '';
     if (scope !== this.scope) { this.scope = scope; this.query('[data-claude-cwd]').value = scope; this.query('[data-claude-results]').replaceChildren(); this.query('[data-claude-more]').hidden = true; }

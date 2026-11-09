@@ -13,6 +13,18 @@ import { Antigravity } from '../lib/antigravity.mjs';
 import { createHttpServer } from '../lib/http.mjs';
 import { ComposerDrafts, draftKey } from '../public/drafts.js';
 import { conversationGroups } from '../public/projects.js';
+import { setupLanguage } from '../public/i18n.js';
+
+test('English interface preserves stored conversation titles and the native default-title sentinel', t => {
+  const document = { documentElement: { nodeType: 1, tagName: 'HTML', childNodes: [], hasAttribute: () => false }, querySelector: () => null };
+  setupLanguage(document, { getItem: () => 'en' });
+  t.after(() => setupLanguage(document, { getItem: () => 'pt' }));
+  const original = { id: 'first', group: 'group', title: 'Nova conversa', createdAt: '2026-01-01', updatedAt: '2026-01-01' };
+  const named = { id: 'second', group: 'group', title: 'Guardar', createdAt: '2026-01-02', updatedAt: '2026-01-02' };
+  assert.equal(conversationGroups({ conversations: [original, named] })[0].title, 'Guardar');
+  assert.equal(conversationGroups({ conversations: [{ ...original, title: 'New conversation' }, named] })[0].title, 'New conversation');
+  assert.equal(conversationGroups({ conversations: [original, { ...named, organization: { title: 'Nova conversa' } }] })[0].title, 'Nova conversa');
+});
 
 const root=path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const waitFor=async predicate=>{const end=Date.now()+6000;while(!predicate()){if(Date.now()>end)throw Error('Tempo excedido.');await new Promise(r=>setTimeout(r,10));}};

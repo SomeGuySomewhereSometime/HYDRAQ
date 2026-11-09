@@ -1,15 +1,16 @@
+import { t as uiText } from './i18n.js';
 import { quotaUsageView } from './turn-quotas.js';
 import {glyph,PanelKit} from './opinions.js';
 
 const node=(tag,cls,text)=>{const e=document.createElement(tag);if(cls)e.className=cls;if(text!==undefined)e.textContent=text;return e;};
 const names={codex:'Codex',claude:'Claude Code',antigravity:'Antigravity',cursor:'Cursor',opencode:'OpenCode'};
 const shortNames={codex:'Codex',claude:'Claude',antigravity:'Antigravity',cursor:'Cursor',opencode:'OpenCode'};
-const effortLabels={default:'Automático',none:'Sem raciocínio',minimal:'Mínimo',low:'Leve',medium:'Médio',high:'Alto',xhigh:'Muito alto',max:'Máximo',ultra:'Ultra'};
+const effortLabels={default:uiText('Automático'),none:uiText('Sem raciocínio'),minimal:uiText('Mínimo'),low:uiText('Leve'),medium:uiText('Médio'),high:uiText('Alto'),xhigh:uiText('Muito alto'),max:uiText('Máximo'),ultra:'Ultra'};
 const busy=new Set(['starting','running','waiting','inProgress']);
 const synthesizing=job=>['queued','starting','running','stopping'].includes(job?.status);
-const synthesisStates={queued:['Na fila','active'],starting:['A iniciar','active'],running:['A sintetizar','active'],stopping:['A parar','active'],completed:['Pronta','done'],failed:['Falhou','failed'],interrupted:['Parada','failed'],uncertain:['Por confirmar','failed']};
-const coverageDetail=delivery=>delivery.peerCoverage?Object.entries(delivery.peerCoverage).map(([provider,coverage])=>`${shortName(provider)}: ${coverageLabels[coverage]||coverage}`).join(' · '):coverageLabels[delivery.coverage]||'sem registo';
-const coverageLabels={complete:'completo',excerpt:'em excerto',summary:'resumido',partial:'parcial: respostas do terminal não importadas',none:'sem nada novo'};
+const synthesisStates={queued:[uiText('Na fila'),'active'],starting:[uiText('A iniciar'),'active'],running:[uiText('A sintetizar'),'active'],stopping:[uiText('A parar'),'active'],completed:[uiText('Pronta'),'done'],failed:[uiText('Falhou'),'failed'],interrupted:[uiText('Parada'),'failed'],uncertain:[uiText('Por confirmar'),'failed']};
+const coverageDetail=delivery=>delivery.peerCoverage?Object.entries(delivery.peerCoverage).map(([provider,coverage])=>`${shortName(provider)}: ${coverageLabels[coverage]||coverage}`).join(' · '):coverageLabels[delivery.coverage]||uiText('sem registo');
+const coverageLabels={complete:uiText('completo'),excerpt:uiText('em excerto'),summary:uiText('resumido'),partial:uiText('parcial: respostas do terminal não importadas'),none:uiText('sem nada novo')};
 import {DUAL_KEYS,memberKeys,targetKeys,allLabel} from './multi-state.js';
 export {memberKeys,targetKeys};
 export const isReadMode=sandbox=>['read-only','plan','ask'].includes(sandbox);
@@ -25,10 +26,10 @@ const lockIcon=()=>{const svg=document.createElementNS('http://www.w3.org/2000/s
 /** Who receives the next request, named on the send button before anything is sent. */
 export function dualSendLabel(record,{target=record.target,writing=false}={}){
  const selected=targetKeys(record,target);
- if(selected.length>1)return selected.length===memberKeys(record).length?`Enviar a${allLabel(selected.length)} ↗`:`Enviar a ${selected.length} de ${memberKeys(record).length} · ${selected.map(k=>shortName(record.members[k].provider)).join(' + ')} ↗`;
+ if(selected.length>1)return selected.length===memberKeys(record).length?uiText`Enviar a${allLabel(selected.length)} ↗`:uiText`Enviar a ${selected.length} de ${memberKeys(record).length} · ${selected.map(k=>shortName(record.members[k].provider)).join(' + ')} ↗`;
  target=selected[0];
  const name=shortName(record.members[target].provider);
- return target===record.principal&&writing?`Enviar ao principal · ${name} ↗`:`Enviar só ao ${name} ↗`;
+ return target===record.principal&&writing?uiText`Enviar ao principal · ${name} ↗`:uiText`Enviar só ao ${name} ↗`;
 }
 
 /** Messages of each round by recipient. Identity comes from the round record, never from the text. */
@@ -42,13 +43,13 @@ export function dualRounds(timeline,record){
 
 /** A recipient's state comes from its own conversation; the round only knows what was handed over. */
 export function dualPanelState(delivery,turn){
- if(!turn&&['preparing','sending'].includes(delivery.status))return {label:'A enviar',tone:'active',live:true};
- if(!turn&&delivery.status==='failed')return {label:'Não enviado',tone:'failed',live:false};
- if(!turn&&delivery.status==='uncertain')return {label:'Entrega incerta',tone:'failed',live:false};
- if(turn?.status==='waiting')return {label:'Aguarda decisão',tone:'warn',live:true,attention:true};
- if(busy.has(turn?.status))return {label:'A responder',tone:'active',live:true};
+ if(!turn&&['preparing','sending'].includes(delivery.status))return {label:uiText('A enviar'),tone:'active',live:true};
+ if(!turn&&delivery.status==='failed')return {label:uiText('Não enviado'),tone:'failed',live:false};
+ if(!turn&&delivery.status==='uncertain')return {label:uiText('Entrega incerta'),tone:'failed',live:false};
+ if(turn?.status==='waiting')return {label:uiText('Aguarda decisão'),tone:'warn',live:true,attention:true};
+ if(busy.has(turn?.status))return {label:uiText('A responder'),tone:'active',live:true};
  const failed=['failed','interrupted','uncertain'].includes(turn?.status);
- return {label:{failed:'Falhou',interrupted:'Parado',uncertain:'Resultado incerto'}[turn?.status]||(turn?.planDocuments?.length?'Plano recebido':'Pronta'),tone:failed?'failed':'done',live:false};
+ return {label:{failed:uiText('Falhou'),interrupted:uiText('Parado'),uncertain:uiText('Resultado incerto')}[turn?.status]||(turn?.planDocuments?.length?uiText('Plano recebido'):uiText('Pronta')),tone:failed?'failed':'done',live:false};
 }
 
 export class DualUI{
@@ -102,7 +103,7 @@ export class DualUI{
  enforceWrite(writing){
   const record=this.record();if(!record||record.target===record.principal||!writing)return;
   this.setTarget(record.principal);
-  this.toast(`A implementação vai só para o principal: ${shortName(record.members[record.principal].provider)}. O outro recebe o resultado quando voltares a falar com ele.`);
+  this.toast(uiText`A implementação vai só para o principal: ${shortName(record.members[record.principal].provider)}. O outro recebe o resultado quando voltares a falar com ele.`);
  }
  modelLabel(provider,settings){const model=this.getModels?.(provider)?.find(m=>m.id===settings?.model);return [model?.name||settings?.model,effortLabels[settings?.effort]||settings?.effort].filter(Boolean).join(' · ');}
 
@@ -141,8 +142,8 @@ export class DualUI{
   const toggle=document.getElementById('dual-toggle'),bar=document.getElementById('dual-targets'),composer=document.getElementById('composer'),review=document.getElementById('review-toggle');
   if(!toggle||!bar)return;
   const record=this.record(conversation),pending=this.pendingFor(),members=this.activeMembers(conversation),keys=members?Object.keys(members):[],pair=keys.map(k=>members[k].provider);
-  toggle.textContent=members?`Multi · ${keys.length} ${keys.length===1?'participante':'participantes'}`:'Multi';toggle.setAttribute('aria-pressed',String(Boolean(members)));toggle.disabled=Boolean(this.memberBusy||locked&&!record);
-  toggle.dataset.tip='Multi: dois a quatro clientes respondem de forma independente na mesma ronda. O histórico passa entre rondas; só o principal implementa.';
+  toggle.textContent=members?`Multi · ${keys.length} ${keys.length===1?uiText('participante'):uiText('participantes')}`:'Multi';toggle.setAttribute('aria-pressed',String(Boolean(members)));toggle.disabled=Boolean(this.memberBusy||locked&&!record);
+  toggle.dataset.tip=uiText('Multi: dois a quatro clientes respondem de forma independente na mesma ronda. O histórico passa entre rondas; só o principal implementa.');
   if(this.selectingRecordId!==record?.id){this.selectingRecordId=record?.id;this.selectingGroup=false;}
   locked=locked||this.targetBusy||this.memberBusy;
   const rawSelected=record?targetKeys(record).filter(k=>keys.includes(k)):keys,selected=rawSelected.length?rawSelected:keys;
@@ -150,7 +151,7 @@ export class DualUI{
   if(members)composer.dataset.dual=selected.length>1?'both':'one';else delete composer.dataset.dual;
   composer.style.setProperty('--multi-edge',pair.map((provider,i)=>`var(--c-${provider}) ${i*100/Math.max(1,pair.length-1)}%`).join(', '));
   for(const [i,key] of DUAL_KEYS.entries()){if(pair[i])composer.style.setProperty('--pair-'+key,`var(--c-${pair[i]})`);else composer.style.removeProperty('--pair-'+key);}
-  if(review){review.disabled=selected.length>1;if(review.disabled)review.dataset.tip='A revisão automática segue os pedidos individuais ao principal.';}
+  if(review){review.disabled=selected.length>1;if(review.disabled)review.dataset.tip=uiText('A revisão automática segue os pedidos individuais ao principal.');}
   bar.hidden=!members;
   const signature=JSON.stringify([record?.id,selected,principal,members,locked,this.selectingGroup]);if(bar.dataset.signature===signature)return;
   bar.dataset.signature=signature;bar.replaceChildren();if(!members)return;
@@ -162,14 +163,14 @@ export class DualUI{
       if(value==='all'){this.selectingGroup=false;this.setTarget('all');return;}
       if(!this.selectingGroup){this.setTarget(value);return;}
       const next=selected.includes(value)?selected.filter(k=>k!==value):keys.filter(k=>k===value||selected.includes(k));
-      if(!next.length){this.toast('Seleciona pelo menos um destinatário.');return;}
+      if(!next.length){this.toast(uiText('Seleciona pelo menos um destinatário.'));return;}
       this.setTarget(next.length===keys.length?'all':next.length===1?next[0]:next);
     });return button;
   };
-  bar.append(option('all',`Todos (${keys.length})`));
+  bar.append(option('all',uiText`Todos (${keys.length})`));
   for(const key of keys){const button=option(key,`${key===principal?'★ ':''}${shortName(members[key].provider)}`,members[key].provider);button.dataset.tip=this.modelLabel(members[key].provider,record?this.memberSettings(record,key):members[key]);bar.append(button);}
-  if(keys.length>2){const multi=node('button','dual-target multi-select-toggle','Selecionar vários');multi.type='button';multi.setAttribute('aria-pressed',String(Boolean(this.selectingGroup)));multi.disabled=locked||Boolean(pending);multi.addEventListener('click',()=>{this.selectingGroup=!this.selectingGroup;this.changed();});bar.append(multi);}
-  bar.setAttribute('aria-label',this.selectingGroup?'Selecionar vários destinatários: cada botão junta ou retira um participante':'Destinatário: todos ou um participante');
+  if(keys.length>2){const multi=node('button','dual-target multi-select-toggle',uiText('Selecionar vários'));multi.type='button';multi.setAttribute('aria-pressed',String(Boolean(this.selectingGroup)));multi.disabled=locked||Boolean(pending);multi.addEventListener('click',()=>{this.selectingGroup=!this.selectingGroup;this.changed();});bar.append(multi);}
+  bar.setAttribute('aria-label',this.selectingGroup?uiText('Selecionar vários destinatários: cada botão junta ou retira um participante'):uiText('Destinatário: todos ou um participante'));
  }
 
  /** A connected client with models; OpenCode's list depends on the folder and may still have to be loaded. */
@@ -181,7 +182,7 @@ export class DualUI{
  }
  /** Principal choice shared by the dialogs; the label of a member follows its client field. */
  principalChoice(members,value){
-  const group=node('fieldset','dual-principal-choice'),legend=node('legend','','Principal · implementa e decide');group.append(legend);
+  const group=node('fieldset','dual-principal-choice'),legend=node('legend','',uiText('Principal · implementa e decide'));group.append(legend);
   const radios=Object.keys(members).map(key=>{const label=node('label','dual-principal-option'),input=node('input');input.type='radio';input.name='dual-principal-'+(++this.sequence);input.value=key;input.checked=value===key;label.append(input,document.createTextNode(shortName(members[key].provider)));group.append(label);return input;});
   const name='multi-principal-'+this.sequence;for(const radio of radios)radio.name=name;
   this.dialog.append(group);
@@ -196,7 +197,7 @@ export class DualUI{
   const keys=members?Object.keys(members):[];
   const principal=(record?.principal&&keys.includes(record.principal)?record.principal:pending?.principal&&keys.includes(pending.principal)?pending.principal:keys[0])||'a';
   dock.toggleAttribute('data-dual',Boolean(pair));
-  dock.setAttribute('aria-label',pair?'Participantes do Multi (clica num cliente para o ligar ou desligar)':'Escolher agente ativo');
+  dock.setAttribute('aria-label',pair?uiText('Participantes do Multi (clica num cliente para o ligar ou desligar)'):uiText('Escolher agente ativo'));
   for(const pill of dock.querySelectorAll('[data-agent]')){
    const provider=pill.dataset.agent,key=pair?DUAL_KEYS.find(k=>pair[k]===provider):null,tag=pill.querySelector('.agent-pill-tag');
    pill.dataset.tagText??=tag?.textContent||'';pill.dataset.tipText??=pill.dataset.tip||'';
@@ -212,15 +213,15 @@ export class DualUI{
    pill.setAttribute('aria-pressed',String(Boolean(key)));
    if(!key){
     delete pill.dataset.dualKey;
-    if(tag)tag.textContent='Desligado';
-    pill.dataset.tip=`${names[provider]||provider} · desligado neste Multi. Clica para ligar ao Multi.`;
+    if(tag)tag.textContent=uiText('Desligado');
+    pill.dataset.tip=uiText`${names[provider]||provider} · desligado neste Multi. Clica para ligar ao Multi.`;
     continue;
    }
    pill.dataset.dualKey=key;
    const label=(this.modelLabel||DualUI.prototype.modelLabel).call(this,provider,record?this.memberSettings?.(record,key):members[key]);
    if(tag)tag.textContent=label||pill.dataset.tagText;
    if(key===principal){const star=node('span','agent-pill-principal','★');star.setAttribute('aria-label','principal');pill.querySelector('.agent-pill-name')?.before(star);}
-   pill.dataset.tip=`${names[provider]||provider}${key===principal?' · principal':''}${label?' · '+label:''}. Ligado no Multi: clica para desligar.`;
+   pill.dataset.tip=uiText`${names[provider]||provider}${key===principal?uiText(' · principal'):''}${label?' · '+label:''}. Ligado no Multi: clica para desligar.`;
   }
   return Boolean(pair);
  }
@@ -237,7 +238,7 @@ export class DualUI{
  }
  removePending(pending,active,key,conversation){
   if(key==='a'&&conversation){
-   this.toast?.('Este cliente é a sessão inicial da conversa. Liga outro participante ou desliga o Multi.');
+   this.toast?.(uiText('Este cliente é a sessão inicial da conversa. Liga outro participante ou desliga o Multi.'));
    return;
   }
   this.beforeChange?.();
@@ -262,11 +263,11 @@ export class DualUI{
   const terminal=record&&(state?.nativeSessions?.sessions?.some(s=>s.group===record.groupId)||state?.conversations?.some(c=>c.group===record.groupId&&c.terminal));
   const roundSending=record?.rounds?.some(r=>r.targets?.some(k=>['preparing','sending'].includes(r.deliveries?.[k]?.status)));
   if(this.running?.(conversation)||roundSending||conversation?.claudexTask){
-   this.toast?.('Aguarda que as respostas terminem para mudar os participantes do Multi.');
+   this.toast?.(uiText('Aguarda que as respostas terminem para mudar os participantes do Multi.'));
    return true;
   }
   if(terminal){
-   this.toast?.('A conversa está no terminal. Usa «Continuar na HYDRAQ» antes de mudar os participantes do Multi.');
+   this.toast?.(uiText('A conversa está no terminal. Usa «Continuar na HYDRAQ» antes de mudar os participantes do Multi.'));
    return true;
   }
   const active=this.activeMembers(conversation);
@@ -278,7 +279,7 @@ export class DualUI{
   };
   const post=(operation,body)=>this.api('/api/dual/'+record.id+'/'+operation,{revision,multiVersion:2,...body});
   if(activeKey){
-   if(keys.length===1){this.toast?.('Mantém pelo menos um cliente ligado no Multi, ou desliga o Multi.');return true;}
+   if(keys.length===1){this.toast?.(uiText('Mantém pelo menos um cliente ligado no Multi, ou desliga o Multi.'));return true;}
    if(!record){this.removePending(pending,active,activeKey,conversation);return true;}
    this.beforeChange?.();
    this.runMemberChange(async()=>{
@@ -295,8 +296,8 @@ export class DualUI{
    });
    return true;
   }
-  if(keys.length>=4){this.toast?.('O Multi permite até quatro participantes. Desliga primeiro outro cliente.');return true;}
-  if(!this.offered(provider)){this.toast?.(`Liga primeiro o ${shortName(provider)} para o pôr no Multi.`);return true;}
+  if(keys.length>=4){this.toast?.(uiText('O Multi permite até quatro participantes. Desliga primeiro outro cliente.'));return true;}
+  if(!this.offered(provider)){this.toast?.(uiText`Liga primeiro o ${shortName(provider)} para o pôr no Multi.`);return true;}
   this.beforeChange?.();
   this.runMemberChange(async()=>{
    const leaving=record?.members[record.vacant];
@@ -306,10 +307,10 @@ export class DualUI{
     return;
    }
    if(!this.getModels(provider).length&&this.loadModels)await this.loadModels(provider,true);
-   if(!sameComposer()||(record&&(this.record()?.revision||0)!==revision))throw Error('O Multi mudou entretanto. Revê os participantes.');
+   if(!sameComposer()||(record&&(this.record()?.revision||0)!==revision))throw Error(uiText('O Multi mudou entretanto. Revê os participantes.'));
    const choice=this.defaultChoice(provider,this.record());
    if(!choice.model||!this.getModels(provider).some(model=>model.id===choice.model)){
-    throw Error(`Não há um modelo disponível no catálogo de ${shortName(provider)}.`);
+    throw Error(uiText`Não há um modelo disponível no catálogo de ${shortName(provider)}.`);
    }
    if(!record){
     pending.participants=[...this.pendingParticipants(pending),choice];
@@ -330,8 +331,8 @@ export class DualUI{
   const record=this.record();if(!record||record.vacant||this.memberBusy)return;
   const key=targetKeys(record).length>1?record.principal:targetKeys(record)[0];
   if(record.members[key].provider===provider)return;
-  if(others(record.members,key).some(m=>m.provider===provider)){this.toast(`O ${shortName(provider)} já participa neste Multi. Para falar só com ele, escolhe-o no seletor.`);return;}
-  if(!this.offered(provider)){this.toast(`Liga primeiro o ${shortName(provider)} para o pôr no Multi.`);return;}
+  if(others(record.members,key).some(m=>m.provider===provider)){this.toast(uiText`O ${shortName(provider)} já participa neste Multi. Para falar só com ele, escolhe-o no seletor.`);return;}
+  if(!this.offered(provider)){this.toast(uiText`Liga primeiro o ${shortName(provider)} para o pôr no Multi.`);return;}
   this.editMember(key,provider);
  }
  /** One participant: model and reasoning, or another client in its place. The dual stays on and nothing is sent. */
@@ -339,14 +340,14 @@ export class DualUI{
   const conversation=this.getCurrent(),record=this.record(conversation);if(!record)return;
   const member=record.members[key],kept=others(record.members,key),settings=this.memberSettings(record,key),state=this.getState();
   this.header(`Multi · ${names[member.provider]||member.provider}`);
-  this.dialog.append(node('p','opinion-caption','Muda o modelo e o raciocínio deste participante, ou põe outro cliente no seu lugar. O Multi continua ligado e nada é enviado. As respostas anteriores mantêm quem as deu; um cliente novo recebe o histórico da conversa no primeiro pedido.'));
+  this.dialog.append(node('p','opinion-caption',uiText('Muda o modelo e o raciocínio deste participante, ou põe outro cliente no seu lugar. O Multi continua ligado e nada é enviado. As respostas anteriores mantêm quem as deu; um cliente novo recebe o histórico da conversa no primeiro pedido.')));
   const error=node('p','opinion-error');error.hidden=true;error.setAttribute('role','alert');
   const fail=message=>{error.textContent=message;error.hidden=false;};
   // The server repeats these checks; here they explain why the client cannot change right now.
   const terminal=state?.nativeSessions?.sessions?.some(s=>s.group===record.groupId)||state?.conversations?.some(c=>c.group===record.groupId&&c.terminal);
-  const blocked=this.running(conversation)||record.rounds.some(r=>r.targets.some(k=>['preparing','sending'].includes(r.deliveries[k].status)))?'Aguarda que as respostas terminem para mudar de cliente.':terminal?'A conversa está no terminal. Usa «Continuar na HYDRAQ» antes de mudar de cliente ou de principal.':'';
+  const blocked=this.running(conversation)||record.rounds.some(r=>r.targets.some(k=>['preparing','sending'].includes(r.deliveries[k].status)))?uiText('Aguarda que as respostas terminem para mudar de cliente.'):terminal?uiText('A conversa está no terminal. Usa «Continuar na HYDRAQ» antes de mudar de cliente ou de principal.'):'';
   const grid=node('div','dual-choice');this.dialog.append(grid);
-  const providerSelect=this.field(grid,'Cliente'),modelSelect=this.field(grid,'Modelo'),effortSelect=this.field(grid,'Raciocínio');
+  const providerSelect=this.field(grid,uiText('Cliente')),modelSelect=this.field(grid,uiText('Modelo')),effortSelect=this.field(grid,uiText('Raciocínio'));
   const available=Object.keys(names).filter(id=>!kept.some(m=>m.provider===id)&&(id===member.provider||this.offered(id)));
   this.fill(providerSelect,available.map(id=>({value:id,label:names[id]})),!blocked&&available.includes(wanted)?wanted:member.provider);
   providerSelect.disabled=Boolean(blocked);
@@ -361,12 +362,12 @@ export class DualUI{
    principal.rename(key,providerSelect.value);
    const incoming=shortName(providerSelect.value),leaving=shortName(member.provider);
    note.hidden=same()&&!blocked;
-   note.textContent=blocked||(same()?'':`O ${incoming} entra no lugar do ${leaving}${principal.value()===key?' e fica como principal: implementa quando escolheres escrita':''}. O ${leaving} fica guardado como conversa do grupo.`);
+   note.textContent=blocked||(same()?'':uiText`O ${incoming} entra no lugar do ${leaving}${principal.value()===key?uiText(' e fica como principal: implementa quando escolheres escrita'):''}. O ${leaving} fica guardado como conversa do grupo.`);
   };
   providerSelect.addEventListener('change',()=>{modelsChanged();describe();});
   for(const radio of principal.radios)radio.addEventListener('change',describe);
   describe();grid.after(note);
-  const actions=node('div','opinion-actions'),save=node('button','primary-button','Guardar'),cancel=node('button','secondary-button','Cancelar');
+  const actions=node('div','opinion-actions'),save=node('button','primary-button',uiText('Guardar')),cancel=node('button','secondary-button',uiText('Cancelar'));
   save.type=cancel.type='button';cancel.addEventListener('click',()=>this.dialog.close());
   save.addEventListener('click',async()=>{
    save.disabled=true;
@@ -382,7 +383,7 @@ export class DualUI{
      await this.refresh();
      // The conversation on show follows the participant: the same group and history, now with the new client.
      if(this.getCurrent()?.id===member.conversationId&&this.conversation(result.conversationId))this.open?.(result.conversationId);
-     this.toast(`${shortName(providerSelect.value)} entrou no lugar do ${shortName(member.provider)}. Recebe o histórico da conversa no primeiro pedido.`);
+     this.toast(uiText`${shortName(providerSelect.value)} entrou no lugar do ${shortName(member.provider)}. Recebe o histórico da conversa no primeiro pedido.`);
     }
     this.changed();this.dialog.close();
    }catch(e){fail(e.message);save.disabled=false;}
@@ -393,12 +394,12 @@ export class DualUI{
  field(parent,label,tag='select'){const wrap=node('label','opinion-field',label),control=node(tag);control.id='dual-control-'+(++this.sequence);wrap.htmlFor=control.id;wrap.append(control);parent.append(wrap);return control;}
  fill(select,values,value){select.replaceChildren(...values.map(v=>{const option=node('option','',v.label);option.value=v.value;return option;}));select.value=values.some(v=>v.value===value)?value:values[0]?.value||'';}
  header(title){
-  this.dialog.replaceChildren();const heading=node('div','opinion-dialog-heading'),close=node('button','secondary-button','Fechar');close.type='button';close.addEventListener('click',()=>this.dialog.close());
+  this.dialog.replaceChildren();const heading=node('div','opinion-dialog-heading'),close=node('button','secondary-button',uiText('Fechar'));close.type='button';close.addEventListener('click',()=>this.dialog.close());
   const h=node('h2','',title);h.id='dual-dialog-title';heading.append(h,close);this.dialog.append(heading);
  }
  participantFields(parent,choice={},excluded=[]){
   const grid=node('div','dual-choice multi-member-fields');parent.append(grid);
-  const provider=this.field(grid,'Cliente'),model=this.field(grid,'Modelo'),effort=this.field(grid,'Raciocínio');
+  const provider=this.field(grid,uiText('Cliente')),model=this.field(grid,uiText('Modelo')),effort=this.field(grid,uiText('Raciocínio'));
   const available=Object.keys(names).filter(id=>!excluded.includes(id)&&(id===choice.provider||this.offered(id)));
   this.fill(provider,available.map(id=>({value:id,label:names[id]})),choice.provider);
   const efforts=()=>{const entry=this.getModels(provider.value).find(m=>m.id===model.value);this.fill(effort,(entry?.efforts||[]).map(e=>({value:e,label:effortLabels[e]||e})),choice.provider===provider.value&&choice.model===model.value?choice.effort:entry?.defaultEffort);};
@@ -408,22 +409,22 @@ export class DualUI{
  }
  addMember(){
   const record=this.record();if(!record)return;
-  this.header('Multi · adicionar participante');
+  this.header(uiText('Multi · adicionar participante'));
   const fields=this.participantFields(this.dialog,{},memberKeys(record).map(k=>record.members[k].provider));
-  const error=node('p','opinion-error'),save=node('button','primary-button','Adicionar participante'),requestId=crypto.randomUUID();save.type='button';
+  const error=node('p','opinion-error'),save=node('button','primary-button',uiText('Adicionar participante')),requestId=crypto.randomUUID();save.type='button';
   save.addEventListener('click',async()=>{save.disabled=true;try{await this.api('/api/dual/'+record.id+'/add',{...fields.value(),revision:record.revision||0,requestId,multiVersion:2});await this.refresh();this.configure();}catch(e){error.textContent=e.message;save.disabled=false;}});
   this.dialog.append(error,save);this.dialog.showModal();
  }
  configure(){
   const conversation=this.getCurrent(),record=this.record(conversation),pending=this.pendingFor(),source=conversation?.provider||this.getProvider();
-  this.header('Multi · dois a quatro participantes');
-  this.dialog.append(node('p','opinion-caption','Cada cliente responde de forma independente na mesma ronda. Entre rondas, recebe o histórico dos restantes, com excertos assinalados quando necessário. Só o principal implementa.'));
+  this.header(uiText('Multi · dois a quatro participantes'));
+  this.dialog.append(node('p','opinion-caption',uiText('Cada cliente responde de forma independente na mesma ronda. Entre rondas, recebe o histórico dos restantes, com excertos assinalados quando necessário. Só o principal implementa.')));
   const error=node('p','opinion-error');error.setAttribute('role','alert');
   const fail=e=>{error.textContent=e.message;};
   if(record?.vacant){
-    const end=node('button','secondary-button','Desligar Multi');end.type='button';
+    const end=node('button','secondary-button',uiText('Desligar Multi'));end.type='button';
     end.addEventListener('click',async()=>{end.disabled=true;try{await this.api('/api/dual/'+record.id+'/end',{});await this.refresh();this.dialog.close();this.open?.(record.members[record.principal].conversationId);}catch(e){fail(e);end.disabled=false;}});
-    this.dialog.append(node('p','opinion-caption','Há um lugar desligado. Liga um segundo cliente pela barra ou desliga o Multi.'),error,end);
+    this.dialog.append(node('p','opinion-caption',uiText('Há um lugar desligado. Liga um segundo cliente pela barra ou desliga o Multi.')),error,end);
     this.dialog.showModal();return;
   }
   if(record){
@@ -433,35 +434,35 @@ export class DualUI{
       const member=record.members[key],row=node('div','multi-member-row');row.dataset.client=member.provider;
       row.append(node('strong','',shortName(member.provider)),node('small','',this.modelLabel(member.provider,this.memberSettings(record,key))));
       const edit=node('button','secondary-button','Mudar…');edit.type='button';edit.disabled=blocked;edit.addEventListener('click',()=>this.editMember(key));row.append(edit);
-      if(memberKeys(record).length>2){const remove=node('button','secondary-button','Remover');remove.type='button';remove.disabled=blocked;const requestId=crypto.randomUUID();remove.addEventListener('click',async()=>{remove.disabled=true;try{await this.api('/api/dual/'+record.id+'/remove',{key,principal:principal.value(),revision:record.revision||0,requestId,multiVersion:2});await this.refresh();this.configure();}catch(e){fail(e);remove.disabled=false;}});row.append(remove);}
+      if(memberKeys(record).length>2){const remove=node('button','secondary-button',uiText('Remover'));remove.type='button';remove.disabled=blocked;const requestId=crypto.randomUUID();remove.addEventListener('click',async()=>{remove.disabled=true;try{await this.api('/api/dual/'+record.id+'/remove',{key,principal:principal.value(),revision:record.revision||0,requestId,multiVersion:2});await this.refresh();this.configure();}catch(e){fail(e);remove.disabled=false;}});row.append(remove);}
       list.append(row);
     }
-    this.dialog.append(node('p','opinion-caption','Para remover o principal, seleciona primeiro a estrela de outro participante.'));
+    this.dialog.append(node('p','opinion-caption',uiText('Para remover o principal, seleciona primeiro a estrela de outro participante.')));
     const actions=node('div','opinion-actions');
-    if(memberKeys(record).length<4){const add=node('button','secondary-button','＋ Adicionar participante');add.type='button';add.disabled=blocked;add.addEventListener('click',()=>this.addMember());actions.append(add);}
-    const save=node('button','primary-button','Guardar'),end=node('button','secondary-button','Desligar Multi');save.type=end.type='button';save.disabled=end.disabled=blocked;
+    if(memberKeys(record).length<4){const add=node('button','secondary-button',uiText('＋ Adicionar participante'));add.type='button';add.disabled=blocked;add.addEventListener('click',()=>this.addMember());actions.append(add);}
+    const save=node('button','primary-button',uiText('Guardar')),end=node('button','secondary-button',uiText('Desligar Multi'));save.type=end.type='button';save.disabled=end.disabled=blocked;
     save.addEventListener('click',async()=>{save.disabled=true;try{await this.api('/api/dual/'+record.id,{principal:principal.value(),multiVersion:2});await this.refresh();this.dialog.close();}catch(e){fail(e);save.disabled=false;}});
     end.addEventListener('click',async()=>{end.disabled=true;try{await this.api('/api/dual/'+record.id+'/end',{});await this.refresh();this.dialog.close();this.open?.(record.members[record.principal].conversationId);}catch(e){fail(e);end.disabled=false;}});
     actions.append(save,end);this.dialog.append(error,actions);this.dialog.showModal();return;
   }
   const available=Object.keys(names).filter(id=>id!==source&&this.offered(id));
-  if(!available.length){this.dialog.append(node('p','opinion-caption','Liga primeiro outro cliente para ativar o Multi.'));this.dialog.showModal();return;}
+  if(!available.length){this.dialog.append(node('p','opinion-caption',uiText('Liga primeiro outro cliente para ativar o Multi.')));this.dialog.showModal();return;}
   const initial=this.pendingParticipants(pending);
   let choices=structuredClone(initial.length?initial:[{provider:available[0]}]),chosen=pending?.principal||'a';
   const content=node('div','multi-start');this.dialog.append(content);
   const draw=()=>{
-    content.replaceChildren();content.append(node('p','dual-summary',`${shortName(source)} · mantém a sessão desta conversa`));
-    const fields=choices.map((choice,i)=>{const row=node('div','multi-member-row');content.append(row);const fields=this.participantFields(row,choice,[source,...choices.filter((_,j)=>j!==i).map(p=>p.provider)]);if(choices.length>1){const remove=node('button','secondary-button','Remover');remove.type='button';remove.addEventListener('click',()=>{choices=read().filter((_,j)=>j!==i);chosen='a';draw();});row.append(remove);}return fields;});
+    content.replaceChildren();content.append(node('p','dual-summary',uiText`${shortName(source)} · mantém a sessão desta conversa`));
+    const fields=choices.map((choice,i)=>{const row=node('div','multi-member-row');content.append(row);const fields=this.participantFields(row,choice,[source,...choices.filter((_,j)=>j!==i).map(p=>p.provider)]);if(choices.length>1){const remove=node('button','secondary-button',uiText('Remover'));remove.type='button';remove.addEventListener('click',()=>{choices=read().filter((_,j)=>j!==i);chosen='a';draw();});row.append(remove);}return fields;});
     const read=()=>fields.map(f=>f.value());
     const roster={a:{provider:source},...Object.fromEntries(fields.map((f,i)=>[DUAL_KEYS[i+1],f.value()]))};
     const principal=this.principalChoice(roster,chosen);content.append(principal.radios[0].closest('fieldset'));
     for(const [i,field] of fields.entries())field.provider.addEventListener('change',()=>{choices=read();chosen=principal.value();draw();});
     const actions=node('div','opinion-actions');
-    if(fields.length<3&&available.length>fields.length){const add=node('button','secondary-button','＋ Adicionar participante');add.type='button';add.addEventListener('click',()=>{choices=read();chosen=principal.value();choices.push({provider:available.find(id=>!choices.some(c=>c.provider===id))});draw();});actions.append(add);}
-    const start=node('button','primary-button',conversation?'Ativar Multi':'Usar no primeiro pedido');start.type='button';
+    if(fields.length<3&&available.length>fields.length){const add=node('button','secondary-button',uiText('＋ Adicionar participante'));add.type='button';add.addEventListener('click',()=>{choices=read();chosen=principal.value();choices.push({provider:available.find(id=>!choices.some(c=>c.provider===id))});draw();});actions.append(add);}
+    const start=node('button','primary-button',conversation?uiText('Ativar Multi'):uiText('Usar no primeiro pedido'));start.type='button';
     start.addEventListener('click',async()=>{const choice={participants:read(),principal:principal.value(),multiVersion:2};if(!conversation){this.pending.set(this.getKey(),choice);this.dialog.close();this.changed();return;}start.disabled=true;try{await this.api(`/api/conversations/${conversation.id}/dual`,choice);await this.refresh();this.dialog.close();}catch(e){fail(e);start.disabled=false;}});
     actions.append(start);
-    if(pending){const remove=node('button','secondary-button','Remover Multi');remove.type='button';remove.addEventListener('click',()=>{this.pending.delete(this.getKey());this.dialog.close();this.changed();});actions.append(remove);}
+    if(pending){const remove=node('button','secondary-button',uiText('Remover Multi'));remove.type='button';remove.addEventListener('click',()=>{this.pending.delete(this.getKey());this.dialog.close();this.changed();});actions.append(remove);}
     content.append(actions);
   };draw();this.dialog.append(error);this.dialog.showModal();
  }
@@ -475,10 +476,10 @@ export class DualUI{
    const {round,parts}=entry,present=parts.filter(part=>part.user!==undefined);
    if(round.targets.length===1){
     const article=articles.get(present[0].user),header=article?.querySelector('.message-header');if(!header)continue;
-    const provider=round.deliveries[round.targets[0]].provider,route=node('span','dual-route',round.write?`${shortName(provider)} · principal · implementação`:`Só para o ${shortName(provider)}`);
+    const provider=round.deliveries[round.targets[0]].provider,route=node('span','dual-route',round.write?uiText`${shortName(provider)} · principal · implementação`:uiText`Só para o ${shortName(provider)}`);
     if(round.write)route.dataset.write='true';route.dataset.client=provider;header.children[1]?.after(route);
-    const context=[...article.querySelectorAll('details.handoff-context')].find(d=>d.querySelector('summary')?.textContent.startsWith('Contexto da passagem'));
-    if(context)context.querySelector('summary').textContent=`Contexto do ${otherNames(roundMembers(record,round),round.targets[0])} enviado com este pedido · ${coverageDetail(round.deliveries[round.targets[0]])}`;
+    const context=[...article.querySelectorAll('details.handoff-context')].find(d=>d.querySelector('summary')?.textContent.startsWith(uiText('Contexto da passagem')));
+    if(context)context.querySelector('summary').textContent=uiText`Contexto do ${otherNames(roundMembers(record,round),round.targets[0])} enviado com este pedido · ${coverageDetail(round.deliveries[round.targets[0]])}`;
     continue;
    }
    const shared=articles.get(present[0].user);if(!shared)continue;
@@ -486,14 +487,14 @@ export class DualUI{
    const contexts=new Map();
    for(const part of present){
     const article=articles.get(part.user);if(!article)continue;
-    contexts.set(part.key,[...article.querySelectorAll('details.handoff-context')].find(d=>d.querySelector('summary')?.textContent.startsWith('Contexto da passagem')));
+    contexts.set(part.key,[...article.querySelectorAll('details.handoff-context')].find(d=>d.querySelector('summary')?.textContent.startsWith(uiText('Contexto da passagem'))));
     for(const index of part.users){const extra=articles.get(index);if(extra&&extra!==shared)extra.remove();}
    }
    const sharedHeader=shared.querySelector('.message-header');sharedHeader?.querySelector('.message-model')?.remove();
-   if(sharedHeader?.children[1])sharedHeader.children[1].textContent=`Tu · para ${allLabel(round.targets.length)}`;
-   const stage=node('section','review-stage dual-stage');stage.dataset.panelStage='dual';stage.panelStageId=round.id;stage.defaultFocus=null;stage.setAttribute('aria-label',`${round.targets.length} respostas independentes`);
+   if(sharedHeader?.children[1])sharedHeader.children[1].textContent=uiText`Tu · para ${allLabel(round.targets.length)}`;
+   const stage=node('section','review-stage dual-stage');stage.dataset.panelStage='dual';stage.panelStageId=round.id;stage.defaultFocus=null;stage.setAttribute('aria-label',uiText`${round.targets.length} respostas independentes`);
    const head=node('header','review-stage-head'),heading=node('div','review-stage-heading'),tools=node('div','review-stage-tools'),state=node('span','review-stage-state');state.setAttribute('role','status');
-   heading.append(node('strong','review-stage-title',`${round.targets.length} respostas independentes`),state);head.append(heading,tools);
+   heading.append(node('strong','review-stage-title',uiText`${round.targets.length} respostas independentes`),state);head.append(heading,tools);
    stage.grid=node('div','review-grid');stage.grid.dataset.participants=String(round.targets.length);stage.append(head,stage.grid);
    const labels=[],outcomes=[];let running=false;
    for(const part of parts){
@@ -504,49 +505,49 @@ export class DualUI{
     labels.push(`${shortName(delivery.provider)}: ${status.label}`);running||=status.live;
     const answers=part.answers.map(i=>articles.get(i)).filter(Boolean);
     answers.forEach((article,index)=>{
-     if(answers.length>1)article.prepend(node('p','review-message-phase',index===answers.length-1&&!status.live?'Resposta':'Progresso'));
+     if(answers.length>1)article.prepend(node('p','review-message-phase',index===answers.length-1&&!status.live?uiText('Resposta'):uiText('Progresso')));
      const folded=article.querySelector(':scope > .message-body');if(folded)folded.hidden=false;article.classList.remove('message-folded');
      panel.body.append(article);
     });
     if(!answers.length){
-     panel.body.append(this.panels.placeholder(delivery.error||turn?.error||owner?.error||(status.live?'A preparar a resposta…':'Sem resposta visível.')));
+     panel.body.append(this.panels.placeholder(delivery.error||turn?.error||owner?.error||(status.live?uiText('A preparar a resposta…'):uiText('Sem resposta visível.'))));
      if(turn?.quotaUsage)panel.body.append(quotaUsageView(turn.quotaUsage));
     }
     else if(turn?.error&&!status.live)panel.body.append(node('p','dual-error',turn.error));
     const context=contexts.get(part.key);
-    if(context){const summary=context.querySelector('summary');summary.textContent=`Contexto do ${otherNames(roundMembers(record,round),part.key)} enviado com este pedido · ${coverageDetail(delivery)}`;panel.body.append(context);}
+    if(context){const summary=context.querySelector('summary');summary.textContent=uiText`Contexto do ${otherNames(roundMembers(record,round),part.key)} enviado com este pedido · ${coverageDetail(delivery)}`;panel.body.append(context);}
     const last=[...(owner?.messages||[])].reverse().find(m=>m.role==='assistant'&&m.requestId===delivery.requestId);panel.text=last?.text||'';panel.copy.hidden=!panel.text;
-    panel.body.setAttribute('aria-label','Resposta de '+(names[delivery.provider]||delivery.provider));
+    panel.body.setAttribute('aria-label',uiText('Resposta de ')+(names[delivery.provider]||delivery.provider));
     const items=owner?.items?.filter(i=>turn?.id&&i.turnId===turn.id)||[],latest=items.at(-1),work=owner&&turn?this.describeWork?.(owner,turn):null;
     // What each one is doing now, every action at once with its time; at the end, what the answer took.
     if(work){if(status.live)for(const line of work.now){const entry=this.panels.activity(line.text,'inProgress');if(line.since&&this.elapsed)entry.append(document.createTextNode(' · '),this.elapsed(line.since));panel.foot.append(entry);}else if(work.summary)panel.foot.append(node('span','dual-work-summary',work.summary));}
-    else if(status.live&&latest)panel.foot.append(this.panels.activity(latest.type==='reasoning'?'A analisar o pedido':latest.command||latest.title||latest.tool||latest.type,latest.status));
+    else if(status.live&&latest)panel.foot.append(this.panels.activity(latest.type==='reasoning'?uiText('A analisar o pedido'):latest.command||latest.title||latest.tool||latest.type,latest.status));
     if(work?.thought){
      // agy and Cursor: open while it works, closed at the answer; a click counts for this request and phase.
-     const detail=node('details','claude-thought'),heading=node('summary','',work.thoughtLabel||'Resumo do raciocínio · Claude'),choice=this.thoughtChoices.get(panel.key);
+     const detail=node('details','claude-thought'),heading=node('summary','',work.thoughtLabel||uiText('Resumo do raciocínio · Claude')),choice=this.thoughtChoices.get(panel.key);
      detail.open=work.thoughtOpen?work.thoughtOpen(status.live,choice?.turn===turn?.id?choice:null,this.thoughtsOpen.has(panel.key)):this.thoughtsOpen.has(panel.key);
      heading.addEventListener('click',()=>this.thoughtChoices.set(panel.key,{turn:turn?.id,live:status.live,open:!detail.open}));
      detail.addEventListener('toggle',()=>{if(detail.isConnected){if(detail.open)this.thoughtsOpen.add(panel.key);else this.thoughtsOpen.delete(panel.key);}});detail.append(heading,node('div','claude-thought-text',work.thought));panel.foot.append(detail);
     }
     if(!status.live&&delivery.status==='failed'&&record.active&&round===record.rounds.at(-1)&&round.targets.length>1&&round.targets.every(k=>round.deliveries[k].conversationId===record.members[k]?.conversationId)&&!this.running(conversation)){
-     const retry=node('button','review-panel-stop dual-retry',`Reenviar ao ${shortName(delivery.provider)}`);retry.type='button';
-     retry.dataset.tip=`Envia a mesma pergunta só ao ${shortName(delivery.provider)}, sem a resposta do outro a esta ronda. O que já foi entregue não se repete.`;
+     const retry=node('button','review-panel-stop dual-retry',uiText`Reenviar ao ${shortName(delivery.provider)}`);retry.type='button';
+     retry.dataset.tip=uiText`Envia a mesma pergunta só ao ${shortName(delivery.provider)}, sem a resposta do outro a esta ronda. O que já foi entregue não se repete.`;
      retry.addEventListener('click',async()=>{retry.disabled=true;try{await this.api('/api/dual/'+record.id+'/retry',{roundId:round.id,key:part.key});await this.refresh();}catch(e){this.toast(e.message);retry.disabled=false;}});
      panel.foot.append(retry);
     }
-    if(status.live&&owner){const stop=node('button','review-panel-stop','Parar');stop.type='button';stop.dataset.tip=`Parar só o ${shortName(delivery.provider)}. Os restantes continuam.`;stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api(`/api/conversations/${owner.id}/interrupt`,{});}catch(e){this.toast(e.message);stop.disabled=false;}});panel.foot.append(stop);}
+    if(status.live&&owner){const stop=node('button','review-panel-stop',uiText('Parar'));stop.type='button';stop.dataset.tip=uiText`Parar só o ${shortName(delivery.provider)}. Os restantes continuam.`;stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api(`/api/conversations/${owner.id}/interrupt`,{});}catch(e){this.toast(e.message);stop.disabled=false;}});panel.foot.append(stop);}
     panel.foot.hidden=!panel.foot.childElementCount;
     stage.grid.append(panel.panel);live.push(panel.body);
     outcomes.push({key:part.key,provider:delivery.provider,done:turn?.status==='completed'&&!status.live,live:status.live});
    }
    state.textContent=labels.join(' · ');
    const synthesis=this.synthesisSection(record,round,outcomes);if(synthesis)stage.append(synthesis);
-   if(running&&record.active){const stop=node('button','review-stage-stop');stop.type='button';stop.append(glyph('stop','review-icon'),node('span','','Parar todos'));stop.dataset.tip='Parar todos os modelos. O que já responderam fica guardado.';stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api('/api/dual/'+record.id+'/interrupt',{});}catch(e){this.toast(e.message);stop.disabled=false;}});tools.append(stop);}
+   if(running&&record.active){const stop=node('button','review-stage-stop');stop.type='button';stop.append(glyph('stop','review-icon'),node('span','',uiText('Parar todos')));stop.dataset.tip=uiText('Parar todos os modelos. O que já responderam fica guardado.');stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api('/api/dual/'+record.id+'/interrupt',{});}catch(e){this.toast(e.message);stop.disabled=false;}});tools.append(stop);}
    shared.after(stage);this.panels.applyFocus(stage);
   }
   // A change of client is marked where it happened; the answers before it keep their own names.
   for(const change of record.changes||[]){
-   const marker=node('div','provider-divider dual-change',change.to&&change.from?`${shortName(change.to.provider)} entrou no lugar do ${shortName(change.from.provider)}`:change.to?`${shortName(change.to.provider)} entrou na conversa`:`${shortName(change.from.provider)} saiu da conversa`);
+   const marker=node('div','provider-divider dual-change',change.to&&change.from?uiText`${shortName(change.to.provider)} entrou no lugar do ${shortName(change.from.provider)}`:change.to?uiText`${shortName(change.to.provider)} entrou na conversa`:uiText`${shortName(change.from.provider)} saiu da conversa`);
    marker.dataset.client=(change.to||change.from).provider;
    const next=[...view.querySelectorAll(':scope > [data-timeline-index]')].find(article=>timeline[Number(article.dataset.timelineIndex)]?.message.at>change.at);
    if(next)next.before(marker);else view.append(marker);
@@ -564,40 +565,40 @@ export class DualUI{
   const head=node('div','dual-synthesis-head');section.append(head);
   if(!outcomes.some(o=>o.live)&&done.length){
    const partial=done.length<outcomes.length,running=batches.some(b=>synthesizing(b.jobs[0]));
-   const ask=node('button','secondary-button dual-synthesis-ask',partial?`Síntese parcial · com ${done.length} de ${outcomes.length} respostas…`:batches.length?'Outra síntese…':'Sintetizar…');ask.type='button';
+   const ask=node('button','secondary-button dual-synthesis-ask',partial?uiText`Síntese parcial · com ${done.length} de ${outcomes.length} respostas…`:batches.length?uiText('Outra síntese…'):'Sintetizar…');ask.type='button';
    ask.disabled=running;
-   ask.dataset.tip=running?'Aguarda a síntese em curso ou para-a.':partial?`Faltam respostas de ${outcomes.filter(o=>!o.done).map(o=>shortName(o.provider)).join(', ')}. A síntese parcial identifica as ausências.`:'Um modelo à tua escolha escreve uma resposta final a partir das respostas, numa sessão à parte.';
+   ask.dataset.tip=running?uiText('Aguarda a síntese em curso ou para-a.'):partial?uiText`Faltam respostas de ${outcomes.filter(o=>!o.done).map(o=>shortName(o.provider)).join(', ')}. A síntese parcial identifica as ausências.`:uiText('Um modelo à tua escolha escreve uma resposta final a partir das respostas, numa sessão à parte.');
    ask.addEventListener('click',()=>this.synthesisDialog(record,round,partial));
    head.append(ask);
   }
   // An automatic synthesis marked on its round but with no record: a restart came in between; nothing is started again.
-  if(round.synthesis&&!batches.some(b=>b.requestId===round.synthesis.requestId))head.append(node('p','dual-synthesis-note',round.synthesis.error?`A síntese automática não arrancou: ${round.synthesis.error}`:'A síntese automática desta ronda não ficou confirmada e não foi repetida. Podes pedi-la aqui.'));
+  if(round.synthesis&&!batches.some(b=>b.requestId===round.synthesis.requestId))head.append(node('p','dual-synthesis-note',round.synthesis.error?uiText`A síntese automática não arrancou: ${round.synthesis.error}`:uiText('A síntese automática desta ronda não ficou confirmada e não foi repetida. Podes pedi-la aqui.')));
   const latest=batches.at(-1);
   if(latest)section.append(this.synthesisPanel(record,latest));
-  if(batches.length>1){const older=node('details','dual-synthesis-older');older.append(node('summary','',`Sínteses anteriores desta ronda · ${batches.length-1}`));for(const batch of batches.slice(0,-1).reverse())older.append(this.synthesisPanel(record,batch));section.append(older);}
+  if(batches.length>1){const older=node('details','dual-synthesis-older');older.append(node('summary','',uiText`Sínteses anteriores desta ronda · ${batches.length-1}`));for(const batch of batches.slice(0,-1).reverse())older.append(this.synthesisPanel(record,batch));section.append(older);}
   return head.childElementCount||batches.length?section:null;
  }
  synthesisPanel(record,batch){
   const job=batch.jobs[0],[label,tone]=synthesisStates[job.status]||[job.status,'failed'];
-  const view=this.panels.panel({key:'synthesis:'+batch.id,client:job.provider,title:'Síntese · '+(shortNames[job.provider]||job.provider),role:'synthesis'});
+  const view=this.panels.panel({key:'synthesis:'+batch.id,client:job.provider,title:uiText('Síntese · ')+(shortNames[job.provider]||job.provider),role:'synthesis'});
   view.panel.dataset.synthesis=batch.id;view.panel.dataset.live=String(synthesizing(job));view.expand.hidden=true;
-  view.meta.textContent=[this.modelLabel(job.provider,job),batch.automatic?'automática':null].filter(Boolean).join(' · ');
+  view.meta.textContent=[this.modelLabel(job.provider,job),batch.automatic?uiText('automática'):null].filter(Boolean).join(' · ');
   this.panels.status(view,label,tone);
   this.fillSynthesis(view,batch);
-  const notes=[...(batch.missing?.length?[`Parcial: faltam respostas de ${batch.missing.map(k=>shortName(batch.sources?.find(s=>s.key===k)?.provider)).join(', ')}.`]:[]),
-   batch.context?`Contexto entregue a ${new Set(record.rounds.flatMap(r=>Object.values(r.deliveries)).filter(d=>d.synthesis===batch.id&&['sent','uncertain'].includes(d.status)).map(d=>d.conversationId)).size} sessões; segue uma vez para cada participante que ainda não recebeu.`:'Não entra no contexto dos participantes.',...(batch.warnings||[])];
+  const notes=[...(batch.missing?.length?[uiText`Parcial: faltam respostas de ${batch.missing.map(k=>shortName(batch.sources?.find(s=>s.key===k)?.provider)).join(', ')}.`]:[]),
+   batch.context?uiText`Contexto entregue a ${new Set(record.rounds.flatMap(r=>Object.values(r.deliveries)).filter(d=>d.synthesis===batch.id&&['sent','uncertain'].includes(d.status)).map(d=>d.conversationId)).size} sessões; segue uma vez para cada participante que ainda não recebeu.`:uiText('Não entra no contexto dos participantes.'),...(batch.warnings||[])];
   for(const text of notes)view.foot.append(node('span','dual-synthesis-detail',text));
   if(job.error&&!synthesizing(job))view.foot.append(node('p','dual-error',job.error));
-  if(synthesizing(job)){const stop=node('button','review-panel-stop','Parar');stop.type='button';stop.dataset.tip='Parar a síntese. As respostas dos participantes não mudam.';stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api('/api/opinions/'+job.id+'/stop',{});}catch(e){this.toast(e.message);stop.disabled=false;}});view.foot.append(stop);}
+  if(synthesizing(job)){const stop=node('button','review-panel-stop',uiText('Parar'));stop.type='button';stop.dataset.tip=uiText('Parar a síntese. As respostas dos participantes não mudam.');stop.addEventListener('click',async()=>{stop.disabled=true;try{await this.api('/api/opinions/'+job.id+'/stop',{});}catch(e){this.toast(e.message);stop.disabled=false;}});view.foot.append(stop);}
   view.foot.hidden=false;
   this.synthesisViews.set(batch.id,view);
   return view.panel;
  }
  fillSynthesis(view,batch){
   const job=batch.jobs[0];view.text=job.text||'';view.copy.hidden=!view.text;view.shown=view.text;
-  view.body.replaceChildren(view.text?this.markdown(view.text):this.panels.placeholder(job.error||(synthesizing(job)?'A preparar a síntese…':'Sem texto.')));
+  view.body.replaceChildren(view.text?this.markdown(view.text):this.panels.placeholder(job.error||(synthesizing(job)?uiText('A preparar a síntese…'):uiText('Sem texto.'))));
   if(job.quotaUsage)view.body.append(quotaUsageView(job.quotaUsage));
-  view.body.setAttribute('aria-label','Síntese');this.panels.restore(view.body);
+  view.body.setAttribute('aria-label',uiText('Síntese'));this.panels.restore(view.body);
  }
  /** New text of a synthesis being written, without rebuilding the conversation. */
  refreshSyntheses(){
@@ -612,13 +613,13 @@ export class DualUI{
   */
  synthesisDialog(record,round=null,partial=false){
   const saved=record.synthesis||{},member=key=>({provider:record.members[key].provider,...this.memberSettings(record,key)});
-  this.header(round?(partial?'Síntese parcial':'Sintetizar as respostas'):'Síntese do Multi');
-  this.dialog.append(node('p','opinion-caption',(round?'Um modelo escreve uma resposta final a partir das respostas, numa sessão à parte. As sessões do Multi não a veem, a não ser que a mandes para a próxima ronda.':'Quem sintetiza, e se a síntese corre sozinha no fim de cada ronda enviada a vários.')+(partial?' Faltam respostas nesta ronda: a síntese identifica todas as ausências.':'')));
+  this.header(round?(partial?uiText('Síntese parcial'):uiText('Sintetizar as respostas')):uiText('Síntese do Multi'));
+  this.dialog.append(node('p','opinion-caption',(round?uiText('Um modelo escreve uma resposta final a partir das respostas, numa sessão à parte. As sessões do Multi não a veem, a não ser que a mandes para a próxima ronda.'):uiText('Quem sintetiza, e se a síntese corre sozinha no fim de cada ronda enviada a vários.'))+(partial?uiText(' Faltam respostas nesta ronda: a síntese identifica todas as ausências.'):'')));
   const error=node('p','opinion-error');error.hidden=true;error.setAttribute('role','alert');
   const grid=node('div','dual-choice');this.dialog.append(grid);
-  const who=this.field(grid,'Quem sintetiza'),providerSelect=this.field(grid,'Cliente'),modelSelect=this.field(grid,'Modelo'),effortSelect=this.field(grid,'Raciocínio');
+  const who=this.field(grid,uiText('Quem sintetiza')),providerSelect=this.field(grid,uiText('Cliente')),modelSelect=this.field(grid,uiText('Modelo')),effortSelect=this.field(grid,uiText('Raciocínio'));
   const same=key=>saved.provider===record.members[key].provider&&saved.model===member(key).model;
-  this.fill(who,[...memberKeys(record).map(key=>({value:key,label:`${shortName(record.members[key].provider)} · ${this.modelLabel(record.members[key].provider,member(key))}`})),{value:'other',label:'Outro modelo…'}],memberKeys(record).find(same)||(saved.provider?'other':record.principal));
+  this.fill(who,[...memberKeys(record).map(key=>({value:key,label:`${shortName(record.members[key].provider)} · ${this.modelLabel(record.members[key].provider,member(key))}`})),{value:'other',label:uiText('Outro modelo…')}],memberKeys(record).find(same)||(saved.provider?'other':record.principal));
   const available=Object.keys(names).filter(id=>this.offered(id));
   this.fill(providerSelect,available.map(id=>({value:id,label:names[id]})),available.includes(saved.provider)?saved.provider:available[0]);
   const models=()=>this.getModels(providerSelect.value);
@@ -626,11 +627,11 @@ export class DualUI{
   const modelsChanged=()=>{const list=models();this.fill(modelSelect,list.map(m=>({value:m.id,label:m.name||m.id})),saved.provider===providerSelect.value?saved.model:(list.find(m=>m.isDefault)||list[0])?.id);efforts();this.whenLoaded(providerSelect,list,modelsChanged);};
   providerSelect.addEventListener('change',modelsChanged);modelSelect.addEventListener('change',efforts);modelsChanged();
   const other=()=>{for(const select of [providerSelect,modelSelect,effortSelect])select.parentElement.hidden=who.value!=='other';};who.addEventListener('change',other);other();
-  const instructions=this.field(this.dialog,'Instruções opcionais','textarea');instructions.rows=2;instructions.placeholder='Ex.: junta tudo sem descartar nada; foca a segurança.';instructions.value=saved.instructions||'';
+  const instructions=this.field(this.dialog,uiText('Instruções opcionais'),'textarea');instructions.rows=2;instructions.placeholder=uiText('Ex.: junta tudo sem descartar nada; foca a segurança.');instructions.value=saved.instructions||'';
   const check=(text,value,tip)=>{const label=node('label','dual-synthesis-option'),input=node('input');input.type='checkbox';input.checked=Boolean(value);label.append(input,document.createTextNode(text));label.dataset.tip=tip;this.dialog.append(label);return input;};
-  const context=check('Entra no contexto da ronda seguinte',saved.context,'Desligado: só tu vês a síntese. Ligado: na próxima ronda, cada participante recebe-a uma vez, como contexto citado.');
-  const auto=check('Fazer automaticamente no fim de cada ronda a vários',saved.auto,'Corre sozinha quando todas as respostas terminam, com estas escolhas. Não corre se faltar uma resposta.');
-  const actions=node('div','opinion-actions'),submit=node('button','primary-button',round?(partial?'Pedir síntese parcial':'Sintetizar'):'Guardar'),cancel=node('button','secondary-button','Cancelar');
+  const context=check(uiText('Entra no contexto da ronda seguinte'),saved.context,uiText('Desligado: só tu vês a síntese. Ligado: na próxima ronda, cada participante recebe-a uma vez, como contexto citado.'));
+  const auto=check(uiText('Fazer automaticamente no fim de cada ronda a vários'),saved.auto,uiText('Corre sozinha quando todas as respostas terminam, com estas escolhas. Não corre se faltar uma resposta.'));
+  const actions=node('div','opinion-actions'),submit=node('button','primary-button',round?(partial?uiText('Pedir síntese parcial'):uiText('Sintetizar')):uiText('Guardar')),cancel=node('button','secondary-button',uiText('Cancelar'));
   submit.type=cancel.type='button';cancel.addEventListener('click',()=>this.dialog.close());
   const requestId=crypto.randomUUID();
   submit.addEventListener('click',async()=>{

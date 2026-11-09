@@ -1,3 +1,4 @@
+import { t as uiText } from './i18n.js';
 // Panel sizes, visibility and explanations. Per-browser preferences only: losing them
 // restores the defaults and never affects conversations or requests.
 export const PANEL_LIMITS = {
@@ -8,18 +9,18 @@ export const MIN_CONVERSATION = 460;
 // Linho was retired: a stored 'linho' preference is no longer valid and falls back to the default.
 export const THEMES = ['classic', 'atelier', 'mono'];
 export const APPEARANCES = [
-  { theme: 'classic', swatch: 'grafite', name: 'Grafite', description: 'Ardósia e grafite escovada, com barra e cor de cada cliente.', meta: '#0a0c10' },
-  { theme: 'atelier', swatch: 'atelier', name: 'Atelier', description: 'Ilhas de vidro sobre obsidiana, com barra de clientes.', meta: '#08090d' },
-  { theme: 'mono', swatch: 'mono', name: 'Mono', description: 'Carbono arquitetónico e acentos cromáticos por cliente.', meta: '#101216' },
+  { theme: 'classic', swatch: 'grafite', name: 'Grafite', description: uiText('Ardósia e grafite escovada, com barra e cor de cada cliente.'), meta: '#0a0c10' },
+  { theme: 'atelier', swatch: 'atelier', name: 'Atelier', description: uiText('Ilhas de vidro sobre obsidiana, com barra de clientes.'), meta: '#08090d' },
+  { theme: 'mono', swatch: 'mono', name: 'Mono', description: uiText('Carbono arquitetónico e acentos cromáticos por cliente.'), meta: '#101216' },
 ];
 export function appearanceOf(theme) {
   return APPEARANCES.find(entry => entry.theme === theme) || APPEARANCES[0];
 }
 /** Width of the reading column (messages and composer) inside the conversation panel. */
 export const COLUMNS = [
-  { value: 'full', name: 'Toda', description: 'Ocupa toda a largura da conversa.' },
-  { value: 'medium', name: 'Média', description: 'Coluna central, um pouco mais estreita.' },
-  { value: 'narrow', name: 'Estreita', description: 'Coluna central estreita, só para ler e escrever.' },
+  { value: 'full', name: uiText('Toda'), description: uiText('Ocupa toda a largura da conversa.') },
+  { value: 'medium', name: uiText('Média'), description: uiText('Coluna central, um pouco mais estreita.') },
+  { value: 'narrow', name: uiText('Estreita'), description: uiText('Coluna central estreita, só para ler e escrever.') },
 ];
 /** Each client has one hue; every theme defines its own tone for each hue (--hue-<id>). */
 export const CLIENTS = [
@@ -30,15 +31,15 @@ export const CLIENTS = [
   { id: 'opencode', name: 'OpenCode' },
 ];
 export const HUES = [
-  { id: 'esmeralda', name: 'Esmeralda' },
-  { id: 'lima', name: 'Lima' },
-  { id: 'ambar', name: 'Âmbar' },
-  { id: 'laranja', name: 'Laranja' },
-  { id: 'rubi', name: 'Rubi' },
-  { id: 'rosa', name: 'Rosa' },
-  { id: 'violeta', name: 'Violeta' },
-  { id: 'azul', name: 'Azul' },
-  { id: 'ciano', name: 'Ciano' },
+  { id: 'esmeralda', name: uiText('Esmeralda') },
+  { id: 'lima', name: uiText('Lima') },
+  { id: 'ambar', name: uiText('Âmbar') },
+  { id: 'laranja', name: uiText('Laranja') },
+  { id: 'rubi', name: uiText('Rubi') },
+  { id: 'rosa', name: uiText('Rosa') },
+  { id: 'violeta', name: uiText('Violeta') },
+  { id: 'azul', name: uiText('Azul') },
+  { id: 'ciano', name: uiText('Ciano') },
 ];
 export const DEFAULT_COLORS = { codex: 'esmeralda', antigravity: 'ciano', claude: 'laranja', cursor: 'violeta', opencode: 'rosa' };
 const STORAGE_KEY = 'hydraq.layout';
@@ -261,7 +262,7 @@ export class AppearanceMenu {
     this.popover.id = 'appearance-menu';
     this.popover.hidden = true;
     this.popover.setAttribute('role', 'menu');
-    this.popover.setAttribute('aria-label', 'Aparência');
+    this.popover.setAttribute('aria-label', uiText('Aparência'));
     document.body.append(this.popover);
     trigger?.setAttribute('aria-haspopup', 'menu');
     trigger?.setAttribute('aria-controls', 'appearance-menu');
@@ -320,7 +321,7 @@ export class AppearanceMenu {
       if (label) label.textContent = current.name;
       const swatch = this.trigger.querySelector('.appearance-swatch');
       if (swatch) swatch.dataset.swatch = current.swatch;
-      this.trigger.dataset.tip = `Aparência: ${current.name}. Clica para escolher a aparência.`;
+      this.trigger.dataset.tip = uiText`Aparência: ${current.name}. Clica para escolher a aparência.`;
     }
     this.fill(this.popover, 'menuitemradio');
     if (this.inline) this.fill(this.inline, 'radio');

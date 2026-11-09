@@ -1,30 +1,32 @@
-const format = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 6 });
+import { locale as uiLocale } from './i18n.js';
+import { t as uiText } from './i18n.js';
+const format = new Intl.NumberFormat(uiLocale(), { maximumFractionDigits: 6 });
 const reasons = {
-  overlap: 'turnos simultâneos na mesma conta',
-  reset: 'o contador mudou de janela ou foi reposto',
-  missing: 'faltam leituras comparáveis',
+  overlap: uiText('turnos simultâneos na mesma conta'),
+  reset: uiText('o contador mudou de janela ou foi reposto'),
+  missing: uiText('faltam leituras comparáveis'),
 };
 
-export function quotaUsageView(usage, { heading = 'Quota usada' } = {}) {
+export function quotaUsageView(usage, { heading = uiText('Quota usada') } = {}) {
   const view = document.createElement('div');
   view.className = 'message-usage turn-quota-usage';
-  const notes = ['Estimativa pela diferença entre leituras do contador da conta ou do grupo. Depende da precisão e atualização do cliente e pode incluir atividade noutros clientes.'];
-  if (usage.partial) notes.push('Medição parcial.');
+  const notes = [uiText('Estimativa pela diferença entre leituras do contador da conta ou do grupo. Depende da precisão e atualização do cliente e pode incluir atividade noutros clientes.')];
+  if (usage.partial) notes.push(uiText('Medição parcial.'));
   const title = document.createElement('strong');
   title.textContent = heading;
   const showGroup = new Set(usage.windows.map(window => window.group)).size > 1;
   const labels = usage.windows.map(window => {
     const name = [showGroup && window.group, window.label].filter(Boolean).join(' · ');
     if (window.spent === null) {
-      notes.push(name + ' sem estimativa. ' + reasons[window.reason] + '.');
+      notes.push(name + uiText(' sem estimativa. ') + reasons[window.reason] + '.');
       return name + ' · —';
     }
-    if (window.spent === 0) notes.push(name + ' sem variação detetada à precisão do contador.');
+    if (window.spent === 0) notes.push(name + uiText(' sem variação detetada à precisão do contador.'));
     return name + ' · ' + format.format(window.spent) + '%';
   });
   if (!labels.length) {
     labels.push('—');
-    notes.push('Sem estimativa. ' + reasons[usage.reason] + '.');
+    notes.push(uiText('Sem estimativa. ') + reasons[usage.reason] + '.');
   }
   view.title = notes.join(' ');
   view.append(title, document.createTextNode(' · ' + labels.join(' | ')));

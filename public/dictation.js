@@ -1,3 +1,4 @@
+import { t as uiText } from './i18n.js';
 const MAX_MS = 5 * 60_000, MAX_BYTES = 25_000_000;
 const node = (tag, className, text) => { const el = document.createElement(tag); el.className = className; if (text) el.textContent = text; return el; };
 
@@ -17,7 +18,7 @@ export class Dictation {
     send.parentElement.prepend(this.button);
     this.panel = node('div', 'dictation-panel'); this.panel.hidden = true;
     this.status = node('span', 'dictation-status'); this.status.setAttribute('role', 'status');
-    this.cancelButton = node('button', 'pill-toggle', 'Cancelar'); this.cancelButton.type = 'button';
+    this.cancelButton = node('button', 'pill-toggle', uiText('Cancelar')); this.cancelButton.type = 'button';
     this.panel.append(this.status, this.cancelButton); input.after(this.panel);
     this.button.addEventListener('click', () => this.phase === 'recording' ? this.stop() : this.start());
     this.cancelButton.addEventListener('click', () => this.cancel());
@@ -29,13 +30,13 @@ export class Dictation {
   render() {
     const supported = Boolean(navigator.mediaDevices?.getUserMedia && globalThis.MediaRecorder);
     this.button.disabled = !supported || !['idle', 'recording'].includes(this.phase);
-    const label = this.phase === 'recording' ? 'Terminar ditado' : this.phase === 'transcribing' ? 'A transcrever…' : 'Ditar mensagem';
+    const label = this.phase === 'recording' ? 'Terminar ditado' : this.phase === 'transcribing' ? 'A transcrever…' : uiText('Ditar mensagem');
     this.button.dataset.phase = this.phase;
-    this.button.title = this.phase === 'idle' ? 'Ditar mensagem · áudio enviado à Groq' : label;
+    this.button.title = this.phase === 'idle' ? uiText('Ditar mensagem · áudio enviado à Groq') : label;
     this.button.setAttribute('aria-pressed', String(this.phase === 'recording'));
-    this.button.setAttribute('aria-label', supported ? label : 'Ditado indisponível neste navegador');
+    this.button.setAttribute('aria-label', supported ? label : uiText('Ditado indisponível neste navegador'));
     this.panel.hidden = !this.active;
-    this.status.textContent = this.phase === 'recording' ? `A gravar · ${Math.floor((Date.now() - this.startedAt) / 1000)} s · Termina para transcrever (máximo 5 min)` : this.phase === 'transcribing' ? 'A transcrever na Groq · o texto ficará na caixa para rever e enviar.' : 'A preparar o microfone…';
+    this.status.textContent = this.phase === 'recording' ? uiText`A gravar · ${Math.floor((Date.now() - this.startedAt) / 1000)} s · Termina para transcrever (máximo 5 min)` : this.phase === 'transcribing' ? uiText('A transcrever na Groq · o texto ficará na caixa para rever e enviar.') : 'A preparar o microfone…';
   }
   sync() { if (this.active && this.key !== this.getKey()) this.cancel(); }
   update() { this.render(); this.changed(); }
@@ -46,31 +47,31 @@ export class Dictation {
     try {
       const response = await fetch('/api/dictation', { headers: { 'x-hydraq-token': this.getToken() }, signal: this.controller.signal });
       if (generation !== this.generation) return;
-      if (response.status === 404 || response.status === 405) throw Error('Reinicia o servidor HYDRAQ e recarrega a página para ativar o ditado.');
+      if (response.status === 404 || response.status === 405) throw Error(uiText('Reinicia o servidor HYDRAQ e recarrega a página para ativar o ditado.'));
       const config = await response.json();
-      if (!response.ok) throw Error(config.error || 'Não foi possível preparar o ditado.');
+      if (!response.ok) throw Error(config.error || uiText('Não foi possível preparar o ditado.'));
       if (!config.available) throw Error('Configura GROQ_API_KEY no ambiente do servidor HYDRAQ e reinicia-o para usar o ditado.');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       if (generation !== this.generation) { stream.getTracks().forEach(t => t.stop()); return; }
       this.stream = stream;
       const mimeType = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'].find(type => MediaRecorder.isTypeSupported(type));
-      if (!mimeType) throw Error('Este navegador não suporta um formato de gravação compatível.');
+      if (!mimeType) throw Error(uiText('Este navegador não suporta um formato de gravação compatível.'));
       const recorder = this.recorder = new MediaRecorder(stream, { mimeType });
       const chunks = []; let bytes = 0;
       recorder.addEventListener('dataavailable', event => {
         if (generation !== this.generation || !event.data.size) return;
         bytes += event.data.size;
-        if (bytes > MAX_BYTES) { this.cancel(); this.toast('A gravação excedeu 25 MB. Grava uma mensagem mais curta.'); return; }
+        if (bytes > MAX_BYTES) { this.cancel(); this.toast(uiText('A gravação excedeu 25 MB. Grava uma mensagem mais curta.')); return; }
         chunks.push(event.data);
       });
-      recorder.addEventListener('error', () => { if (generation === this.generation) { this.cancel(); this.toast('Falha na gravação do microfone. Tenta novamente.'); } });
+      recorder.addEventListener('error', () => { if (generation === this.generation) { this.cancel(); this.toast(uiText('Falha na gravação do microfone. Tenta novamente.')); } });
       recorder.addEventListener('stop', () => {
         if (generation === this.generation) { this.releaseMicrophone(); this.transcribe(new Blob(chunks, { type: mimeType }), generation); }
       });
       recorder.start(1000); this.startedAt = Date.now(); this.phase = 'recording';
       this.timer = setTimeout(() => this.stop(), MAX_MS);
       this.ticker = setInterval(() => this.render(), 1000); this.update();
-    } catch (error) { if (generation === this.generation) { this.cancel(); this.toast(error.name === 'NotAllowedError' ? 'Permite o acesso ao microfone no navegador para ditar.' : error.name === 'NotFoundError' ? 'Não foi encontrado um microfone.' : error.message); } }
+    } catch (error) { if (generation === this.generation) { this.cancel(); this.toast(error.name === 'NotAllowedError' ? uiText('Permite o acesso ao microfone no navegador para ditar.') : error.name === 'NotFoundError' ? uiText('Não foi encontrado um microfone.') : error.message); } }
   }
   releaseMicrophone() {
     clearTimeout(this.timer); clearInterval(this.ticker);
@@ -89,14 +90,14 @@ export class Dictation {
     try {
       const response = await fetch('/api/dictation', { method: 'POST', headers: { 'x-hydraq-token': this.getToken(), 'Content-Type': blob.type }, body: blob, signal: controller.signal });
       const result = await response.json();
-      if (!response.ok) throw Error(result.error || 'Não foi possível transcrever a gravação.');
+      if (!response.ok) throw Error(result.error || uiText('Não foi possível transcrever a gravação.'));
       if (generation !== this.generation || this.key !== this.getKey()) return;
       const text = this.input.value, addition = (text && !/\s$/.test(text) ? ' ' : '') + result.text;
-      if (this.input.maxLength >= 0 && (text + addition).length > this.input.maxLength) throw Error('O texto transcrito não cabe na mensagem. Envia ou encurta o rascunho antes de voltar a ditar.');
+      if (this.input.maxLength >= 0 && (text + addition).length > this.input.maxLength) throw Error(uiText('O texto transcrito não cabe na mensagem. Envia ou encurta o rascunho antes de voltar a ditar.'));
       this.input.value = text + addition;
       this.input.dispatchEvent(new Event('input', { bubbles: true })); this.input.focus();
-      this.toast('Ditado acrescentado. Revê o texto e carrega em Enviar.');
-    } catch (error) { if (generation === this.generation) this.toast(error.name === 'AbortError' ? 'A transcrição demorou demasiado. Tenta novamente.' : error.message); }
+      this.toast(uiText('Ditado acrescentado. Revê o texto e carrega em Enviar.'));
+    } catch (error) { if (generation === this.generation) this.toast(error.name === 'AbortError' ? uiText('A transcrição demorou demasiado. Tenta novamente.') : error.message); }
     finally { clearTimeout(timeout); if (generation === this.generation) { this.phase = 'idle'; this.update(); } }
   }
 }

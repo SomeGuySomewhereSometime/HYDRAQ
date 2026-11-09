@@ -1,7 +1,9 @@
-const names={'read-only':'Só leitura',project:'Projeto confinado',native:'Nativo'};
+import { t as uiText } from './i18n.js';
+import { translateStatic } from './i18n.js';
+const names={'read-only':uiText('Só leitura'),project:uiText('Projeto confinado'),native:uiText('Nativo')};
 export function policyLabel(policy) {
   if(!policy)return '';
-  return names[policy.profile]+(policy.profile==='native'?'':(policy.network?' + rede':' · sem rede')+(policy.externalMcp?' + MCP externos':' · sem MCP externos'));
+  return names[policy.profile]+(policy.profile==='native'?'':(policy.network?uiText(' + rede'):uiText(' · sem rede'))+(policy.externalMcp?uiText(' + MCP externos'):uiText(' · sem MCP externos')));
 }
 export function effectivePolicy(provider,policy,mixed=false) {
   if(!policy||policy.profile==='native')return {policy,supported:true};
@@ -14,6 +16,7 @@ export class PermissionControls {
     this.records=new Map();
     try{this.records=new Map(JSON.parse(localStorage.getItem('hydraq.permission-drafts')||'[]'));}catch{}
     host.innerHTML='<label>Perfil de permissões<select data-profile><option value="native">Nativo</option><option value="read-only">Só leitura</option><option value="project">Projeto confinado</option></select></label><div class="permission-switches"><label><input type="checkbox" data-network>Rede dos comandos e pesquisa</label><label><input type="checkbox" data-mcp>MCP externos</label></div><label data-round-label>Ronda Multi<select data-round><option value="strict">Estrita</option><option value="mixed">Mista</option></select></label><p data-note></p><p data-last aria-live="polite"></p><details data-validation><summary>Validação dos perfis</summary><p>Os ensaios listados usam rede e MCP externos desligados. Os percursos por verificar continuam identificados.</p><table><thead><tr><th>Cliente</th><th>Percurso</th><th>Perfil</th><th>Teste real</th></tr></thead><tbody></tbody></table></details>';
+    translateStatic(host);
     this.profile=host.querySelector('[data-profile]');
     this.network=host.querySelector('[data-network]');
     this.mcp=host.querySelector('[data-mcp]');
@@ -42,12 +45,12 @@ export class PermissionControls {
     this.network.disabled=this.mcp.disabled=busy||policy.profile==='native';
     this.host.querySelector('[data-round-label]').hidden=!multi;
     this.host.querySelector('[data-note]').textContent=policy.profile==='native'
-      ? 'As permissões de rede e ferramentas são geridas pelo cliente. Planear pode ser escolhido no compositor.'
-      : policy.externalMcp?'Os MCP externos podem atuar fora do projeto. No Hydra, escolhe também os servidores e os participantes autorizados na configuração da tarefa.'
-      : 'Planear é independente do perfil. Cada turno protegido é auditado ao terminar.';
+      ? uiText('As permissões de rede e ferramentas são geridas pelo cliente. Planear pode ser escolhido no compositor.')
+      : policy.externalMcp?uiText('Os MCP externos podem atuar fora do projeto. No Hydra, escolhe também os servidores e os participantes autorizados na configuração da tarefa.')
+      : uiText('Planear é independente do perfil. Cada turno protegido é auditado ao terminar.');
     const body=this.host.querySelector('tbody');
-    const routes={normal:'Envio',multi:'Multi',hydra:'Hydra',delegation:'Delegação',resume:'Retoma',switch:'Troca',restart:'Após reinício'};
-    const rows=providers.flatMap(provider=>(this.state()?.permissions.clients[provider]?.validation||[]).map(result=>[provider,routes[result.route],names[result.profile],result.status==='tested'&&!policy.network&&!policy.externalMcp?'Passou neste ensaio':'Por verificar']));
+    const routes={normal:uiText('Envio'),multi:'Multi',hydra:'Hydra',delegation:uiText('Delegação'),resume:uiText('Retoma'),switch:uiText('Troca'),restart:uiText('Após reinício')};
+    const rows=providers.flatMap(provider=>(this.state()?.permissions.clients[provider]?.validation||[]).map(result=>[provider,routes[result.route],names[result.profile],result.status==='tested'&&!policy.network&&!policy.externalMcp?uiText('Passou neste ensaio'):uiText('Por verificar')]));
     const signature=JSON.stringify(rows);
     if(body.dataset.signature!==signature){
       body.dataset.signature=signature;
@@ -59,6 +62,6 @@ export class PermissionControls {
     }
     const previous=lastTurn?.permissionPolicy;
     this.host.querySelector('[data-last]').textContent=previous
-      ? 'Último pedido · '+policyLabel(previous)+(lastTurn.permissionAudit?' · '+({pending:'auditoria pendente',passed:'auditoria concluída',violation:'alterações fora do perfil',incomplete:'auditoria incompleta',failed:'falha de auditoria',interrupted:'auditoria interrompida'}[lastTurn.permissionAudit.status]||lastTurn.permissionAudit.status):''):'';
+      ? uiText('Último pedido · ')+policyLabel(previous)+(lastTurn.permissionAudit?' · '+({pending:uiText('auditoria pendente'),passed:uiText('auditoria concluída'),violation:uiText('alterações fora do perfil'),incomplete:uiText('auditoria incompleta'),failed:uiText('falha de auditoria'),interrupted:uiText('auditoria interrompida')}[lastTurn.permissionAudit.status]||lastTurn.permissionAudit.status):''):'';
   }
 }
